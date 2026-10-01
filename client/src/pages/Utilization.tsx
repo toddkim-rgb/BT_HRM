@@ -55,7 +55,7 @@ export default function Utilization() {
         title="가동률"
         desc={
           <>
-            총 가동률 = 프로젝트 투입MD(SM·SI·내부·제안·기타) ÷ 가용MD · 유상 가동률 = SM+SI 투입MD ÷ 가용MD. 가용MD = 영업일 − 휴가. <b>PM이 승인한 실적만</b> 집계합니다.
+            총 가동률 = 프로젝트 투입MD(SM·SI·내부·제안·기타) ÷ 가용MD · 유상 가동률 = SM+SI 투입MD ÷ 가용MD. 가용MD = 영업일 − 휴가 (진행 중인 달은 오늘까지). <b>PM이 승인한 실적만</b> 집계합니다.
           </>
         }
         actions={

@@ -24,7 +24,11 @@ async function approvedTimesheets(start: string, end: string, extra: Record<stri
 
 /** 인력별 월 가동률 */
 export async function utilizationFor(ym: string, empIds?: string[]) {
-  const { start, end } = monthRange(ym);
+  const month = monthRange(ym);
+  const start = month.start;
+  // 진행 중인 달은 오늘까지의 영업일만 가용 MD로 계산
+  const t = today();
+  const end = month.end > t ? t : month.end;
   const holidays = await holidaySet();
   const emps = await prisma.employee.findMany({
     where: {

@@ -111,6 +111,8 @@ async function demo() {
   const holidays = new Set(HOLIDAYS_2026.map(([d]) => d));
   const weeks = ['2026-W36', '2026-W37', '2026-W38', '2026-W39'];
   const plan: Record<string, (d: string) => [string, number][]> = {
+    E2001: () => [['SI-2026-001', 1]],
+    E2002: () => [['SM-2026-001', 1]],
     E3001: (d) => (d === '2026-09-10' ? [['NP-LV', 1]] : [['SI-2026-001', 1]]),
     E3002: (d) => (new Date(d).getUTCDay() === 3 ? [['SI-2026-001', 0.5], ['IN-2026-001', 0.5]] : [['SI-2026-001', 1]]),
     E3003: () => [['SM-2026-001', 1]],
