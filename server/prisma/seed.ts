@@ -38,7 +38,7 @@ async function base() {
   for (const [dt, name] of HOLIDAYS_2026) await prisma.holiday.upsert({ where: { dt }, create: { dt, name }, update: {} });
   await prisma.employee.upsert({
     where: { empId: 'admin' },
-    create: { empId: 'admin', name: '시스템관리자', deptCd: '경영지원팀', gradeCd: '과장', skillLevel: '중급', employType: 'REG', role: 'ADMIN', utilTarget: false, passwordHash: await bcrypt.hash('admin1234', 10) },
+    create: { empId: 'admin', name: '시스템관리자', deptCd: '경영지원팀', gradeCd: '과장', skillLevel: '중급', email: 'admin@example.com', employType: 'REG', role: 'ADMIN', utilTarget: false, passwordHash: await bcrypt.hash('admin1234', 10) },
     update: {},
   });
   if (!(await prisma.msTemplate.count())) {
@@ -72,18 +72,18 @@ async function demo() {
   });
 
   const emps = [
-    { empId: 'E1001', name: '김대표', deptCd: '경영진', gradeCd: '이사', skillLevel: '특급', employType: 'REG', role: 'EXEC', careerStartDt: '2002-03-01', utilTarget: false },
-    { empId: 'E2001', name: '이수진', deptCd: 'SI사업팀', gradeCd: '부장', skillLevel: '특급', employType: 'REG', role: 'PM', careerStartDt: '2008-03-01' },
-    { empId: 'E2002', name: '박준호', deptCd: 'SM사업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'PM', careerStartDt: '2011-07-01' },
-    { empId: 'E3001', name: '홍길동', deptCd: 'SI사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '개발', skillStack: 'React, Java, Oracle', careerStartDt: '2019-01-02' },
-    { empId: 'E3002', name: '김철수', deptCd: 'SI사업팀', gradeCd: '과장', skillLevel: '고급', employType: 'REG', role: 'EMP', jobCd: '설계', skillStack: 'Spring, PostgreSQL', careerStartDt: '2014-02-01' },
-    { empId: 'E3003', name: '이영희', deptCd: 'SM사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '운영', skillStack: 'Oracle, Linux', careerStartDt: '2018-05-01' },
-    { empId: 'E3004', name: '정민수', deptCd: 'SM사업팀', gradeCd: '사원', skillLevel: '초급', employType: 'CONT', role: 'EMP', jobCd: '개발', skillStack: 'Vue, Node.js', careerStartDt: '2024-01-02' },
-    { empId: 'S1001', name: '최영업', deptCd: '영업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'SALES', careerStartDt: '2012-01-02', utilTarget: false },
-    { empId: 'P-0001', name: '강협력', deptCd: 'SI사업팀', gradeCd: '책임', skillLevel: '고급', employType: 'PARTNER', partnerId: 'PT-001', role: 'EMP', jobCd: '개발', careerStartDt: '2013-01-01' },
-    { empId: 'P-0002', name: '윤프리', deptCd: 'SM사업팀', gradeCd: '선임', skillLevel: '중급', employType: 'FREE', partnerId: 'PT-002', role: 'EMP', jobCd: '운영', careerStartDt: '2017-01-01' },
+    { empId: 'E1001', email: 'ceo.kim@example.com', name: '김대표', deptCd: '경영진', gradeCd: '이사', skillLevel: '특급', employType: 'REG', role: 'EXEC', careerStartDt: '2002-03-01', utilTarget: false },
+    { empId: 'E2001', email: 'sujin.lee@example.com', name: '이수진', deptCd: 'SI사업팀', gradeCd: '부장', skillLevel: '특급', employType: 'REG', role: 'PM', careerStartDt: '2008-03-01' },
+    { empId: 'E2002', email: 'junho.park@example.com', name: '박준호', deptCd: 'SM사업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'PM', careerStartDt: '2011-07-01' },
+    { empId: 'E3001', email: 'gildong.hong@example.com', name: '홍길동', deptCd: 'SI사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '개발', skillStack: 'React, Java, Oracle', careerStartDt: '2019-01-02' },
+    { empId: 'E3002', email: 'chulsoo.kim@example.com', name: '김철수', deptCd: 'SI사업팀', gradeCd: '과장', skillLevel: '고급', employType: 'REG', role: 'EMP', jobCd: '설계', skillStack: 'Spring, PostgreSQL', careerStartDt: '2014-02-01' },
+    { empId: 'E3003', email: 'younghee.lee@example.com', name: '이영희', deptCd: 'SM사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '운영', skillStack: 'Oracle, Linux', careerStartDt: '2018-05-01' },
+    { empId: 'E3004', email: 'minsu.jung@example.com', name: '정민수', deptCd: 'SM사업팀', gradeCd: '사원', skillLevel: '초급', employType: 'CONT', role: 'EMP', jobCd: '개발', skillStack: 'Vue, Node.js', careerStartDt: '2024-01-02' },
+    { empId: 'S1001', email: 'sales.choi@example.com', name: '최영업', deptCd: '영업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'SALES', careerStartDt: '2012-01-02', utilTarget: false },
+    { empId: 'P-0001', email: 'kang@hanbit.example.com', name: '강협력', deptCd: 'SI사업팀', gradeCd: '책임', skillLevel: '고급', employType: 'PARTNER', partnerId: 'PT-001', role: 'EMP', jobCd: '개발', careerStartDt: '2013-01-01' },
+    { empId: 'P-0002', email: 'yoon.free@example.com', name: '윤프리', deptCd: 'SM사업팀', gradeCd: '선임', skillLevel: '중급', employType: 'FREE', partnerId: 'PT-002', role: 'EMP', jobCd: '운영', careerStartDt: '2017-01-01' },
   ];
-  for (const e of emps) await prisma.employee.create({ data: { ...e, hireDt: '2025-01-02', passwordHash: pw } });
+  for (const e of emps) await prisma.employee.create({ data: { ...e, passwordHash: pw } });
 
   await prisma.project.createMany({
     data: [
@@ -104,6 +104,9 @@ async function demo() {
     { empId: 'E2002', prjCd: 'SM-2026-001', roleCd: 'PL', startDt: '2026-01-01', endDt: '2026-12-31', allocRate: 100 },
     { empId: 'E3003', prjCd: 'SM-2026-001', roleCd: 'OPS', startDt: '2026-01-01', endDt: '2026-12-31', allocRate: 100 },
     { empId: 'P-0002', prjCd: 'SM-2026-001', roleCd: 'OPS', startDt: '2026-03-01', endDt: '2026-10-25', allocRate: 100 },
+    // 다중 프로젝트 투입 예: 10월부터 SM 50% + 제안 50%
+    { empId: 'E3004', prjCd: 'SM-2026-001', roleCd: 'DEV', startDt: '2026-10-01', endDt: '2026-12-31', allocRate: 50 },
+    { empId: 'E3004', prjCd: 'PS-2026-001', roleCd: 'DEV', startDt: '2026-10-01', endDt: '2026-10-31', allocRate: 50 },
   ];
   await prisma.assignment.createMany({ data: asg.map((a) => ({ ...a, residentType: 'ONSITE', createdBy: 'admin' })) });
 
@@ -123,16 +126,9 @@ async function demo() {
   for (const week of weeks) {
     const days = weekDays(week);
     for (const [empId, f] of Object.entries(plan)) {
-      // 홍길동 W39는 제출 상태로 남겨 PM 승인 데모
-      const pending = empId === 'E3001' && week === '2026-W39';
+      const latest = week === '2026-W39';
       const ww = await prisma.weeklyWork.create({
-        data: {
-          empId,
-          reportWeek: week,
-          statusCd: pending ? 'SUBMITTED' : 'APPROVED',
-          submittedAt: new Date(`${days[4]}T09:00:00Z`),
-          ...(pending ? {} : { approvedBy: 'SYSTEM', approvedAt: new Date(`${days[6]}T09:00:00Z`) }),
-        },
+        data: { empId, reportWeek: week, statusCd: 'SUBMITTED', submittedAt: new Date(`${days[4]}T09:00:00Z`) },
       });
       const ts = businessDays(days[0], days[6], holidays).flatMap((d) => f(d).map(([prjCd, md]) => ({ wwId: ww.wwId, empId, prjCd, workDt: d, md })));
       await prisma.timesheet.createMany({ data: ts });
@@ -145,7 +141,7 @@ async function demo() {
             { wwId: ww.wwId, prjCd: 'SI-2026-001', itemType: 'PLAN', seq: 1, workNm: '처방 조회 API', targetProgress: (n + 1) * 10, content: 'API 개발' },
           ],
         });
-        if (pending) await prisma.weeklyIssue.create({ data: { wwId: ww.wwId, prjCd: 'SI-2026-001', issueType: 'RISK', severity: 'H', content: '처방 인터페이스 사양 미확정', actionPlan: '고객 전산팀과 협의 일정 요청', supportReqYn: true } });
+        if (latest) await prisma.weeklyIssue.create({ data: { wwId: ww.wwId, prjCd: 'SI-2026-001', issueType: 'RISK', severity: 'H', content: '처방 인터페이스 사양 미확정', actionPlan: '고객 전산팀과 협의 일정 요청', supportReqYn: true } });
       }
       if (empId === 'E3003') {
         await prisma.workItem.createMany({

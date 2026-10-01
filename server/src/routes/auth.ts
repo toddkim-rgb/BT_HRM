@@ -8,10 +8,10 @@ import { parse } from '../lib/validate.js';
 export const authRouter = Router();
 
 authRouter.post('/login', async (req, res) => {
-  const body = parse(z.object({ empId: z.string().min(1), password: z.string().min(1) }), req.body);
-  const emp = await prisma.employee.findUnique({ where: { empId: body.empId } });
+  const body = parse(z.object({ email: z.string().trim().toLowerCase().min(1), password: z.string().min(1) }), req.body);
+  const emp = await prisma.employee.findUnique({ where: { email: body.email } });
   if (!emp || emp.statusCd === 'RETIRED' || !(await bcrypt.compare(body.password, emp.passwordHash))) {
-    throw new HttpError(401, '사번 또는 비밀번호가 올바르지 않습니다.');
+    throw new HttpError(401, '이메일 또는 비밀번호가 올바르지 않습니다.');
   }
   const user = { empId: emp.empId, name: emp.name, role: emp.role as Role };
   res.json({ token: signToken(user), user });

@@ -19,19 +19,20 @@ export interface Employee {
   partner?: { partnerNm: string } | null;
   careerStartDt: string | null;
   careerYears: number | null;
-  email: string | null;
+  email: string;
   phone: string | null;
   statusCd: string;
-  hireDt: string | null;
-  retireDt: string | null;
   role: string;
   utilTarget: boolean;
   allocTotal?: number;
   overAlloc?: number;
+  projectCount?: number;
+  currentAssignments?: { prjCd: string; prjNm: string; roleCd: string; allocRate: number; endDt: string }[];
 }
 
 const blank: Partial<Employee> & { initialPassword?: string } = {
   empId: '',
+  email: '',
   name: '',
   deptCd: '',
   gradeCd: '',
@@ -73,7 +74,7 @@ export default function Employees() {
       />
       <Card>
         <div className="filters">
-          <input type="search" placeholder="이름·사번·소속·기술 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input type="search" placeholder="이름·사번·이메일·소속·기술 검색" value={q} onChange={(e) => setQ(e.target.value)} />
           <Select value={employType} onChange={setEmployType} options={EMPLOY_TYPE} placeholder="고용형태 전체" />
           <Select value={status} onChange={setStatus} options={EMP_STATUS} placeholder="재직·휴직" />
         </div>
@@ -119,7 +120,15 @@ export default function Employees() {
                       {e.careerYears != null ? `${e.careerYears}년` : '-'}
                     </td>
                     <td data-label="투입률" className="num">
-                      {e.allocTotal ? `${e.allocTotal}%` : e.utilTarget ? <Badge tone="warn">대기</Badge> : <span className="muted small">대상 아님</span>}
+                      {e.allocTotal ? (
+                        <span title={(e.currentAssignments ?? []).map((a) => `${a.prjCd} ${a.allocRate}%`).join('\n')}>
+                          {e.allocTotal}%{(e.projectCount ?? 0) > 1 && <div className="small muted">{e.projectCount}개 프로젝트</div>}
+                        </span>
+                      ) : e.utilTarget ? (
+                        <Badge tone="warn">대기</Badge>
+                      ) : (
+                        <span className="muted small">대상 아님</span>
+                      )}
                       {!!e.overAlloc && (
                         <div>
                           <Badge tone="bad">과투입 +{e.overAlloc}%</Badge>
@@ -216,12 +225,12 @@ function EmployeeDetail({ empId, onClose, onEdit }: { empId: string; onClose: ()
             </dd>
             <dt>경력</dt>
             <dd>{data.careerYears != null ? `${data.careerYears}년 (IT 경력 시작 ${data.careerStartDt})` : '-'}</dd>
+            <dt>이메일 (로그인)</dt>
+            <dd>{data.email}</dd>
             <dt>연락처</dt>
-            <dd>{[data.email, data.phone].filter(Boolean).join(' · ') || '-'}</dd>
+            <dd>{data.phone ?? '-'}</dd>
             <dt>상태</dt>
-            <dd>
-              {label(EMP_STATUS, data.statusCd)} {data.hireDt && `· 입사 ${data.hireDt}`} {data.retireDt && `· 퇴사 ${data.retireDt}`}
-            </dd>
+            <dd>{label(EMP_STATUS, data.statusCd)}</dd>
           </dl>
           <div>
             <h2 style={{ marginBottom: 8 }}>투입 이력</h2>
@@ -285,7 +294,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
       const body = { ...f, partnerId: needsPartner ? f.partnerId : null };
       if (isNew) {
         const r = await api.post<{ empId: string }>('/employees', body);
-        toast(`등록했습니다. (사번 ${r.empId}, 초기 비밀번호: ${f.initialPassword || r.empId})`);
+        toast(`등록했습니다. (사번 ${r.empId}, 로그인 ${f.email}, 초기 비밀번호: ${f.initialPassword || r.empId})`);
       } else {
         await api.put(`/employees/${initial.empId}`, body);
         toast('저장했습니다.');
@@ -369,7 +378,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
         <Field label="주요 기술스택" full>
           <input value={f.skillStack ?? ''} onChange={(e) => set({ skillStack: e.target.value })} placeholder="예: Java, Spring, Oracle" />
         </Field>
-        <Field label="업무 이메일">
+        <Field label="업무 이메일" required hint="로그인 ID로 사용">
           <input type="email" value={f.email ?? ''} onChange={(e) => set({ email: e.target.value })} />
         </Field>
         <Field label="연락처">
@@ -380,12 +389,6 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
         </Field>
         <Field label="시스템 권한" required>
           <Select value={f.role} onChange={(role) => set({ role })} options={ROLE_LABEL} />
-        </Field>
-        <Field label="입사일">
-          <input type="date" value={f.hireDt ?? ''} onChange={(e) => set({ hireDt: e.target.value })} />
-        </Field>
-        <Field label="퇴사일">
-          <input type="date" value={f.retireDt ?? ''} onChange={(e) => set({ retireDt: e.target.value })} />
         </Field>
         <Field label="투입 대상" hint="관리·영업·경영진 등은 해제 (가동률·대기 인원 집계 제외)">
           <label className="check" style={{ minHeight: 38 }}>
@@ -403,8 +406,8 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
   );
 }
 
-const CSV_HEADERS = ['empId', 'name', 'deptCd', 'gradeCd', 'jobCd', 'skillLevel', 'skillStack', 'employType', 'partnerId', 'careerStartDt', 'email', 'phone', 'hireDt', 'role'];
-const CSV_HEADER_KO = ['사번', '성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일', '연락처', '입사일', '권한(EMP/PM/EXEC/ADMIN/SALES)'];
+const CSV_HEADERS = ['empId', 'name', 'deptCd', 'gradeCd', 'jobCd', 'skillLevel', 'skillStack', 'employType', 'partnerId', 'careerStartDt', 'email', 'phone', 'role'];
+const CSV_HEADER_KO = ['사번', '성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일(로그인ID·필수)', '연락처', '권한(EMP/PM/EXEC/ADMIN/SALES)'];
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -443,7 +446,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
   const [err, setErr] = useState<string | null>(null);
 
   const template = () => {
-    const csv = '﻿' + [CSV_HEADER_KO.join(','), '20260001,홍길동,SI사업팀,대리,개발,중급,"Java, React",REG,,2019-01-02,hong@example.com,010-0000-0000,2026-01-02,EMP'].join('\r\n');
+    const csv = '﻿' + [CSV_HEADER_KO.join(','), '20260001,홍길동,SI사업팀,대리,개발,중급,"Java, React",REG,,2019-01-02,hong@example.com,010-0000-0000,EMP'].join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     a.download = '인력_일괄등록_양식.csv';
@@ -521,7 +524,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
           <table className="tbl">
             <thead>
               <tr>
-                {['사번', '성명', '소속', '직급', '등급', '고용형태', '협력사'].map((h) => (
+                {['사번', '성명', '이메일', '소속', '직급', '등급', '고용형태', '협력사'].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -531,6 +534,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
                 <tr key={i}>
                   <td>{r.empId ?? '(자동)'}</td>
                   <td>{r.name}</td>
+                  <td>{r.email}</td>
                   <td>{r.deptCd}</td>
                   <td>{r.gradeCd}</td>
                   <td>{r.skillLevel}</td>

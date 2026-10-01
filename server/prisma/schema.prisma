@@ -22,11 +22,9 @@ model Employee {
   employType    String // REG/CONT/FREE/PARTNER
   partnerId     String?
   careerStartDt String?
-  email         String?
+  email         String   @unique // 로그인 ID (소문자 저장)
   phone         String?
   statusCd      String   @default("ACTIVE") // ACTIVE/LEAVE/RETIRED
-  hireDt        String?
-  retireDt      String?
   utilTarget    Boolean  @default(true) // 가동률·투입 현황 집계 대상 (관리·영업·경영진은 false)
   role          String   @default("EMP") // EMP(R-01)/PM(R-02)/EXEC(R-03)/ADMIN(R-04)/SALES(R-05)
   passwordHash  String
@@ -169,12 +167,9 @@ model WeeklyWork {
   wwId         Int       @id @default(autoincrement())
   empId        String
   reportWeek   String
-  statusCd     String    @default("DRAFT") // DRAFT/SUBMITTED/APPROVED/REJECTED
+  statusCd     String    @default("DRAFT") // DRAFT/SUBMITTED (승인 절차 없음, 제출 = 확정)
   remark       String?
   submittedAt  DateTime?
-  approvedBy   String?
-  approvedAt   DateTime?
-  rejectReason String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth';
 import { ISSUE_TYPE, ITEM_STATUS, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
 import { dateTime, label, num } from '../lib/format';
 import { dow, isoWeek, md as mdLabel, shiftWeek, today, weekLabel } from '../lib/dates';
+import { fillByAssignment, type WeekPlan } from '../lib/fill';
 import { useFetch } from '../lib/hooks';
 
 interface Item {
@@ -46,10 +47,9 @@ interface View {
   statusCd: string;
   remark: string | null;
   submittedAt: string | null;
-  approvedBy: string | null;
-  approvedAt: string | null;
-  rejectReason: string | null;
   timesheet: TsRow[];
+  plan: (WeekPlan & { roles: string[] })[];
+  dayAlloc: Record<string, number>;
   actualItems: Item[];
   planItems: Item[];
   issues: Issue[];
@@ -75,9 +75,8 @@ export default function WeeklyWork() {
   const empId = params.empId ?? user!.empId;
   const week = params.week ?? isoWeek(today());
   const isMine = empId === user!.empId;
-  const canApprove = user!.role === 'PM' || user!.role === 'ADMIN';
 
-  const { data, error, loading, reload } = useFetch<View>(`/weekly-works/${empId}/${week}`);
+  const { data, error, loading } = useFetch<View>(`/weekly-works/${empId}/${week}`);
   const { data: projects } = useFetch<Project[]>('/projects?includeNp=Y');
   const [v, setV] = useState<View | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -93,7 +92,8 @@ export default function WeeklyWork() {
   }, [data]);
 
   const prjMap = useMemo(() => new Map((projects ?? []).map((p) => [p.prjCd, p])), [projects]);
-  const editable = isMine && v != null && v.statusCd !== 'APPROVED';
+  const editable = isMine && v != null;
+  const submitted = v?.statusCd === 'SUBMITTED';
   const isSm = (prjCd: string) => prjMap.get(prjCd)?.prjType === 'SM';
   const workProjects = (v?.timesheet ?? []).filter((r) => r.prjType !== 'NP' && prjMap.get(r.prjCd)?.prjType !== 'NP');
   const prjOptions: [string, string][] = workProjects.map((r) => [r.prjCd, `${r.prjCd} ${r.prjNm ?? ''}`]);
@@ -120,6 +120,7 @@ export default function WeeklyWork() {
   const daySum = (d: string) => v.timesheet.reduce((s, r) => s + (r.md[d] ?? 0), 0);
   const rowSum = (r: TsRow) => Object.values(r.md).reduce<number>((s, x) => s + (x ?? 0), 0);
   const total = v.timesheet.reduce((s, r) => s + rowSum(r), 0);
+  const planOf = (prjCd: string) => v.plan.find((p) => p.prjCd === prjCd)?.plannedMd ?? null;
 
   const payload = () => ({
     remark: v.remark,
@@ -129,31 +130,31 @@ export default function WeeklyWork() {
     issues: v.issues,
   });
 
-  const save = async (quiet = false) => {
+  const save = async () => {
     setBusy(true);
     setErr(null);
     try {
       const r = await api.put<{ view: View }>(`/weekly-works/${empId}/${week}`, payload());
       setV(r.view);
       setDirty(false);
-      if (!quiet) toast('임시저장했습니다.');
-      return true;
+      toast('임시저장했습니다.');
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
-      return false;
     } finally {
       setBusy(false);
     }
   };
 
+  // 제출 = 확정 (승인 절차 없음). 제출된 보고서도 수정 후 다시 제출하면 바로 반영
   const submit = async (confirmWarnings = false) => {
-    if (!(await save(true))) return;
     setBusy(true);
+    setErr(null);
     try {
-      const r = await api.post<{ statusCd: string }>(`/weekly-works/${empId}/${week}/submit`, { confirmWarnings });
+      const r = await api.post<{ view: View }>(`/weekly-works/${empId}/${week}/submit`, { ...payload(), confirmWarnings });
       setConfirm(null);
-      toast(r.statusCd === 'APPROVED' ? '제출되었습니다. (승인 대상 PM이 없어 자동 승인)' : '제출했습니다. PM 승인 후 실적에 반영됩니다.');
-      await reload();
+      setV(r.view);
+      setDirty(false);
+      toast(submitted ? '수정 내용을 제출했습니다.' : '제출했습니다. 가동률·MM에 바로 반영됩니다.');
     } catch (e) {
       if (e instanceof ApiError && (e.details as { needConfirm?: boolean })?.needConfirm) {
         setConfirm((e.details as { warnings: string[] }).warnings);
@@ -163,18 +164,15 @@ export default function WeeklyWork() {
     }
   };
 
-  const decide = async (action: 'APPROVE' | 'REJECT') => {
-    const reason = action === 'REJECT' ? window.prompt('반려 사유를 입력하세요.')?.trim() : undefined;
-    if (action === 'REJECT' && !reason) return;
-    setBusy(true);
-    try {
-      const r = await api.patch<{ results: { ok: boolean; error?: string }[] }>('/weekly-works/approve', { wwIds: [v.wwId], action, reason });
-      if (r.results[0]?.ok) toast(action === 'APPROVE' ? '승인했습니다.' : '반려했습니다.');
-      else toast(r.results[0]?.error ?? '처리하지 못했습니다.', 'bad');
-      await reload();
-    } finally {
-      setBusy(false);
-    }
+  // 다중 프로젝트 투입: 배정 투입률대로 요일별 MD 자동 배분
+  const fill = () => {
+    const hasInput = v.timesheet.some((r) => v.plan.some((p) => p.prjCd === r.prjCd) && Object.values(r.md).some((x) => x));
+    if (hasInput && !window.confirm('배정된 프로젝트 행의 입력값을 투입률대로 다시 채웁니다. 계속할까요?')) return;
+    update((d) => {
+      const names = new Map(d.timesheet.map((r) => [r.prjCd, r]));
+      d.timesheet = fillByAssignment(d.timesheet, d.plan, d.businessDays).map((r) => ({ ...names.get(r.prjCd), ...r }));
+    });
+    toast('배정 투입률대로 채웠습니다. 실제와 다르면 수정하세요.', 'info');
   };
 
   const loadCarryover = async () => {
@@ -227,24 +225,15 @@ export default function WeeklyWork() {
       <div className="row" style={{ marginBottom: 12 }}>
         <Badge code={v.statusCd}>{label(WW_STATUS, v.statusCd)}</Badge>
         {v.submittedAt && <span className="muted small">제출 {dateTime(v.submittedAt)}</span>}
-        {v.approvedAt && <span className="muted small">승인 {dateTime(v.approvedAt)}</span>}
         {dirty && <span className="warn-text small">● 저장되지 않은 변경</span>}
-        {!isMine && canApprove && v.wwId && (v.statusCd === 'SUBMITTED' || v.statusCd === 'APPROVED') && (
-          <span className="row" style={{ marginLeft: 'auto' }}>
-            {v.statusCd === 'SUBMITTED' && (
-              <button className="btn sm good" disabled={busy} onClick={() => decide('APPROVE')}>
-                승인
-              </button>
-            )}
-            <button className="btn sm danger" disabled={busy} onClick={() => decide('REJECT')}>
-              반려
-            </button>
-          </span>
-        )}
       </div>
-      {v.statusCd === 'REJECTED' && <div className="alert bad">반려 사유: {v.rejectReason}</div>}
-      {v.statusCd === 'APPROVED' && isMine && <div className="alert info">승인된 보고서는 수정할 수 없습니다. 수정이 필요하면 PM에게 반려를 요청하세요.</div>}
-      {v.statusCd === 'SUBMITTED' && isMine && <div className="alert info">제출된 보고서입니다. 승인 전에는 수정할 수 있으며, 수정 후 다시 제출해야 합니다.</div>}
+      {submitted && isMine && <div className="alert info">제출된 보고서입니다. 수정이 필요하면 고친 뒤 '수정 제출'을 누르세요. 바로 반영됩니다.</div>}
+      {v.plan.length > 1 && (
+        <div className="alert info">
+          이번 주 {v.plan.length}개 프로젝트에 투입 중입니다 · {v.plan.map((p) => `${p.prjCd} 계획 ${num(p.plannedMd)}MD`).join(' · ')}
+          {Object.values(v.dayAlloc).some((a) => a > 100) && ' · 투입률 합계가 100%를 넘는 날이 있어 하루 1.0MD 안에서 나눠 입력해야 합니다.'}
+        </div>
+      )}
       <ErrorBox error={err} />
 
       <div className="stack">
@@ -257,9 +246,16 @@ export default function WeeklyWork() {
           }
           actions={
             editable && (
-              <button className="btn sm" onClick={() => setAddOpen(true)}>
-                + 프로젝트/공통코드
-              </button>
+              <>
+                {v.plan.length > 0 && (
+                  <button className="btn sm" onClick={fill}>
+                    배정대로 채우기
+                  </button>
+                )}
+                <button className="btn sm" onClick={() => setAddOpen(true)}>
+                  + 프로젝트/공통코드
+                </button>
+              </>
             )
           }
         >
@@ -298,7 +294,15 @@ export default function WeeklyWork() {
                 </div>
               );
             })}
-            <div className="row" style={{ justifyContent: 'space-between', fontWeight: 700 }}>
+            {v.timesheet.map((r) => (
+              <div className="row" key={r.prjCd} style={{ justifyContent: 'space-between' }}>
+                <span className="small">{r.prjCd}</span>
+                <span className="small">
+                  {num(rowSum(r))}MD{planOf(r.prjCd) != null && <span className="muted"> / 계획 {num(planOf(r.prjCd))}</span>}
+                </span>
+              </div>
+            ))}
+            <div className="row" style={{ justifyContent: 'space-between', fontWeight: 700, marginTop: 4 }}>
               <span>주간 합계</span>
               <span>{num(total)}MD</span>
             </div>
@@ -319,6 +323,7 @@ export default function WeeklyWork() {
                     );
                   })}
                   <th>합계</th>
+                  <th>계획</th>
                   {editable && <th />}
                 </tr>
               </thead>
@@ -351,6 +356,9 @@ export default function WeeklyWork() {
                     <td className="num">
                       <strong>{num(rowSum(r))}</strong>
                     </td>
+                    <td className="num muted" title="배정 투입률 기준 이번 주 계획 MD">
+                      {planOf(r.prjCd) != null ? num(planOf(r.prjCd)) : '-'}
+                    </td>
                     {editable && (
                       <td>
                         <button
@@ -378,6 +386,7 @@ export default function WeeklyWork() {
                     </td>
                   ))}
                   <td className="num">{num(total)}</td>
+                  <td className="num muted">{num(v.plan.reduce((s, p) => s + p.plannedMd, 0))}</td>
                   {editable && <td />}
                 </tr>
               </tfoot>
@@ -621,11 +630,13 @@ export default function WeeklyWork() {
 
       {editable && (
         <div className="sticky-actions">
-          <button className="btn" disabled={busy} onClick={() => save()}>
-            임시저장
-          </button>
+          {!submitted && (
+            <button className="btn" disabled={busy} onClick={save}>
+              임시저장
+            </button>
+          )}
           <button className="btn primary" disabled={busy} onClick={() => submit(false)}>
-            {v.statusCd === 'SUBMITTED' ? '수정 후 재제출' : '제출'}
+            {submitted ? '수정 제출' : '제출'}
           </button>
         </div>
       )}

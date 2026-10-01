@@ -2,7 +2,6 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Loading, ToastProvider } from './components/ui';
 import { AuthProvider, useAuth } from './lib/auth';
-import Approvals from './pages/Approvals';
 import Assignments from './pages/Assignments';
 import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
@@ -12,6 +11,7 @@ import Partners from './pages/Partners';
 import ProjectMm from './pages/ProjectMm';
 import Projects from './pages/Projects';
 import Settings from './pages/Settings';
+import Submissions from './pages/Submissions';
 import Utilization from './pages/Utilization';
 import WeeklyWork from './pages/WeeklyWork';
 
@@ -25,7 +25,7 @@ function Routed() {
         <Route index element={<Dashboard />} />
         <Route path="weekly" element={<WeeklyWork />} />
         <Route path="weekly/:empId/:week" element={<WeeklyWork />} />
-        <Route path="approvals" element={<Approvals />} />
+        <Route path="submissions" element={<Submissions />} />
         <Route path="assignments" element={<Assignments />} />
         <Route path="utilization" element={<Utilization />} />
         <Route path="project-mm" element={<ProjectMm />} />

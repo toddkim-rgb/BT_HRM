@@ -36,6 +36,8 @@ export default function MyInfo() {
               <dd>
                 <strong>{data.name}</strong>
               </dd>
+              <dt>이메일 (로그인)</dt>
+              <dd>{data.email}</dd>
               <dt>소속 / 직급</dt>
               <dd>
                 {data.deptCd} / {data.gradeCd}

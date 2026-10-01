@@ -11,7 +11,7 @@ export interface User {
 interface AuthCtx {
   user: User | null;
   ready: boolean;
-  login: (empId: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -39,8 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setReady(true));
   }, [logout]);
 
-  const login = async (empId: string, password: string) => {
-    const r = await api.post<{ token: string; user: User }>('/auth/login', { empId, password });
+  const login = async (email: string, password: string) => {
+    const r = await api.post<{ token: string; user: User }>('/auth/login', { email, password });
     tokenStore.set(r.token);
     setUser(r.user);
   };

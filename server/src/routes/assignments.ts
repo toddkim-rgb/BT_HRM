@@ -91,12 +91,22 @@ assignmentsRouter.post('/:id/cancel', async (req, res) => {
   res.json({ ok: true });
 });
 
-/** 등록 전 과투입 미리보기 */
+/** 등록 전 과투입 미리보기 + 같은 기간 다른 투입 현황 (다중 프로젝트 투입) */
 assignmentsRouter.get('/preview/overalloc', async (req, res) => {
   const u = me(req);
   if (!(u.role === 'PM' || isManager(u))) throw new HttpError(403, '권한이 없습니다.');
-  const q = parse(z.object({ empId: z.string(), startDt: dateStr, endDt: dateStr, allocRate: z.coerce.number() }), req.query);
-  const existing = await maxAllocation(q.empId, q.startDt, q.endDt);
+  const q = parse(
+    z.object({ empId: z.string(), startDt: dateStr, endDt: dateStr, allocRate: z.coerce.number(), excludeAsgId: z.coerce.number().optional() }),
+    req.query,
+  );
+  const overlapping = await prisma.assignment.findMany({
+    where: { empId: q.empId, canceled: false, startDt: { lte: q.endDt }, endDt: { gte: q.startDt }, ...(q.excludeAsgId ? { asgId: { not: q.excludeAsgId } } : {}) },
+    select: { asgId: true, prjCd: true, roleCd: true, startDt: true, endDt: true, allocRate: true, project: { select: { prjNm: true } } },
+    orderBy: { startDt: 'asc' },
+  });
+  // 기간 중 기존 배정 투입률 합계의 최댓값 (시작 지점 기준)
+  const points = [q.startDt, ...overlapping.map((o) => o.startDt).filter((d) => d > q.startDt && d <= q.endDt)];
+  const existing = Math.max(0, ...points.map((p) => overlapping.filter((o) => o.startDt <= p && o.endDt >= p).reduce((s, o) => s + o.allocRate, 0)));
   const total = existing + q.allocRate;
-  res.json({ existing, total, overAlloc: Math.max(0, total - 100) });
+  res.json({ existing, total, overAlloc: Math.max(0, total - 100), overlapping });
 });

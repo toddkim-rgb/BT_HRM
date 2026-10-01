@@ -18,7 +18,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: '대시보드', icon: '◧' },
       { to: '/weekly', label: '주간 업무보고', icon: '✎' },
-      { to: '/approvals', label: '주간보고 승인', icon: '✔', roles: ['PM', 'ADMIN'] },
+      { to: '/submissions', label: '주간보고 현황', icon: '✔', roles: ['PM', 'EXEC', 'ADMIN'] },
       { to: '/assignments', label: '투입 배정', icon: '⇄', roles: ALL_MANAGERS },
     ],
   },

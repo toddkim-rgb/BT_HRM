@@ -160,20 +160,25 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
   const isNew = !initial.asgId;
   const [f, setF] = useState(initial);
   const [err, setErr] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ existing: number; total: number; overAlloc: number } | null>(null);
+  const [preview, setPreview] = useState<{
+    existing: number;
+    total: number;
+    overAlloc: number;
+    overlapping: { asgId: number; prjCd: string; roleCd: string; startDt: string; endDt: string; allocRate: number; project: { prjNm: string } }[];
+  } | null>(null);
   const { data: emps } = useFetch<{ empId: string; name: string; deptCd: string; skillLevel: string; employType: string; allocTotal: number }[]>('/employees?status=ACTIVE');
   const set = (p: Partial<Asg>) => setF((s) => ({ ...s, ...p }));
 
   useEffect(() => {
-    if (!isNew || !f.empId || !f.startDt || !f.endDt || f.startDt > f.endDt || !f.allocRate) {
+    if (!f.empId || !f.startDt || !f.endDt || f.startDt > f.endDt || !f.allocRate) {
       setPreview(null);
       return;
     }
     api
-      .get<typeof preview>(`/assignments/preview/overalloc${qs({ empId: f.empId, startDt: f.startDt, endDt: f.endDt, allocRate: f.allocRate })}`)
+      .get<typeof preview>(`/assignments/preview/overalloc${qs({ empId: f.empId, startDt: f.startDt, endDt: f.endDt, allocRate: f.allocRate, excludeAsgId: initial.asgId })}`)
       .then(setPreview)
       .catch(() => setPreview(null));
-  }, [isNew, f.empId, f.startDt, f.endDt, f.allocRate]);
+  }, [initial.asgId, f.empId, f.startDt, f.endDt, f.allocRate]);
 
   const save = async () => {
     setErr(null);
@@ -233,8 +238,23 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
       </div>
       {preview && (
         <div className={`alert ${preview.overAlloc > 0 ? 'warn' : 'info'}`} style={{ marginTop: 12, marginBottom: 0 }}>
-          기간 중 기존 투입률 최대 {preview.existing}% + 이번 {f.allocRate}% = {preview.total}%
-          {preview.overAlloc > 0 && ` → 과투입 +${preview.overAlloc}% (저장은 가능)`}
+          {preview.overlapping.length ? (
+            <>
+              <strong>같은 기간 다른 투입 {preview.overlapping.length}건</strong>
+              <ul style={{ margin: '6px 0', paddingLeft: 18 }}>
+                {preview.overlapping.map((o) => (
+                  <li key={o.asgId}>
+                    {o.prjCd} {o.project.prjNm} · {label(ASG_ROLE, o.roleCd)} {o.allocRate}% · {o.startDt} ~ {o.endDt}
+                    {o.prjCd === f.prjCd && ' (같은 프로젝트 중복 배정)'}
+                  </li>
+                ))}
+              </ul>
+              기간 중 투입률 합계 최대 {preview.existing}% + 이번 {f.allocRate}% = {preview.total}%
+              {preview.overAlloc > 0 && ` → 과투입 +${preview.overAlloc}% (저장은 가능)`}
+            </>
+          ) : (
+            <>같은 기간 다른 투입이 없습니다. 투입률 {f.allocRate}%</>
+          )}
         </div>
       )}
     </Modal>

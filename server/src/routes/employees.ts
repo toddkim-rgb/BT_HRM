@@ -22,11 +22,9 @@ const employeeSchema = z.object({
   employType: z.enum(EMPLOY_TYPES),
   partnerId: optStr,
   careerStartDt: optDate,
-  email: optStr,
+  email: z.string().trim().toLowerCase().email('이메일 형식이 올바르지 않습니다'), // 로그인 ID
   phone: optStr,
   statusCd: z.enum(['ACTIVE', 'LEAVE', 'RETIRED']).default('ACTIVE'),
-  hireDt: optDate,
-  retireDt: optDate,
   role: z.enum(ROLES).default('EMP'),
   utilTarget: z.boolean().default(true),
   initialPassword: optStr,
@@ -44,6 +42,11 @@ async function nextPartnerEmpId(): Promise<string> {
   return `P-${String(max + 1).padStart(4, '0')}`;
 }
 
+async function checkEmail(email: string, empId?: string) {
+  const dup = await prisma.employee.findUnique({ where: { email }, select: { empId: true, name: true } });
+  if (dup && dup.empId !== empId) throw new HttpError(409, `이미 사용 중인 이메일입니다: ${email} (${dup.name})`);
+}
+
 async function checkPartner(employType: string, partnerId: string | null | undefined) {
   if (employType === 'PARTNER' || employType === 'FREE') {
     if (!partnerId) throw new HttpError(400, '협력사·프리랜서 인력은 협력사를 지정해야 합니다.');
@@ -58,7 +61,7 @@ employeesRouter.get('/', requireRole('PM', 'EXEC', 'ADMIN', 'SALES'), async (req
     where: {
       ...(status ? { statusCd: status } : includeRetired === 'Y' ? {} : { statusCd: { not: 'RETIRED' } }),
       ...(employType ? { employType } : {}),
-      ...(q ? { OR: [{ name: { contains: q } }, { empId: { contains: q } }, { deptCd: { contains: q } }, { skillStack: { contains: q } }] } : {}),
+      ...(q ? { OR: [{ name: { contains: q } }, { empId: { contains: q } }, { deptCd: { contains: q } }, { email: { contains: q.toLowerCase() } }, { skillStack: { contains: q } }] } : {}),
     },
     include: { partner: { select: { partnerNm: true } } },
     orderBy: [{ deptCd: 'asc' }, { name: 'asc' }],
@@ -66,8 +69,16 @@ employeesRouter.get('/', requireRole('PM', 'EXEC', 'ADMIN', 'SALES'), async (req
   const alloc = await currentAllocations();
   res.json(
     rows.map(({ passwordHash: _, ...e }) => {
-      const total = alloc.get(e.empId) ?? 0;
-      return { ...e, careerYears: careerYears(e.careerStartDt), allocTotal: total, overAlloc: Math.max(0, total - 100) };
+      const cur = alloc.get(e.empId) ?? [];
+      const total = cur.reduce((s, a) => s + a.allocRate, 0);
+      return {
+        ...e,
+        careerYears: careerYears(e.careerStartDt),
+        allocTotal: total,
+        overAlloc: Math.max(0, total - 100),
+        projectCount: new Set(cur.map((a) => a.prjCd)).size,
+        currentAssignments: cur,
+      };
     }),
   );
 });
@@ -96,6 +107,7 @@ employeesRouter.get('/:empId', async (req, res) => {
 employeesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const body = parse(employeeSchema, req.body);
   await checkPartner(body.employType, body.partnerId);
+  await checkEmail(body.email);
   let empId = body.empId;
   if (!empId) {
     if (body.employType === 'PARTNER' || body.employType === 'FREE') empId = await nextPartnerEmpId();
@@ -115,6 +127,7 @@ employeesRouter.put('/:empId', requireRole('ADMIN'), async (req, res) => {
   const { initialPassword: _p, empId: _e, ...data } = body;
   const empId = String(req.params.empId);
   if (!(await prisma.employee.findUnique({ where: { empId } }))) throw notFound('인력');
+  await checkEmail(body.email, empId);
   await prisma.employee.update({ where: { empId }, data });
   res.json({ ok: true });
 });
@@ -133,6 +146,7 @@ employeesRouter.post('/import', requireRole('ADMIN'), async (req, res) => {
     try {
       const body = parse(employeeSchema, raw);
       await checkPartner(body.employType, body.partnerId);
+      await checkEmail(body.email);
       const empId = body.empId || (body.employType === 'PARTNER' || body.employType === 'FREE' ? await nextPartnerEmpId() : null);
       if (!empId) throw new HttpError(400, '사번 누락');
       if (await prisma.employee.findUnique({ where: { empId } })) throw new HttpError(409, '사번 중복');

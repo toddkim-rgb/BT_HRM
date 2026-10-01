@@ -34,7 +34,7 @@ export default function Dashboard() {
       <div className="grid cols-2">
         <MyWeekly />
         <MyAssignments />
-        {hasRole(user, 'PM', 'ADMIN') && <PendingApprovals />}
+        {hasRole(user, 'PM', 'EXEC', 'ADMIN') && <SubmissionSummary />}
         {isMgr && <ProjectBurn />}
       </div>
     </div>
@@ -61,15 +61,15 @@ function MyWeekly() {
   const { user } = useAuth();
   const thisWeek = isoWeek(today());
   const lastWeek = shiftWeek(thisWeek, -1);
-  const { data: cur } = useFetch<{ statusCd: string; rejectReason: string | null }>(`/weekly-works/${user!.empId}/${thisWeek}`);
-  const { data: prev } = useFetch<{ statusCd: string; rejectReason: string | null }>(`/weekly-works/${user!.empId}/${lastWeek}`);
-  const row = (week: string, d: { statusCd: string; rejectReason: string | null } | null) => (
+  const { data: cur } = useFetch<{ statusCd: string }>(`/weekly-works/${user!.empId}/${thisWeek}`);
+  const { data: prev } = useFetch<{ statusCd: string }>(`/weekly-works/${user!.empId}/${lastWeek}`);
+  const row = (week: string, d: { statusCd: string } | null) => (
     <tr>
       <td>{weekLabel(week)}</td>
       <td>{d ? <Badge code={d.statusCd}>{label(WW_STATUS, d.statusCd)}</Badge> : '…'}</td>
       <td style={{ textAlign: 'right' }}>
         <Link className="btn sm" to={`/weekly/${user!.empId}/${week}`}>
-          {d && ['NEW', 'DRAFT', 'REJECTED'].includes(d.statusCd) ? '작성' : '보기'}
+          {d && d.statusCd !== 'SUBMITTED' ? '작성' : '보기'}
         </Link>
       </td>
     </tr>
@@ -84,9 +84,9 @@ function MyWeekly() {
           </tbody>
         </table>
       </div>
-      {prev?.statusCd === 'REJECTED' && <div className="alert bad" style={{ marginTop: 10, marginBottom: 0 }}>지난주 보고서가 반려되었습니다: {prev.rejectReason}</div>}
+      {prev && prev.statusCd !== 'SUBMITTED' && <div className="alert warn" style={{ marginTop: 10, marginBottom: 0 }}>지난주 보고서가 아직 제출되지 않았습니다.</div>}
       <p className="muted small" style={{ marginBottom: 0 }}>
-        제출 마감은 없으며 금요일 작성을 권장합니다. 지난 주차도 언제든 작성·제출할 수 있습니다.
+        제출하면 바로 확정됩니다 (승인 절차 없음). 마감은 없으며 금요일 작성을 권장합니다.
       </p>
     </Card>
   );
@@ -98,8 +98,18 @@ function MyAssignments() {
     `/employees/${user!.empId}`,
   );
   const list = (data?.assignments ?? []).filter((a) => a.status === 'ACTIVE' || a.status === 'PLANNED');
+  const activeTotal = list.filter((a) => a.status === 'ACTIVE').reduce((s, a) => s + a.allocRate, 0);
   return (
-    <Card title="내 투입 현황">
+    <Card
+      title="내 투입 현황"
+      actions={
+        activeTotal > 0 && (
+          <Badge tone={activeTotal > 100 ? 'bad' : 'info'}>
+            현재 투입률 합계 {activeTotal}%{activeTotal > 100 && ` (과투입 +${activeTotal - 100}%)`}
+          </Badge>
+        )
+      }
+    >
       {!data ? (
         <Loading />
       ) : !list.length ? (
@@ -131,13 +141,16 @@ function MyAssignments() {
   );
 }
 
-function PendingApprovals() {
-  const { data } = useFetch<{ wwId: number; name: string; reportWeek: string; highIssueCount: number; supportReqCount: number }[]>('/weekly-works?status=SUBMITTED');
+function SubmissionSummary() {
+  const { data } = useFetch<{ prjCd: string; prjNm: string; assigned: number; submitted: number; missing: string[] }[]>('/weekly-works/project-summary');
+  const lastWeek = shiftWeek(isoWeek(today()), -1);
+  const { data: last } = useFetch<{ prjCd: string; assigned: number; submitted: number; missing: string[] }[]>(`/weekly-works/project-summary?week=${lastWeek}`);
+  const missingLast = (last ?? []).reduce((s, p) => s + p.missing.length, 0);
   return (
     <Card
-      title="승인 대기"
+      title="이번 주 제출 현황"
       actions={
-        <Link className="btn sm" to="/approvals">
+        <Link className="btn sm" to="/submissions">
           전체 보기
         </Link>
       }
@@ -145,21 +158,20 @@ function PendingApprovals() {
       {!data ? (
         <Loading />
       ) : !data.length ? (
-        <Empty>승인 대기 중인 보고서가 없습니다.</Empty>
+        <Empty>진행 중인 담당 프로젝트가 없습니다.</Empty>
       ) : (
         <>
-          <div className="kpi-value" style={{ marginBottom: 8 }}>
-            {data.length}건
-          </div>
-          <div className="small">
-            {data.slice(0, 6).map((r) => (
-              <div key={r.wwId} className="row" style={{ marginBottom: 4 }}>
-                {r.name} <span className="muted">{r.reportWeek}</span>
-                {r.highIssueCount > 0 && <Badge code="H">이슈 상</Badge>}
-                {r.supportReqCount > 0 && <Badge tone="warn">지원요청</Badge>}
-              </div>
-            ))}
-          </div>
+          {data.slice(0, 8).map((p) => (
+            <div key={p.prjCd} className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+              <span>
+                <strong>{p.prjCd}</strong> <span className="small muted">{p.prjNm}</span>
+              </span>
+              <Badge tone={p.assigned && p.submitted === p.assigned ? 'good' : 'warn'}>
+                {p.submitted}/{p.assigned}명
+              </Badge>
+            </div>
+          ))}
+          {missingLast > 0 && <div className="alert warn" style={{ marginTop: 8, marginBottom: 0 }}>지난주 미제출 {missingLast}건이 있습니다.</div>}
         </>
       )}
     </Card>

@@ -27,15 +27,27 @@ export async function maxAllocation(empId: string, start: string, end: string): 
   return max;
 }
 
-/** 오늘 기준 인력별 투입률 합계 */
-export async function currentAllocations(): Promise<Map<string, number>> {
+export interface CurrentAlloc {
+  prjCd: string;
+  prjNm: string;
+  roleCd: string;
+  allocRate: number;
+  endDt: string;
+}
+
+/** 오늘 기준 인력별 투입 중인 배정 (다중 프로젝트 투입 현황) */
+export async function currentAllocations(): Promise<Map<string, CurrentAlloc[]>> {
   const t = today();
   const rows = await prisma.assignment.findMany({
     where: { canceled: false, startDt: { lte: t }, endDt: { gte: t } },
-    select: { empId: true, allocRate: true },
+    select: { empId: true, prjCd: true, roleCd: true, allocRate: true, endDt: true, project: { select: { prjNm: true } } },
+    orderBy: { allocRate: 'desc' },
   });
-  const m = new Map<string, number>();
-  for (const r of rows) m.set(r.empId, (m.get(r.empId) ?? 0) + r.allocRate);
+  const m = new Map<string, CurrentAlloc[]>();
+  for (const r of rows) {
+    if (!m.has(r.empId)) m.set(r.empId, []);
+    m.get(r.empId)!.push({ prjCd: r.prjCd, prjNm: r.project.prjNm, roleCd: r.roleCd, allocRate: r.allocRate, endDt: r.endDt });
+  }
   return m;
 }
 

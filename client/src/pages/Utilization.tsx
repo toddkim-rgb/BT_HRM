@@ -19,6 +19,7 @@ interface Row {
   totalMd: number;
   paidMd: number;
   reportedMd: number;
+  byProject: { prjCd: string; md: number }[];
   util: number | null;
   paidUtil: number | null;
 }
@@ -55,7 +56,7 @@ export default function Utilization() {
         title="가동률"
         desc={
           <>
-            총 가동률 = 프로젝트 투입MD(SM·SI·내부·제안·기타) ÷ 가용MD · 유상 가동률 = SM+SI 투입MD ÷ 가용MD. 가용MD = 영업일 − 휴가 (진행 중인 달은 오늘까지). <b>PM이 승인한 실적만</b> 집계합니다.
+            총 가동률 = 프로젝트 투입MD(SM·SI·내부·제안·기타) ÷ 가용MD · 유상 가동률 = SM+SI 투입MD ÷ 가용MD. 가용MD = 영업일 − 휴가 (진행 중인 달은 오늘까지). <b>제출된 주간 업무보고</b>만 집계합니다.
           </>
         }
         actions={
@@ -136,6 +137,11 @@ export default function Utilization() {
                         </td>
                         <td data-label="투입MD" className="num">
                           {num(r.totalMd)}
+                          {r.byProject.length > 1 && (
+                            <div className="small muted" title="다중 프로젝트 투입">
+                              {r.byProject.map((b) => `${b.prjCd} ${num(b.md)}`).join(' · ')}
+                            </div>
+                          )}
                         </td>
                         <td data-label="유상MD" className="num">
                           {num(r.paidMd)}

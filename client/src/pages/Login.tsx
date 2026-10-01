@@ -2,17 +2,18 @@ import { useState, type FormEvent } from 'react';
 import { useAuth } from '../lib/auth';
 
 const DEMO = [
-  ['admin', 'admin1234', '시스템관리자'],
-  ['E1001', '1234', '경영진'],
-  ['E2001', '1234', 'SI PM'],
-  ['E2002', '1234', 'SM PM'],
-  ['E3001', '1234', '투입인력'],
-  ['S1001', '1234', '영업담당'],
+  ['admin@example.com', 'admin1234', '시스템관리자'],
+  ['ceo.kim@example.com', '1234', '경영진'],
+  ['sujin.lee@example.com', '1234', 'SI PM'],
+  ['junho.park@example.com', '1234', 'SM PM'],
+  ['gildong.hong@example.com', '1234', '투입인력'],
+  ['minsu.jung@example.com', '1234', '다중 투입'],
+  ['sales.choi@example.com', '1234', '영업담당'],
 ];
 
 export default function Login() {
   const { login } = useAuth();
-  const [empId, setEmpId] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,7 +23,7 @@ export default function Login() {
     setBusy(true);
     setError(null);
     try {
-      await login(empId.trim(), password);
+      await login(email.trim(), password);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -38,8 +39,8 @@ export default function Login() {
         </div>
         <p className="muted">SM·SI 사업부문 인력관리 시스템</p>
         <label className="field">
-          <span className="field-label">사번</span>
-          <input value={empId} onChange={(e) => setEmpId(e.target.value)} autoComplete="username" autoFocus required />
+          <span className="field-label">이메일</span>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" placeholder="name@company.com" autoFocus required />
         </label>
         <label className="field">
           <span className="field-label">비밀번호</span>
@@ -59,11 +60,11 @@ export default function Login() {
                   key={id}
                   className="chip"
                   onClick={() => {
-                    setEmpId(id);
+                    setEmail(id);
                     setPassword(pw);
                   }}
                 >
-                  {label} <small>{id}</small>
+                  {label}
                 </button>
               ))}
             </div>

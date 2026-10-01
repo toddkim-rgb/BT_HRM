@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { isManager, me, pmProjectCodes } from '../auth.js';
 import { forbidden, notFound, prisma } from '../db.js';
 import { plannedMd } from '../lib/alloc.js';
-import { addMonths, businessDays, monthRange, overlap, today } from '../lib/dates.js';
+import { addMonths, businessDays, monthRange, today } from '../lib/dates.js';
 import { holidaySet, mdPerMm } from '../lib/settings.js';
 import { parse, ymStr } from '../lib/validate.js';
 import { z } from 'zod';
@@ -14,10 +14,10 @@ export const statsRouter = Router();
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** 승인된 타임시트만 집계 */
-async function approvedTimesheets(start: string, end: string, extra: Record<string, unknown> = {}) {
+/** 제출된(=확정) 주간 업무보고의 타임시트만 집계 */
+async function submittedTimesheets(start: string, end: string, extra: Record<string, unknown> = {}) {
   return prisma.timesheet.findMany({
-    where: { workDt: { gte: start, lte: end }, weeklyWork: { statusCd: 'APPROVED' }, ...extra },
+    where: { workDt: { gte: start, lte: end }, weeklyWork: { statusCd: 'SUBMITTED' }, ...extra },
     select: { empId: true, prjCd: true, md: true, workDt: true, project: { select: { prjType: true, prjCd: true } } },
   });
 }
@@ -30,21 +30,23 @@ export async function utilizationFor(ym: string, empIds?: string[]) {
   const t = today();
   const end = month.end > t ? t : month.end;
   const holidays = await holidaySet();
+  const ts = start <= end ? await submittedTimesheets(start, end, empIds ? { empId: { in: empIds } } : {}) : [];
+  // 대상: 퇴사자 제외. 단, 퇴사자도 해당 월 실적이 있으면 포함
+  const reported = [...new Set(ts.map((t) => t.empId))];
   const emps = await prisma.employee.findMany({
     where: {
       ...(empIds ? { empId: { in: empIds } } : { utilTarget: true }),
-      OR: [{ hireDt: null }, { hireDt: { lte: end } }],
-      AND: [{ OR: [{ retireDt: null }, { retireDt: { gte: start } }] }],
-      NOT: { statusCd: 'RETIRED', retireDt: null },
+      OR: [{ statusCd: { not: 'RETIRED' } }, { empId: { in: reported } }],
     },
-    select: { empId: true, name: true, deptCd: true, gradeCd: true, employType: true, hireDt: true, retireDt: true, statusCd: true },
+    select: { empId: true, name: true, deptCd: true, gradeCd: true, employType: true, statusCd: true },
     orderBy: [{ deptCd: 'asc' }, { name: 'asc' }],
   });
-  const ts = await approvedTimesheets(start, end, empIds ? { empId: { in: empIds } } : {});
+  const bd = start <= end ? businessDays(start, end, holidays).length : 0;
   return emps.map((e) => {
-    const o = overlap(e.hireDt ?? start, e.retireDt ?? end, start, end);
-    const bd = o ? businessDays(o.start, o.end, holidays).length : 0;
     const mine = ts.filter((t) => t.empId === e.empId);
+    // 다중 프로젝트 투입: 프로젝트별 투입 MD
+    const byPrj = new Map<string, number>();
+    for (const t of mine) if (WORK_TYPES.includes(t.project.prjType)) byPrj.set(t.prjCd, (byPrj.get(t.prjCd) ?? 0) + t.md);
     const leave = mine.filter((t) => t.prjCd === 'NP-LV').reduce((s, t) => s + t.md, 0);
     const total = mine.filter((t) => WORK_TYPES.includes(t.project.prjType)).reduce((s, t) => s + t.md, 0);
     const paid = mine.filter((t) => PAID_TYPES.includes(t.project.prjType)).reduce((s, t) => s + t.md, 0);
@@ -57,6 +59,7 @@ export async function utilizationFor(ym: string, empIds?: string[]) {
       totalMd: total,
       paidMd: paid,
       reportedMd: mine.reduce((s, t) => s + t.md, 0),
+      byProject: [...byPrj].map(([prjCd, md]) => ({ prjCd, md })).sort((a, b) => b.md - a.md),
       util: avail ? round1((total / avail) * 100) : null,
       paidUtil: avail ? round1((paid / avail) * 100) : null,
     };
@@ -117,7 +120,7 @@ async function projectMm(prjCds: string[]) {
   const asg = await prisma.assignment.findMany({ where: { prjCd: { in: prjCds }, canceled: false } });
   const ts = await prisma.timesheet.groupBy({
     by: ['prjCd'],
-    where: { prjCd: { in: prjCds }, weeklyWork: { statusCd: 'APPROVED' } },
+    where: { prjCd: { in: prjCds }, weeklyWork: { statusCd: 'SUBMITTED' } },
     _sum: { md: true },
   });
   const t = today();
@@ -168,7 +171,7 @@ statsRouter.get('/projects/:prjCd/mm', async (req, res) => {
     include: { employee: { select: { name: true, gradeCd: true, skillLevel: true, employType: true } } },
     orderBy: { startDt: 'asc' },
   });
-  const ts = await approvedTimesheets('0000-01-01', '9999-12-31', { prjCd: p.prjCd });
+  const ts = await submittedTimesheets('0000-01-01', '9999-12-31', { prjCd: p.prjCd });
 
   // 월별 계획 vs 실적 MM
   const startYm = (p.startDt ?? asg[0]?.startDt ?? today()).slice(0, 7);

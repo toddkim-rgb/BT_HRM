@@ -1,13 +1,17 @@
+import { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 import { type AuthUser, isManager, me, pmProjectCodes } from '../auth.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
-import { businessDays, isValidWeek, shiftWeek, today, weekDays } from '../lib/dates.js';
+import { businessDays, isValidWeek, isoWeek, shiftWeek, today, weekDays } from '../lib/dates.js';
 import { holidaySet } from '../lib/settings.js';
 import { dateStr, optStr, parse } from '../lib/validate.js';
 
-// 10장 주간 업무보고 (F-002, F-003, F-005, F-011)
+// 10장 주간 업무보고 (F-002, F-005, F-011)
+// 승인 절차 없음: 제출 = 확정, 제출된 보고서만 가동률·MM에 집계
 export const weeklyWorksRouter = Router();
+
+type Tx = Prisma.TransactionClient;
 
 const SM_WORK_TYPES = ['PERIODIC', 'REQUEST', 'INCIDENT', 'IMPROVE', 'ETC'] as const;
 
@@ -34,7 +38,7 @@ const issueSchema = z.object({
   supportReqYn: z.boolean().default(false),
 });
 
-const saveSchema = z.object({
+const reportSchema = z.object({
   remark: optStr,
   timesheet: z.array(z.object({ prjCd: z.string().min(1), md: z.record(z.string(), z.number().nullable()) })),
   actualItems: z.array(itemSchema),
@@ -42,6 +46,7 @@ const saveSchema = z.object({
   issues: z.array(issueSchema),
 });
 
+type ReportInput = z.infer<typeof reportSchema>;
 type ItemInput = z.infer<typeof itemSchema>;
 
 /** 실적 상태 자동 판정: 100% = 완료, 목표 미달 = 지연, 그 외 정상 (10.3) */
@@ -50,15 +55,6 @@ function judgeStatus(it: ItemInput, isSm: boolean): string | null {
   if (it.progressAfter === 100) return 'DONE';
   if (it.targetProgress != null && it.progressAfter != null && it.progressAfter < it.targetProgress) return 'DELAY';
   return 'NORMAL';
-}
-
-/** 보고서 승인권자 = 보고서에 포함된 프로젝트의 PM들 (+관리자) */
-async function approversOf(wwId: number): Promise<Set<string>> {
-  const [ts, wi] = await Promise.all([
-    prisma.timesheet.findMany({ where: { wwId }, select: { project: { select: { pmEmpId: true } } } }),
-    prisma.workItem.findMany({ where: { wwId }, select: { project: { select: { pmEmpId: true } } } }),
-  ]);
-  return new Set([...ts, ...wi].map((r) => r.project.pmEmpId).filter((x): x is string => !!x));
 }
 
 /** 조회 권한: 본인 / 경영진·관리자 / 해당 주 담당 프로젝트에 배정·입력된 인력의 PM */
@@ -106,6 +102,34 @@ async function projectMap(codes: string[]) {
   return new Map(rows.map((r) => [r.prjCd, r]));
 }
 
+/**
+ * 다중 프로젝트 투입: 프로젝트별 해당 주 계획 MD (배정 투입률 기준)
+ * days = 영업일별 투입률 합계(%) — 같은 프로젝트 중복 배정은 합산
+ */
+async function weekPlan(empId: string, week: string, holidays: Set<string>) {
+  const days = weekDays(week);
+  const bdays = businessDays(days[0], days[6], holidays);
+  const asg = await prisma.assignment.findMany({
+    where: { empId, canceled: false, startDt: { lte: days[6] }, endDt: { gte: days[0] } },
+    select: { prjCd: true, allocRate: true, roleCd: true, startDt: true, endDt: true },
+    orderBy: { allocRate: 'desc' },
+  });
+  const plan = new Map<string, { prjCd: string; roles: string[]; days: Record<string, number>; plannedMd: number }>();
+  for (const a of asg) {
+    if (!plan.has(a.prjCd)) plan.set(a.prjCd, { prjCd: a.prjCd, roles: [], days: {}, plannedMd: 0 });
+    const p = plan.get(a.prjCd)!;
+    if (!p.roles.includes(a.roleCd)) p.roles.push(a.roleCd);
+    for (const d of bdays) {
+      if (d < a.startDt || d > a.endDt) continue;
+      p.days[d] = (p.days[d] ?? 0) + a.allocRate;
+      p.plannedMd += a.allocRate / 100;
+    }
+  }
+  const out = [...plan.values()].map((p) => ({ ...p, plannedMd: Math.round(p.plannedMd * 100) / 100 }));
+  const dayAlloc = Object.fromEntries(bdays.map((d) => [d, out.reduce((s, p) => s + (p.days[d] ?? 0), 0)]));
+  return { plan: out, dayAlloc };
+}
+
 async function buildView(empId: string, week: string) {
   const days = weekDays(week);
   const holidays = await holidaySet();
@@ -114,10 +138,7 @@ async function buildView(empId: string, week: string) {
     where: { empId_reportWeek: { empId, reportWeek: week } },
     include: { timesheets: true, workItems: { orderBy: { seq: 'asc' } }, issues: true },
   });
-  const assigned = await prisma.assignment.findMany({
-    where: { empId, canceled: false, startDt: { lte: days[6] }, endDt: { gte: days[0] } },
-    select: { prjCd: true, allocRate: true, roleCd: true },
-  });
+  const { plan, dayAlloc } = await weekPlan(empId, week, holidays);
 
   let tsRows: { prjCd: string; md: Record<string, number | null> }[];
   let actualItems: unknown[];
@@ -139,11 +160,10 @@ async function buildView(empId: string, week: string) {
     planItems = [];
     issues = [];
   }
-  // 배정된 프로젝트(해당 주 배정기간 내) 행 자동 생성
-  for (const a of assigned) if (!tsRows.some((r) => r.prjCd === a.prjCd)) tsRows.push({ prjCd: a.prjCd, md: {} });
+  // 배정된 프로젝트(해당 주 배정기간 내) 행 자동 생성 — 투입률 높은 순
+  for (const p of plan) if (!tsRows.some((r) => r.prjCd === p.prjCd)) tsRows.push({ prjCd: p.prjCd, md: {} });
 
-  const codes = [...new Set([...tsRows.map((r) => r.prjCd), ...assigned.map((a) => a.prjCd)])];
-  const pm = await projectMap(codes);
+  const pm = await projectMap(tsRows.map((r) => r.prjCd));
   const emp = await prisma.employee.findUnique({ where: { empId }, select: { empId: true, name: true, gradeCd: true, skillLevel: true, jobCd: true } });
   return {
     week,
@@ -155,11 +175,9 @@ async function buildView(empId: string, week: string) {
     statusCd: ww?.statusCd ?? 'NEW',
     remark: ww?.remark ?? null,
     submittedAt: ww?.submittedAt ?? null,
-    approvedBy: ww?.approvedBy ?? null,
-    approvedAt: ww?.approvedAt ?? null,
-    rejectReason: ww?.rejectReason ?? null,
     timesheet: tsRows.map((r) => ({ ...r, prjNm: pm.get(r.prjCd)?.prjNm, prjType: pm.get(r.prjCd)?.prjType })),
-    assigned,
+    plan,
+    dayAlloc,
     actualItems,
     planItems,
     issues,
@@ -186,49 +204,39 @@ weeklyWorksRouter.get('/:empId/:week/carryover', async (req, res) => {
   res.json(await carryOver(empId, week));
 });
 
-// 임시저장
-weeklyWorksRouter.put('/:empId/:week', async (req, res) => {
-  const u = me(req);
-  const { empId, week } = req.params;
-  checkWeek(week);
-  if (u.empId !== empId) throw forbidden();
-  const body = parse(saveSchema, req.body);
+/** 입력값 검증 후 보고서를 통째로 저장 (트랜잭션 내) */
+async function writeReport(tx: Tx, empId: string, week: string, body: ReportInput, statusCd: 'DRAFT' | 'SUBMITTED') {
   const days = weekDays(week);
-
-  const cur = await prisma.weeklyWork.findUnique({ where: { empId_reportWeek: { empId, reportWeek: week } } });
-  if (cur?.statusCd === 'APPROVED') throw new HttpError(409, '승인된 보고서는 수정할 수 없습니다. PM에게 반려를 요청하세요.');
-
-  // 프로젝트 존재 확인
   const codes = [...new Set([...body.timesheet.map((t) => t.prjCd), ...body.actualItems.map((i) => i.prjCd), ...body.planItems.map((i) => i.prjCd), ...body.issues.map((i) => i.prjCd)])];
-  const pm = await projectMap(codes);
+  const prjRows = await tx.project.findMany({ where: { prjCd: { in: codes } }, select: { prjCd: true, prjType: true } });
+  const pm = new Map(prjRows.map((r) => [r.prjCd, r]));
   for (const c of codes) if (!pm.has(c)) throw new HttpError(400, `존재하지 않는 프로젝트 코드: ${c}`);
 
-  // 투입시간: 0.5 단위, 1일 합계 ≤ 1.0 (10.3)
+  // 투입시간: 0.5 단위, 1일 합계 ≤ 1.0 (10.3) — 여러 프로젝트에 나눠 입력해도 하루 합계 기준
   const daySum: Record<string, number> = {};
   const tsData: { prjCd: string; workDt: string; md: number }[] = [];
+  const seen = new Set<string>();
   for (const row of body.timesheet) {
     for (const [dt, md] of Object.entries(row.md)) {
       if (md == null || md === 0) continue;
       if (!days.includes(dt)) throw new HttpError(400, `해당 주차가 아닌 날짜입니다: ${dt}`);
       if (md < 0 || md > 1 || Math.round(md * 2) !== md * 2) throw new HttpError(400, `투입 MD는 0.5 단위(0~1)로 입력하세요: ${row.prjCd} ${dt}`);
+      const k = `${row.prjCd}|${dt}`;
+      if (seen.has(k)) throw new HttpError(400, `같은 프로젝트·날짜가 중복 입력되었습니다: ${row.prjCd} ${dt}`);
+      seen.add(k);
       daySum[dt] = (daySum[dt] ?? 0) + md;
       tsData.push({ prjCd: row.prjCd, workDt: dt, md });
     }
   }
   const overDays = Object.entries(daySum).filter(([, s]) => s > 1);
   if (overDays.length) throw new HttpError(400, `1일 투입 합계는 1.0MD를 넘을 수 없습니다: ${overDays.map(([d]) => d).join(', ')}`);
-  const dup = new Set<string>();
-  for (const t of tsData) {
-    const k = `${t.prjCd}|${t.workDt}`;
-    if (dup.has(k)) throw new HttpError(400, `같은 프로젝트·날짜가 중복 입력되었습니다: ${t.prjCd} ${t.workDt}`);
-    dup.add(k);
-  }
 
   // SI 마일스톤은 해당 프로젝트의 것이어야 함
-  const msIds = [...body.actualItems, ...body.planItems].map((i) => i.msId).filter((x): x is number => x != null);
+  const allItems = [...body.actualItems, ...body.planItems];
+  const msIds = allItems.map((i) => i.msId).filter((x): x is number => x != null);
   if (msIds.length) {
-    const ms = await prisma.milestone.findMany({ where: { msId: { in: msIds } }, select: { msId: true, prjCd: true } });
-    for (const it of [...body.actualItems, ...body.planItems]) {
+    const ms = await tx.milestone.findMany({ where: { msId: { in: msIds } }, select: { msId: true, prjCd: true } });
+    for (const it of allItems) {
       if (it.msId != null && ms.find((m) => m.msId === it.msId)?.prjCd !== it.prjCd) throw new HttpError(400, `마일스톤이 프로젝트와 맞지 않습니다: ${it.workNm}`);
     }
   }
@@ -253,29 +261,22 @@ weeklyWorksRouter.put('/:empId/:week', async (req, res) => {
     };
   };
 
-  const wwId = await prisma.$transaction(async (tx) => {
-    const ww = cur
-      ? await tx.weeklyWork.update({
-          where: { wwId: cur.wwId },
-          // 제출 후 수정하면 다시 제출해야 함 (승인 전 자유 수정, 10.7)
-          data: { remark: body.remark, statusCd: cur.statusCd === 'REJECTED' ? 'REJECTED' : 'DRAFT', submittedAt: null },
-        })
-      : await tx.weeklyWork.create({ data: { empId, reportWeek: week, remark: body.remark } });
-    await tx.timesheet.deleteMany({ where: { wwId: ww.wwId } });
-    await tx.workItem.deleteMany({ where: { wwId: ww.wwId } });
-    await tx.weeklyIssue.deleteMany({ where: { wwId: ww.wwId } });
-    if (tsData.length) await tx.timesheet.createMany({ data: tsData.map((t) => ({ ...t, wwId: ww.wwId, empId })) });
-    const items = [...body.actualItems.map((it, i) => toItem(it, 'ACTUAL', i)), ...body.planItems.map((it, i) => toItem(it, 'PLAN', i))];
-    if (items.length) await tx.workItem.createMany({ data: items.map((it) => ({ ...it, wwId: ww.wwId })) });
-    if (body.issues.length) await tx.weeklyIssue.createMany({ data: body.issues.map((it) => ({ ...it, actionPlan: it.actionPlan ?? null, wwId: ww.wwId })) });
-    return ww.wwId;
-  });
-  res.json({ ok: true, wwId, view: await buildView(empId, week) });
-});
+  const cur = await tx.weeklyWork.findUnique({ where: { empId_reportWeek: { empId, reportWeek: week } } });
+  const data = { remark: body.remark, statusCd, submittedAt: statusCd === 'SUBMITTED' ? new Date() : null };
+  const ww = cur ? await tx.weeklyWork.update({ where: { wwId: cur.wwId }, data }) : await tx.weeklyWork.create({ data: { ...data, empId, reportWeek: week } });
+  await tx.timesheet.deleteMany({ where: { wwId: ww.wwId } });
+  await tx.workItem.deleteMany({ where: { wwId: ww.wwId } });
+  await tx.weeklyIssue.deleteMany({ where: { wwId: ww.wwId } });
+  if (tsData.length) await tx.timesheet.createMany({ data: tsData.map((t) => ({ ...t, wwId: ww.wwId, empId })) });
+  const items = [...body.actualItems.map((it, i) => toItem(it, 'ACTUAL', i)), ...body.planItems.map((it, i) => toItem(it, 'PLAN', i))];
+  if (items.length) await tx.workItem.createMany({ data: items.map((it) => ({ ...it, wwId: ww.wwId })) });
+  if (body.issues.length) await tx.weeklyIssue.createMany({ data: body.issues.map((it) => ({ ...it, actionPlan: it.actionPlan ?? null, wwId: ww.wwId })) });
+  return ww.wwId;
+}
 
-/** 제출 전 검증 (10.3): errors = 제출 불가, warnings = 확인 후 제출 */
-async function validateForSubmit(wwId: number, week: string) {
-  const ww = await prisma.weeklyWork.findUniqueOrThrow({
+/** 제출 검증 (10.3): errors = 제출 불가, warnings = 확인 후 제출 */
+async function validateForSubmit(tx: Tx, wwId: number, week: string) {
+  const ww = await tx.weeklyWork.findUniqueOrThrow({
     where: { wwId },
     include: { timesheets: true, workItems: { include: { project: { select: { prjType: true } } } } },
   });
@@ -293,59 +294,84 @@ async function validateForSubmit(wwId: number, week: string) {
   return { errors, warnings };
 }
 
+// 임시저장 (제출 전에만)
+weeklyWorksRouter.put('/:empId/:week', async (req, res) => {
+  const u = me(req);
+  const { empId, week } = req.params;
+  checkWeek(week);
+  if (u.empId !== empId) throw forbidden();
+  const body = parse(reportSchema, req.body);
+  const cur = await prisma.weeklyWork.findUnique({ where: { empId_reportWeek: { empId, reportWeek: week } } });
+  if (cur?.statusCd === 'SUBMITTED') throw new HttpError(409, '제출된 보고서는 임시저장할 수 없습니다. 수정 후 바로 제출하세요.');
+  await prisma.$transaction((tx) => writeReport(tx, empId, week, body, 'DRAFT'));
+  res.json({ ok: true, view: await buildView(empId, week) });
+});
+
+class ValidationAbort extends Error {
+  constructor(public result: { errors: string[]; warnings: string[] }) {
+    super('validation');
+  }
+}
+
+// 제출 (= 확정). 제출된 보고서도 언제든 수정 후 다시 제출할 수 있음
 weeklyWorksRouter.post('/:empId/:week/submit', async (req, res) => {
   const u = me(req);
   const { empId, week } = req.params;
   checkWeek(week);
   if (u.empId !== empId) throw forbidden();
-  const { confirmWarnings } = parse(z.object({ confirmWarnings: z.boolean().default(false) }), req.body ?? {});
-  const ww = await prisma.weeklyWork.findUnique({ where: { empId_reportWeek: { empId, reportWeek: week } } });
-  if (!ww) throw new HttpError(400, '먼저 임시저장하세요.');
-  if (ww.statusCd === 'APPROVED') throw new HttpError(409, '이미 승인된 보고서입니다.');
-  if (ww.statusCd === 'SUBMITTED') throw new HttpError(409, '이미 제출된 보고서입니다.');
-  const { errors, warnings } = await validateForSubmit(ww.wwId, week);
-  if (errors.length) throw new HttpError(422, errors.join('\n'), { errors, warnings });
-  if (warnings.length && !confirmWarnings) throw new HttpError(422, '확인이 필요한 항목이 있습니다.', { errors, warnings, needConfirm: true });
-
-  // 승인할 PM이 없는 보고서(공통코드만 입력)는 자동 승인
-  const approvers = await approversOf(ww.wwId);
-  const autoApprove = approvers.size === 0;
-  await prisma.weeklyWork.update({
-    where: { wwId: ww.wwId },
-    data: {
-      statusCd: autoApprove ? 'APPROVED' : 'SUBMITTED',
-      submittedAt: new Date(),
-      rejectReason: null,
-      ...(autoApprove ? { approvedBy: 'SYSTEM', approvedAt: new Date() } : {}),
-    },
-  });
-  res.json({ ok: true, statusCd: autoApprove ? 'APPROVED' : 'SUBMITTED' });
+  const body = parse(reportSchema.extend({ confirmWarnings: z.boolean().default(false) }), req.body);
+  try {
+    // 저장·검증을 한 트랜잭션으로: 검증에 걸리면 기존(제출된) 내용이 그대로 유지됨
+    const wwId = await prisma.$transaction(async (tx) => {
+      const id = await writeReport(tx, empId, week, body, 'SUBMITTED');
+      const v = await validateForSubmit(tx, id, week);
+      if (v.errors.length || (v.warnings.length && !body.confirmWarnings)) throw new ValidationAbort(v);
+      return id;
+    });
+    await onSubmitted(wwId);
+  } catch (e) {
+    if (!(e instanceof ValidationAbort)) throw e;
+    const { errors, warnings } = e.result;
+    if (errors.length) throw new HttpError(422, errors.join('\n'), { errors, warnings });
+    throw new HttpError(422, '확인이 필요한 항목이 있습니다.', { errors, warnings, needConfirm: true });
+  }
+  res.json({ ok: true, statusCd: 'SUBMITTED', view: await buildView(empId, week) });
 });
 
-// 승인 대기 목록 (PM: 담당 프로젝트가 포함된 제출 보고서)
+/** 제출 후처리: 연결 작업 항목이 처음 제출되면 마일스톤 자동 진행중 (10.4.3) */
+async function onSubmitted(wwId: number) {
+  const items = await prisma.workItem.findMany({ where: { wwId, itemType: 'ACTUAL', msId: { not: null } }, select: { msId: true } });
+  const ids = [...new Set(items.map((i) => i.msId!))];
+  if (!ids.length) return;
+  await prisma.milestone.updateMany({ where: { msId: { in: ids }, statusCd: 'PLANNED' }, data: { statusCd: 'IN_PROGRESS', actualStartDt: today() } });
+}
+
+// 제출된 보고서 목록 (PM: 담당 프로젝트가 포함된 보고서)
 weeklyWorksRouter.get('/', async (req, res) => {
   const u = me(req);
   if (!(u.role === 'PM' || isManager(u))) throw forbidden();
-  const { status, week } = req.query as Record<string, string | undefined>;
-  const where: Record<string, unknown> = { ...(status ? { statusCd: { in: status.split(',') } } : {}), ...(week ? { reportWeek: week } : {}) };
-  if (u.role === 'PM') {
-    const mine = await pmProjectCodes(u.empId);
-    where.OR = [{ timesheets: { some: { prjCd: { in: mine } } } }, { workItems: { some: { prjCd: { in: mine } } } }];
-  }
+  const { status, week, prjCd } = req.query as Record<string, string | undefined>;
+  const where: Prisma.WeeklyWorkWhereInput = { statusCd: { in: (status ?? 'SUBMITTED').split(',') }, ...(week ? { reportWeek: week } : {}) };
+  let scope: string[] | null = null;
+  if (u.role === 'PM') scope = await pmProjectCodes(u.empId);
+  if (prjCd) scope = scope ? scope.filter((c) => c === prjCd) : [prjCd];
+  if (scope) where.OR = [{ timesheets: { some: { prjCd: { in: scope } } } }, { workItems: { some: { prjCd: { in: scope } } } }];
   const rows = await prisma.weeklyWork.findMany({
     where,
     include: {
       employee: { select: { name: true, gradeCd: true, deptCd: true } },
       timesheets: { select: { prjCd: true, md: true } },
-      issues: { select: { severity: true, supportReqYn: true } },
-      workItems: { where: { itemType: 'ACTUAL' }, select: { statusCd: true } },
+      issues: { select: { severity: true, supportReqYn: true, prjCd: true } },
+      workItems: { where: { itemType: 'ACTUAL' }, select: { statusCd: true, prjCd: true } },
     },
-    orderBy: [{ reportWeek: 'desc' }, { submittedAt: 'asc' }],
+    orderBy: [{ reportWeek: 'desc' }, { submittedAt: 'desc' }],
+    take: 300,
   });
   res.json(
     rows.map((r) => {
       const byPrj: Record<string, number> = {};
       for (const t of r.timesheets) byPrj[t.prjCd] = (byPrj[t.prjCd] ?? 0) + t.md;
+      const inScope = <T extends { prjCd: string }>(x: T) => !scope || scope.includes(x.prjCd);
       return {
         wwId: r.wwId,
         empId: r.empId,
@@ -355,68 +381,51 @@ weeklyWorksRouter.get('/', async (req, res) => {
         reportWeek: r.reportWeek,
         statusCd: r.statusCd,
         submittedAt: r.submittedAt,
-        approvedBy: r.approvedBy,
         totalMd: r.timesheets.reduce((s, t) => s + t.md, 0),
         mdByProject: byPrj,
-        delayCount: r.workItems.filter((w) => w.statusCd === 'DELAY').length,
-        issueCount: r.issues.length,
-        highIssueCount: r.issues.filter((i) => i.severity === 'H').length,
-        supportReqCount: r.issues.filter((i) => i.supportReqYn).length,
+        delayCount: r.workItems.filter((w) => w.statusCd === 'DELAY' && inScope(w)).length,
+        issueCount: r.issues.filter(inScope).length,
+        highIssueCount: r.issues.filter((i) => i.severity === 'H' && inScope(i)).length,
+        supportReqCount: r.issues.filter((i) => i.supportReqYn && inScope(i)).length,
       };
     }),
   );
 });
 
-// 승인/반려 (일괄 가능)
-weeklyWorksRouter.patch('/approve', async (req, res) => {
+/** 프로젝트별 주간 제출 현황 요약 (PM 담당 / 경영진·관리자 전체) */
+weeklyWorksRouter.get('/project-summary', async (req, res) => {
   const u = me(req);
-  const body = parse(
-    z.object({ wwIds: z.array(z.number().int()).min(1), action: z.enum(['APPROVE', 'REJECT']), reason: optStr }).refine((v) => v.action === 'APPROVE' || !!v.reason?.trim(), {
-      message: '반려 사유를 입력하세요.',
-      path: ['reason'],
-    }),
-    req.body,
+  if (!(u.role === 'PM' || isManager(u))) throw forbidden();
+  const week = String(req.query.week ?? isoWeek(today()));
+  checkWeek(week);
+  const days = weekDays(week);
+  const projects = await prisma.project.findMany({
+    where: { prjType: { not: 'NP' }, statusCd: { in: ['ACTIVE', 'WON'] }, ...(u.role === 'PM' ? { pmEmpId: u.empId } : {}) },
+    select: { prjCd: true, prjNm: true },
+    orderBy: { prjCd: 'asc' },
+  });
+  const asg = await prisma.assignment.findMany({
+    where: { prjCd: { in: projects.map((p) => p.prjCd) }, canceled: false, startDt: { lte: days[6] }, endDt: { gte: days[0] } },
+    select: { prjCd: true, empId: true, employee: { select: { name: true } } },
+  });
+  const submitted = new Set(
+    (await prisma.weeklyWork.findMany({ where: { reportWeek: week, statusCd: 'SUBMITTED', empId: { in: asg.map((a) => a.empId) } }, select: { empId: true } })).map((w) => w.empId),
   );
-  const results: { wwId: number; ok: boolean; error?: string }[] = [];
-  for (const wwId of body.wwIds) {
-    const ww = await prisma.weeklyWork.findUnique({ where: { wwId } });
-    if (!ww) {
-      results.push({ wwId, ok: false, error: '보고서 없음' });
-      continue;
-    }
-    const approvers = await approversOf(wwId);
-    if (u.role !== 'ADMIN' && !(u.role === 'PM' && approvers.has(u.empId))) {
-      results.push({ wwId, ok: false, error: '승인 권한 없음' });
-      continue;
-    }
-    const canApprove = ww.statusCd === 'SUBMITTED';
-    const canReject = ww.statusCd === 'SUBMITTED' || ww.statusCd === 'APPROVED';
-    if (body.action === 'APPROVE' ? !canApprove : !canReject) {
-      results.push({ wwId, ok: false, error: `처리할 수 없는 상태: ${ww.statusCd}` });
-      continue;
-    }
-    await prisma.weeklyWork.update({
-      where: { wwId },
-      data:
-        body.action === 'APPROVE'
-          ? { statusCd: 'APPROVED', approvedBy: u.empId, approvedAt: new Date(), rejectReason: null }
-          : { statusCd: 'REJECTED', rejectReason: body.reason, approvedBy: null, approvedAt: null },
-    });
-    if (body.action === 'APPROVE') await onApproved(wwId);
-    results.push({ wwId, ok: true });
-  }
-  res.json({ results });
+  res.json(
+    projects.map((p) => {
+      const members = [...new Map(asg.filter((a) => a.prjCd === p.prjCd).map((a) => [a.empId, a.employee.name])).entries()];
+      return {
+        prjCd: p.prjCd,
+        prjNm: p.prjNm,
+        assigned: members.length,
+        submitted: members.filter(([id]) => submitted.has(id)).length,
+        missing: members.filter(([id]) => !submitted.has(id)).map(([, name]) => name),
+      };
+    }),
+  );
 });
 
-/** 승인 후처리: 연결 작업 항목 첫 승인 시 마일스톤 자동 진행중 (10.4.3) */
-async function onApproved(wwId: number) {
-  const items = await prisma.workItem.findMany({ where: { wwId, itemType: 'ACTUAL', msId: { not: null } }, select: { msId: true } });
-  const ids = [...new Set(items.map((i) => i.msId!))];
-  if (!ids.length) return;
-  await prisma.milestone.updateMany({ where: { msId: { in: ids }, statusCd: 'PLANNED' }, data: { statusCd: 'IN_PROGRESS', actualStartDt: today() } });
-}
-
-// 프로젝트별 주간 제출 현황 (배정 인력 기준)
+// 프로젝트별 주간 제출 현황 (배정 인력 기준, 다중 투입 인력은 이 프로젝트 MD만)
 weeklyWorksRouter.get('/project/:prjCd/:week/status', async (req, res) => {
   const u = me(req);
   const { prjCd, week } = req.params;
@@ -425,26 +434,37 @@ weeklyWorksRouter.get('/project/:prjCd/:week/status', async (req, res) => {
   if (!prj) throw notFound('프로젝트');
   if (!isManager(u) && !(u.role === 'PM' && prj.pmEmpId === u.empId)) throw forbidden();
   const days = weekDays(week);
+  const holidays = await holidaySet();
   const asg = await prisma.assignment.findMany({
     where: { prjCd, canceled: false, startDt: { lte: days[6] }, endDt: { gte: days[0] } },
     include: { employee: { select: { name: true, gradeCd: true } } },
   });
-  const emps = [...new Map(asg.map((a) => [a.empId, a])).values()];
+  const empIds = [...new Set(asg.map((a) => a.empId))];
   const wws = await prisma.weeklyWork.findMany({
-    where: { reportWeek: week, empId: { in: emps.map((e) => e.empId) } },
+    where: { reportWeek: week, empId: { in: empIds } },
     include: { timesheets: { where: { prjCd } } },
   });
+  // 다른 프로젝트 동시 투입 현황
+  const others = await prisma.assignment.findMany({
+    where: { empId: { in: empIds }, prjCd: { not: prjCd }, canceled: false, startDt: { lte: days[6] }, endDt: { gte: days[0] } },
+    select: { empId: true, prjCd: true, allocRate: true },
+  });
+  const bdays = businessDays(days[0], days[6], holidays);
   res.json(
-    emps.map((a) => {
-      const ww = wws.find((w) => w.empId === a.empId);
+    empIds.map((empId) => {
+      const mine = asg.filter((a) => a.empId === empId);
+      const ww = wws.find((w) => w.empId === empId);
+      const plannedMd = mine.reduce((s, a) => s + bdays.filter((d) => d >= a.startDt && d <= a.endDt).length * (a.allocRate / 100), 0);
       return {
-        empId: a.empId,
-        name: a.employee.name,
-        gradeCd: a.employee.gradeCd,
-        roleCd: a.roleCd,
-        allocRate: a.allocRate,
+        empId,
+        name: mine[0].employee.name,
+        gradeCd: mine[0].employee.gradeCd,
+        roleCd: mine.map((a) => a.roleCd).join(', '),
+        allocRate: mine.reduce((s, a) => s + a.allocRate, 0),
+        otherProjects: others.filter((o) => o.empId === empId).map((o) => ({ prjCd: o.prjCd, allocRate: o.allocRate })),
         wwId: ww?.wwId ?? null,
         statusCd: ww?.statusCd ?? 'NONE',
+        plannedMd: Math.round(plannedMd * 100) / 100,
         projectMd: ww?.timesheets.reduce((s, t) => s + t.md, 0) ?? 0,
       };
     }),
