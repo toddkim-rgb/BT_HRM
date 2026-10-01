@@ -26,15 +26,19 @@ export function signToken(user: AuthUser): string {
   return jwt.sign(user, secret(), { expiresIn: '12h' });
 }
 
-export function requireAuth(req: Request, _res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) throw new HttpError(401, '로그인이 필요합니다.');
+  let payload: AuthUser;
   try {
-    const payload = jwt.verify(header.slice(7), secret()) as AuthUser;
-    req.user = { empId: payload.empId, name: payload.name, role: payload.role, mustChangePw: !!payload.mustChangePw };
+    payload = jwt.verify(header.slice(7), secret()) as AuthUser;
   } catch {
     throw new HttpError(401, '세션이 만료되었습니다. 다시 로그인해 주세요.');
   }
+  // 삭제 처리·퇴사된 인력은 발급된 토큰도 사용 불가
+  const emp = await prisma.employee.findUnique({ where: { empId: payload.empId }, select: { deletedAt: true, statusCd: true, role: true } });
+  if (!emp || emp.deletedAt || emp.statusCd === 'RETIRED') throw new HttpError(401, '사용할 수 없는 계정입니다. 다시 로그인해 주세요.');
+  req.user = { empId: payload.empId, name: payload.name, role: emp.role as Role, mustChangePw: !!payload.mustChangePw };
   next();
 }
 

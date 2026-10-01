@@ -21,7 +21,8 @@ export interface Employee {
   careerYears: number | null;
   email: string;
   phone: string | null;
-  statusCd: string;
+  statusCd: string | null;
+  deletedAt?: string | null;
   role: string;
   utilTarget: boolean;
   allocTotal?: number;
@@ -37,7 +38,7 @@ const blank: Partial<Employee> & { initialPassword?: string } = {
   gradeCd: '',
   skillLevel: '중급',
   employType: 'REG',
-  statusCd: 'ACTIVE',
+  statusCd: null,
   role: 'EMP',
   utilTarget: true,
 };
@@ -48,10 +49,27 @@ export default function Employees() {
   const [q, setQ] = useState('');
   const [employType, setEmployType] = useState('');
   const [status, setStatus] = useState('');
-  const { data, error, loading, reload } = useFetch<Employee[]>(`/employees${qs({ q, employType, status, includeRetired: status === 'RETIRED' ? 'Y' : undefined })}`);
+  const [view, setView] = useState<'active' | 'deleted'>('active');
+  const deletedView = view === 'deleted';
+  const { data, error, loading, reload } = useFetch<Employee[]>(
+    `/employees${qs({ q, employType, status: deletedView ? undefined : status, includeRetired: status === 'RETIRED' ? 'Y' : undefined, deleted: deletedView ? 'Y' : undefined })}`,
+  );
   const [edit, setEdit] = useState<Partial<Employee> | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [removing, setRemoving] = useState<Employee | null>(null);
+  const toast = useToast();
+
+  const restore = async (e: Employee) => {
+    if (!window.confirm(`${e.name}님을 복구할까요? 목록·로그인·배정 대상에 다시 포함됩니다.`)) return;
+    try {
+      await api.post(`/employees/${e.empId}/restore`);
+      toast(`${e.name}님을 복구했습니다.`);
+      reload();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), 'bad');
+    }
+  };
 
   return (
     <div>
@@ -72,11 +90,22 @@ export default function Employees() {
         }
       />
       <Card>
+        {isAdmin && (
+          <div className="tabs" role="tablist">
+            <button role="tab" aria-selected={!deletedView} className={!deletedView ? 'active' : ''} onClick={() => setView('active')}>
+              인력
+            </button>
+            <button role="tab" aria-selected={deletedView} className={deletedView ? 'active' : ''} onClick={() => setView('deleted')}>
+              삭제된 인력
+            </button>
+          </div>
+        )}
         <div className="filters">
           <input type="search" placeholder="이름·이메일·소속·기술 검색" value={q} onChange={(e) => setQ(e.target.value)} />
           <Select value={employType} onChange={setEmployType} options={EMPLOY_TYPE} placeholder="고용형태 전체" />
-          <Select value={status} onChange={setStatus} options={EMP_STATUS} placeholder="재직·휴직" />
+          {!deletedView && <Select value={status} onChange={setStatus} options={{ ...EMP_STATUS, NONE: '미지정' }} placeholder="퇴사 제외 전체" />}
         </div>
+        {deletedView && <div className="alert info">삭제 처리된 인력입니다. 목록·로그인·배정 대상에서 제외되며, 과거 배정·주간보고·가동률 이력은 유지됩니다. 복구하면 다시 사용할 수 있습니다.</div>}
         <ErrorBox error={error} />
         {loading && !data ? (
           <Loading />
@@ -131,7 +160,24 @@ export default function Employees() {
                       )}
                     </td>
                     <td data-label="상태">
-                      <Badge code={e.statusCd}>{label(EMP_STATUS, e.statusCd)}</Badge>
+                      {deletedView ? (
+                        <span className="row" style={{ flexWrap: 'nowrap' }}>
+                          <Badge tone="neutral">삭제 {e.deletedAt ? e.deletedAt.slice(0, 10) : ''}</Badge>
+                          <button
+                            className="btn sm"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              restore(e);
+                            }}
+                          >
+                            복구
+                          </button>
+                        </span>
+                      ) : e.statusCd ? (
+                        <Badge code={e.statusCd}>{label(EMP_STATUS, e.statusCd)}</Badge>
+                      ) : (
+                        <span className="muted small">미지정</span>
+                      )}
                     </td>
                     {isAdmin && <td data-label="권한">{label(ROLE_LABEL, e.role)}</td>}
                   </tr>
@@ -147,10 +193,18 @@ export default function Employees() {
           empId={detail}
           onClose={() => setDetail(null)}
           onEdit={
-            isAdmin
+            isAdmin && !deletedView
               ? (e) => {
                   setDetail(null);
                   setEdit(e);
+                }
+              : undefined
+          }
+          onDelete={
+            isAdmin && !deletedView
+              ? (e) => {
+                  setDetail(null);
+                  setRemoving(e);
                 }
               : undefined
           }
@@ -162,6 +216,16 @@ export default function Employees() {
           onClose={() => setEdit(null)}
           onSaved={() => {
             setEdit(null);
+            reload();
+          }}
+        />
+      )}
+      {removing && (
+        <DeleteDialog
+          emp={removing}
+          onClose={() => setRemoving(null)}
+          onDone={() => {
+            setRemoving(null);
             reload();
           }}
         />
@@ -178,7 +242,7 @@ export default function Employees() {
   );
 }
 
-function EmployeeDetail({ empId, onClose, onEdit }: { empId: string; onClose: () => void; onEdit?: (e: Employee) => void }) {
+function EmployeeDetail({ empId, onClose, onEdit, onDelete }: { empId: string; onClose: () => void; onEdit?: (e: Employee) => void; onDelete?: (e: Employee) => void }) {
   const { data, loading, error } = useFetch<Employee & { assignments: { asgId: number; prjCd: string; roleCd: string; startDt: string; endDt: string; allocRate: number; status: string; project: { prjNm: string } }[] }>(
     `/employees/${empId}`,
   );
@@ -188,11 +252,20 @@ function EmployeeDetail({ empId, onClose, onEdit }: { empId: string; onClose: ()
       onClose={onClose}
       wide
       footer={
-        onEdit &&
-        data && (
-          <button className="btn primary" onClick={() => onEdit(data)}>
-            수정
-          </button>
+        data &&
+        (onEdit || onDelete) && (
+          <>
+            {onDelete && (
+              <button className="btn danger" onClick={() => onDelete(data)} style={{ marginRight: 'auto' }}>
+                삭제
+              </button>
+            )}
+            {onEdit && (
+              <button className="btn primary" onClick={() => onEdit(data)}>
+                수정
+              </button>
+            )}
+          </>
         )
       }
     >
@@ -225,7 +298,7 @@ function EmployeeDetail({ empId, onClose, onEdit }: { empId: string; onClose: ()
             <dt>연락처</dt>
             <dd>{data.phone ?? '-'}</dd>
             <dt>상태</dt>
-            <dd>{label(EMP_STATUS, data.statusCd)}</dd>
+            <dd>{data.statusCd ? label(EMP_STATUS, data.statusCd) : '미지정'}</dd>
           </dl>
           <div>
             <h2 style={{ marginBottom: 8 }}>투입 이력</h2>
@@ -266,6 +339,89 @@ function EmployeeDetail({ empId, onClose, onEdit }: { empId: string; onClose: ()
               </div>
             )}
           </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function DeleteDialog({ emp, onClose, onDone }: { emp: Employee; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const { data, error } = useFetch<{
+    mode: 'HARD' | 'ARCHIVE';
+    counts: { assignmentsActive: number; assignmentsPlanned: number; assignmentsTotal: number; weeklyWorks: number; pmProjects: number };
+    blockers: string[];
+  }>(`/employees/${emp.empId}/delete-impact`);
+  const [agree, setAgree] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api.del<{ mode: 'HARD' | 'ARCHIVE' }>(`/employees/${emp.empId}`);
+      toast(r.mode === 'HARD' ? `${emp.name}님을 완전히 삭제했습니다.` : `${emp.name}님을 삭제 처리했습니다. '삭제된 인력'에서 복구할 수 있습니다.`);
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const blocked = !!data?.blockers.length;
+  return (
+    <Modal
+      title={`인력 삭제 · ${emp.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            취소
+          </button>
+          <button className="btn danger" disabled={!data || blocked || !agree || busy} onClick={run}>
+            {data?.mode === 'HARD' ? '완전 삭제' : '삭제 처리'}
+          </button>
+        </>
+      }
+    >
+      <ErrorBox error={error ?? err} />
+      {!data ? (
+        <Loading />
+      ) : (
+        <div className="stack" style={{ gap: 12 }}>
+          {blocked ? (
+            <div className="alert bad" style={{ marginBottom: 0 }}>
+              삭제할 수 없습니다.
+              {data.blockers.map((b) => `\n· ${b}`).join('')}
+            </div>
+          ) : data.mode === 'HARD' ? (
+            <div className="alert warn" style={{ marginBottom: 0 }}>
+              연결된 이력(배정·주간보고 등)이 없는 인력입니다. <strong>완전히 삭제</strong>되며 되돌릴 수 없습니다.
+            </div>
+          ) : (
+            <>
+              <div className="alert info" style={{ marginBottom: 0 }}>
+                이력이 있는 인력이라 <strong>삭제 처리(보관)</strong>합니다. 목록·로그인·배정 대상에서 제외되고, 과거 가동률·MM·주간보고는 유지됩니다. '삭제된 인력'에서 복구할 수 있습니다.
+              </div>
+              <dl className="desc-list">
+                <dt>진행 중 배정</dt>
+                <dd>{data.counts.assignmentsActive}건 → 오늘 날짜로 종료</dd>
+                <dt>예정 배정</dt>
+                <dd>{data.counts.assignmentsPlanned}건 → 취소</dd>
+                <dt>전체 배정 이력</dt>
+                <dd>{data.counts.assignmentsTotal}건 (보존)</dd>
+                <dt>주간 업무보고</dt>
+                <dd>{data.counts.weeklyWorks}건 (보존)</dd>
+              </dl>
+            </>
+          )}
+          {!blocked && (
+            <label className="check">
+              <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> {emp.name}님({emp.email})을 {data.mode === 'HARD' ? '완전 삭제' : '삭제 처리'}합니다.
+            </label>
+          )}
         </div>
       )}
     </Modal>
@@ -378,11 +534,11 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
         <Field label="업무 이메일" required hint="로그인 ID로 사용">
           <input type="email" value={f.email ?? ''} onChange={(e) => set({ email: e.target.value })} />
         </Field>
-        <Field label="연락처">
-          <input value={f.phone ?? ''} onChange={(e) => set({ phone: e.target.value })} />
+        <Field label="연락처" required hint="아이디(이메일) 찾기 본인 확인에 사용">
+          <input type="tel" value={f.phone ?? ''} onChange={(e) => set({ phone: e.target.value })} placeholder="010-0000-0000" />
         </Field>
-        <Field label="상태" required>
-          <Select value={f.statusCd} onChange={(statusCd) => set({ statusCd })} options={EMP_STATUS} />
+        <Field label="상태">
+          <Select value={f.statusCd} onChange={(statusCd) => set({ statusCd: statusCd || null })} options={EMP_STATUS} placeholder="미지정" />
         </Field>
         <Field label="시스템 권한" required>
           <Select value={f.role} onChange={(role) => set({ role })} options={ROLE_LABEL} />
@@ -420,7 +576,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
 }
 
 const CSV_HEADERS = ['name', 'deptCd', 'gradeCd', 'jobCd', 'skillLevel', 'skillStack', 'employType', 'partnerId', 'careerStartDt', 'email', 'phone', 'role'];
-const CSV_HEADER_KO = ['성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일(로그인ID·필수)', '연락처', '권한(EMP/PM/EXEC/ADMIN/SALES)'];
+const CSV_HEADER_KO = ['성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일(로그인ID·필수)', '연락처(필수)', '권한(EMP/PM/EXEC/ADMIN/SALES)'];
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];

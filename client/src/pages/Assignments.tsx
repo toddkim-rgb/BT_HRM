@@ -31,7 +31,7 @@ export default function Assignments() {
   const [edit, setEdit] = useState<Partial<Asg> | null>(null);
   const toast = useToast();
 
-  const myProjects = (projects ?? []).filter((p) => !['DONE', 'STOP', 'LOST'].includes(p.statusCd) && (user?.role === 'ADMIN' || p.pmEmpId === user?.empId));
+  const myProjects = (projects ?? []).filter((p) => !['DONE', 'STOP'].includes(p.statusCd) && (user?.role === 'ADMIN' || p.pmEmpId === user?.empId));
   const canManage = (a: Asg) => user?.role === 'ADMIN' || (user?.role === 'PM' && a.project.pmEmpId === user.empId);
   const t = today();
   const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);

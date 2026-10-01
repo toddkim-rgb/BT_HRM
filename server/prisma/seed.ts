@@ -92,7 +92,7 @@ async function demo() {
       { prjCd: 'SI-2026-001', prjType: 'SI', prjNm: '○○병원 투약관리 구축', customerNm: '○○병원', contractType: 'PRIME', startDt: '2026-06-01', endDt: '2026-12-31', contractMm: 28, contractAmt: 350000000, revenueMethod: 'MM', pmEmpId: 'E2001', residentType: 'MIXED', statusCd: 'ACTIVE', plOpenYn: true },
       { prjCd: 'IN-2026-001', prjType: 'IN', prjNm: '자체 솔루션 고도화', startDt: '2026-01-01', endDt: '2026-12-31', pmEmpId: 'E2001', statusCd: 'ACTIVE' },
       { prjCd: 'PS-2026-001', prjType: 'PS', prjNm: '△△공사 차세대 제안', customerNm: '△△공사', startDt: '2026-09-01', endDt: '2026-10-31', pmEmpId: 'E2001', statusCd: 'ACTIVE' },
-      { prjCd: 'SI-2026-002', prjType: 'SI', prjNm: '□□의료원 EMR 구축', customerNm: '□□의료원', contractType: 'SUB', primeContractor: '(주)대형SI', startDt: '2027-01-01', endDt: '2027-09-30', contractMm: 40, winProb: 60, revenueMethod: 'MM', statusCd: 'SALES' },
+      { prjCd: 'SI-2026-002', prjType: 'SI', prjNm: '□□의료원 EMR 구축', customerNm: '□□의료원', contractType: 'SUB', primeContractor: '(주)대형SI', startDt: '2027-01-01', endDt: '2027-09-30', contractMm: 40, winProb: 60, revenueMethod: 'MM', statusCd: 'PROPOSAL' },
     ],
   });
 

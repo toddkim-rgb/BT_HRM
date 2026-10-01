@@ -13,7 +13,7 @@ export const EMP_STATUS: Record<string, string> = { ACTIVE: '재직', LEAVE: '�
 export const SKILL_LEVELS = ['초급', '중급', '고급', '특급'];
 
 export const PRJ_TYPE: Record<string, string> = { SM: 'SM', SI: 'SI', IN: '내부', PS: '제안', ETC: '기타', NP: '공통' };
-export const PRJ_STATUS: Record<string, string> = { SALES: '영업중', WON: '수주', ACTIVE: '진행중', DONE: '완료', STOP: '중단', LOST: '실주' };
+export const PRJ_STATUS: Record<string, string> = { PROPOSAL: '제안', ACTIVE: '진행중', DONE: '완료', STOP: '중단' };
 export const CONTRACT_TYPE: Record<string, string> = { PRIME: '원도급', SUB: '하도급' };
 export const RESIDENT: Record<string, string> = { ONSITE: '상주', OFFSITE: '비상주', MIXED: '혼합' };
 export const REVENUE_METHOD: Record<string, string> = { MONTHLY: '월정액', MM: '투입MM × 청구단가' };

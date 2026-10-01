@@ -45,7 +45,7 @@ export default function ProjectMm() {
 function ProjectList() {
   const { data, error, loading } = useFetch<Summary[]>('/stats/projects');
   const nav = useNavigate();
-  const rows = (data ?? []).filter((p) => p.statusCd !== 'SALES');
+  const rows = (data ?? []).filter((p) => p.statusCd !== 'PROPOSAL');
   return (
     <div>
       <PageHeader title="프로젝트 MM 현황" desc="계획 MM = Σ(배정 기간 영업일 × 투입률) ÷ 22 · 실적 MM = 제출된 투입MD ÷ 22 · 소진율 = 누적 실적 MM ÷ 계약 MM" />

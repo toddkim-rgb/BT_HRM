@@ -643,7 +643,7 @@ export default function WeeklyWork() {
 
       {addOpen && (
         <AddRowModal
-          projects={(projects ?? []).filter((p) => !v.timesheet.some((r) => r.prjCd === p.prjCd) && !['DONE', 'STOP', 'LOST', 'SALES'].includes(p.statusCd))}
+          projects={(projects ?? []).filter((p) => !v.timesheet.some((r) => r.prjCd === p.prjCd) && !['DONE', 'STOP', 'PROPOSAL'].includes(p.statusCd))}
           onClose={() => setAddOpen(false)}
           onAdd={(p) => {
             update((d) => void d.timesheet.push({ prjCd: p.prjCd, prjNm: p.prjNm, prjType: p.prjType, md: {} }));

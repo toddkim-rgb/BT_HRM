@@ -3,6 +3,7 @@ import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { me, requireAuth, signToken, type Role } from '../auth.js';
 import { HttpError, prisma } from '../db.js';
+import { isUsable, usableEmp } from '../lib/empFilter.js';
 import { assertPasswordPolicy, maskEmail, rateLimit } from '../lib/password.js';
 import { optStr, parse } from '../lib/validate.js';
 
@@ -17,7 +18,7 @@ authRouter.post('/login', async (req, res) => {
   // 계정별 무차별 대입 방지 (사내 NAT 환경을 고려해 IP+이메일 기준)
   rateLimit(`login:${ip(req)}:${body.email}`, 10, 5 * 60 * 1000);
   const emp = await prisma.employee.findUnique({ where: { email: body.email } });
-  if (!emp || emp.statusCd === 'RETIRED' || !(await bcrypt.compare(body.password, emp.passwordHash))) {
+  if (!emp || emp.deletedAt || emp.statusCd === 'RETIRED' || !(await bcrypt.compare(body.password, emp.passwordHash))) {
     throw new HttpError(401, '이메일 또는 비밀번호가 올바르지 않습니다.');
   }
   const user = userOf(emp);
@@ -60,8 +61,8 @@ authRouter.post('/password-reset-request', async (req, res) => {
     z.object({ email: z.string().trim().toLowerCase().email('이메일 형식이 올바르지 않습니다'), name: z.string().trim().min(1, '성명을 입력하세요'), message: optStr }),
     req.body,
   );
-  const emp = await prisma.employee.findUnique({ where: { email: body.email }, select: { empId: true, name: true, statusCd: true } });
-  const matched = emp && emp.name === body.name && emp.statusCd !== 'RETIRED' ? emp.empId : null;
+  const emp = await prisma.employee.findUnique({ where: { email: body.email }, select: { empId: true, name: true, statusCd: true, deletedAt: true } });
+  const matched = emp && emp.name === body.name && isUsable(emp) ? emp.empId : null;
   const dup = await prisma.accountRequest.findFirst({ where: { reqType: 'PW_RESET', email: body.email, statusCd: 'OPEN' } });
   if (!dup) await prisma.accountRequest.create({ data: { reqType: 'PW_RESET', name: body.name, email: body.email, message: body.message, matchedEmpId: matched } });
   res.json({ ok: true });
@@ -71,7 +72,7 @@ authRouter.post('/password-reset-request', async (req, res) => {
 async function findByNameAndPhone(name: string, phone: string) {
   const digits = phone.replace(/\D/g, '');
   if (digits.length < 7) return [];
-  const cands = await prisma.employee.findMany({ where: { name, statusCd: { not: 'RETIRED' }, phone: { not: null } }, select: { empId: true, email: true, phone: true } });
+  const cands = await prisma.employee.findMany({ where: { AND: [usableEmp, { name, phone: { not: null } }] }, select: { empId: true, email: true, phone: true } });
   return cands.filter((c) => (c.phone ?? '').replace(/\D/g, '') === digits);
 }
 

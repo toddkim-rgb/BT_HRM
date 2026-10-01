@@ -27,7 +27,7 @@ const projectSchema = z.object({
   plOpenYn: z.boolean().default(false),
   pmEmpId: optStr,
   residentType: z.enum(['ONSITE', 'OFFSITE', 'MIXED']).nullish(),
-  statusCd: z.enum(['SALES', 'WON', 'ACTIVE', 'DONE', 'STOP', 'LOST']).default('ACTIVE'),
+  statusCd: z.enum(['PROPOSAL', 'ACTIVE', 'DONE', 'STOP']).default('ACTIVE'), // 제안/진행중/완료/중단
 });
 
 /** 금액 정보 노출 여부: 경영진·관리자·영업, 또는 손익 공개된 프로젝트의 PM */
@@ -76,7 +76,7 @@ projectsRouter.get('/:prjCd', async (req, res) => {
 projectsRouter.post('/', requireRole('ADMIN', 'SALES'), async (req, res) => {
   const u = me(req);
   const body = parse(projectSchema, req.body);
-  if (u.role === 'SALES' && body.statusCd !== 'SALES') throw new HttpError(403, '영업담당은 영업중 프로젝트만 등록할 수 있습니다.');
+  if (u.role === 'SALES' && body.statusCd !== 'PROPOSAL') throw new HttpError(403, '영업담당은 제안 상태 프로젝트만 등록할 수 있습니다.');
   if (body.startDt && body.endDt && body.startDt > body.endDt) throw new HttpError(400, '종료일이 시작일보다 빠릅니다.');
   const year = (body.startDt ?? today()).slice(0, 4);
   const prjCd = await nextPrjCd(body.prjType, year);
@@ -91,7 +91,7 @@ projectsRouter.put('/:prjCd', requireRole('ADMIN', 'SALES'), async (req, res) =>
   const cur = await prisma.project.findUnique({ where: { prjCd: String(req.params.prjCd) } });
   if (!cur || cur.prjType === 'NP') throw notFound('프로젝트');
   const body = parse(projectSchema, req.body);
-  if (u.role === 'SALES' && cur.statusCd !== 'SALES') throw forbidden();
+  if (u.role === 'SALES' && cur.statusCd !== 'PROPOSAL') throw forbidden();
   if (body.prjType !== cur.prjType) throw new HttpError(400, '사업구분은 변경할 수 없습니다 (코드 체계 유지).');
   await prisma.project.update({ where: { prjCd: cur.prjCd }, data: body });
   res.json({ ok: true });

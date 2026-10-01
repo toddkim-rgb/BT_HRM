@@ -400,7 +400,7 @@ weeklyWorksRouter.get('/project-summary', async (req, res) => {
   checkWeek(week);
   const days = weekDays(week);
   const projects = await prisma.project.findMany({
-    where: { prjType: { not: 'NP' }, statusCd: { in: ['ACTIVE', 'WON'] }, ...(u.role === 'PM' ? { pmEmpId: u.empId } : {}) },
+    where: { prjType: { not: 'NP' }, statusCd: 'ACTIVE', ...(u.role === 'PM' ? { pmEmpId: u.empId } : {}) },
     select: { prjCd: true, prjNm: true },
     orderBy: { prjCd: 'asc' },
   });

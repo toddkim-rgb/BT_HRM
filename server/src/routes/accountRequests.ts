@@ -34,7 +34,7 @@ accountRequestsRouter.post('/:id/issue-temp-password', async (req, res) => {
   if (!r) throw notFound('요청');
   if (r.statusCd !== 'OPEN') throw new HttpError(409, '이미 처리된 요청입니다.');
   const emp = await prisma.employee.findUnique({ where: { empId: body.empId } });
-  if (!emp || emp.statusCd === 'RETIRED') throw new HttpError(400, '임시 비밀번호를 발급할 수 없는 인력입니다.');
+  if (!emp || emp.deletedAt || emp.statusCd === 'RETIRED') throw new HttpError(400, '임시 비밀번호를 발급할 수 없는 인력입니다.');
   const password = tempPassword();
   await prisma.$transaction([
     prisma.employee.update({ where: { empId: emp.empId }, data: { passwordHash: await bcrypt.hash(password, 10), mustChangePw: true } }),

@@ -180,7 +180,7 @@ function SubmissionSummary() {
 
 function ProjectBurn() {
   const { data } = useFetch<{ prjCd: string; prjNm: string; contractMm: number | null; actualMm: number; burnRate: number | null; statusCd: string }[]>('/stats/projects');
-  const list = (data ?? []).filter((p) => p.burnRate != null && p.statusCd !== 'SALES').sort((a, b) => (b.burnRate ?? 0) - (a.burnRate ?? 0));
+  const list = (data ?? []).filter((p) => p.burnRate != null && p.statusCd !== 'PROPOSAL').sort((a, b) => (b.burnRate ?? 0) - (a.burnRate ?? 0));
   return (
     <Card
       title="프로젝트 MM 소진율"

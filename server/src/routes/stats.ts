@@ -4,6 +4,7 @@ import { forbidden, notFound, prisma } from '../db.js';
 import { plannedMd } from '../lib/alloc.js';
 import { addMonths, businessDays, monthRange, today } from '../lib/dates.js';
 import { holidaySet, mdPerMm } from '../lib/settings.js';
+import { usableEmp } from '../lib/empFilter.js';
 import { parse, ymStr } from '../lib/validate.js';
 import { z } from 'zod';
 import { PAID_TYPES, WORK_TYPES } from './projects.js';
@@ -36,7 +37,8 @@ export async function utilizationFor(ym: string, empIds?: string[]) {
   const emps = await prisma.employee.findMany({
     where: {
       ...(empIds ? { empId: { in: empIds } } : { utilTarget: true }),
-      OR: [{ statusCd: { not: 'RETIRED' } }, { empId: { in: reported } }],
+      // 퇴사·삭제 인력은 제외하되, 해당 월 실적이 있으면 포함
+      OR: [usableEmp, { empId: { in: reported } }],
     },
     select: { empId: true, name: true, deptCd: true, gradeCd: true, employType: true, statusCd: true },
     orderBy: [{ deptCd: 'asc' }, { name: 'asc' }],
@@ -195,11 +197,11 @@ statsRouter.get('/summary', async (req, res) => {
   const u = me(req);
   if (!(isManager(u) || u.role === 'SALES' || u.role === 'PM')) throw forbidden();
   const t = today();
-  const emps = await prisma.employee.findMany({ where: { statusCd: { not: 'RETIRED' }, utilTarget: true }, select: { empId: true, employType: true, statusCd: true } });
+  const emps = await prisma.employee.findMany({ where: { AND: [usableEmp, { utilTarget: true }] }, select: { empId: true, employType: true, statusCd: true } });
   const active = await prisma.assignment.findMany({ where: { canceled: false, startDt: { lte: t }, endDt: { gte: t } }, select: { empId: true, allocRate: true } });
   const allocBy = new Map<string, number>();
   for (const a of active) allocBy.set(a.empId, (allocBy.get(a.empId) ?? 0) + a.allocRate);
-  const working = emps.filter((e) => e.statusCd === 'ACTIVE');
+  const working = emps.filter((e) => e.statusCd !== 'LEAVE'); // 상태 미지정은 재직으로 간주
   const lastYm = addMonths(t.slice(0, 7), -1);
   const util = summarize(await utilizationFor(t.slice(0, 7)));
   const prevUtil = summarize(await utilizationFor(lastYm));

@@ -24,7 +24,9 @@ model Employee {
   careerStartDt String?
   email         String   @unique // 로그인 ID (소문자 저장)
   phone         String?
-  statusCd      String   @default("ACTIVE") // ACTIVE/LEAVE/RETIRED
+  statusCd      String? // ACTIVE/LEAVE/RETIRED (선택 입력, 미지정은 재직으로 간주)
+  deletedAt     DateTime? // 삭제 처리(보관): 목록·로그인·배정 제외, 이력 유지, 복구 가능
+  deletedBy     String?
   utilTarget    Boolean  @default(true) // 가동률·투입 현황 집계 대상 (관리·영업·경영진은 false)
   role          String   @default("EMP") // EMP(R-01)/PM(R-02)/EXEC(R-03)/ADMIN(R-04)/SALES(R-05)
   passwordHash  String
@@ -102,7 +104,7 @@ model Project {
   plOpenYn        Boolean  @default(false)
   pmEmpId         String?
   residentType    String? // ONSITE/OFFSITE/MIXED
-  statusCd        String   @default("ACTIVE") // SALES/WON/ACTIVE/DONE/STOP/LOST
+  statusCd        String   @default("ACTIVE") // PROPOSAL(제안)/ACTIVE(진행중)/DONE(완료)/STOP(중단)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireRole } from '../auth.js';
 import { HttpError, notFound, prisma } from '../db.js';
+import { usableEmp } from '../lib/empFilter.js';
 import { optDate, optStr, parse } from '../lib/validate.js';
 
 // 7장 협력사 마스터 (F-033) — 계약·단가 관리는 손익 단계에서 확장
@@ -20,7 +21,7 @@ const partnerSchema = z.object({
 // 목록은 인력 등록 화면에서도 쓰므로 PM 이상 조회 허용 (단가 정보 없음)
 partnersRouter.get('/', requireRole('PM', 'EXEC', 'ADMIN', 'SALES'), async (_req, res) => {
   const rows = await prisma.partner.findMany({
-    include: { _count: { select: { employees: { where: { statusCd: { not: 'RETIRED' } } } } } },
+    include: { _count: { select: { employees: { where: usableEmp } } } },
     orderBy: { partnerNm: 'asc' },
   });
   res.json(rows.map(({ _count, ...p }) => ({ ...p, headcount: _count.employees })));

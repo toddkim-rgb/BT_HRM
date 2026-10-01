@@ -53,10 +53,10 @@ assignmentsRouter.get('/', async (req, res) => {
 
 async function validateTarget(empId: string, prjCd: string) {
   const emp = await prisma.employee.findUnique({ where: { empId } });
-  if (!emp || emp.statusCd === 'RETIRED') throw new HttpError(400, '배정할 수 없는 인력입니다.');
+  if (!emp || emp.deletedAt || emp.statusCd === 'RETIRED') throw new HttpError(400, '배정할 수 없는 인력입니다. (퇴사 또는 삭제된 인력)');
   const prj = await prisma.project.findUnique({ where: { prjCd } });
   if (!prj || prj.prjType === 'NP') throw new HttpError(400, '배정할 수 없는 프로젝트입니다.');
-  if (['DONE', 'STOP', 'LOST'].includes(prj.statusCd)) throw new HttpError(400, '종료된 프로젝트에는 배정할 수 없습니다.');
+  if (['DONE', 'STOP'].includes(prj.statusCd)) throw new HttpError(400, '완료·중단된 프로젝트에는 배정할 수 없습니다.');
 }
 
 assignmentsRouter.post('/', async (req, res) => {

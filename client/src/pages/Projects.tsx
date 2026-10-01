@@ -38,7 +38,7 @@ export default function Projects() {
   const [status, setStatus] = useState('');
   const { data, error, loading, reload } = useFetch<Project[]>(`/projects${qs({ type, status })}`);
   const [edit, setEdit] = useState<Partial<Project> | null>(null);
-  const canEdit = (p: Project) => hasRole(user, 'ADMIN') || (hasRole(user, 'SALES') && p.statusCd === 'SALES');
+  const canEdit = (p: Project) => hasRole(user, 'ADMIN') || (hasRole(user, 'SALES') && p.statusCd === 'PROPOSAL');
 
   return (
     <div>
@@ -47,7 +47,7 @@ export default function Projects() {
         desc="코드는 {사업구분}-{연도}-{일련번호}로 자동 채번됩니다."
         actions={
           canCreate && (
-            <button className="btn primary" onClick={() => setEdit({ prjType: 'SI', statusCd: user?.role === 'SALES' ? 'SALES' : 'ACTIVE', plOpenYn: false })}>
+            <button className="btn primary" onClick={() => setEdit({ prjType: 'SI', statusCd: user?.role === 'SALES' ? 'PROPOSAL' : 'ACTIVE', plOpenYn: false })}>
               + 프로젝트 등록
             </button>
           )
@@ -109,11 +109,11 @@ export default function Projects() {
                     <td data-label="상태">
                       <Badge code={p.statusCd}>
                         {label(PRJ_STATUS, p.statusCd)}
-                        {p.statusCd === 'SALES' && p.winProb != null && ` ${p.winProb}%`}
+                        {p.statusCd === 'PROPOSAL' && p.winProb != null && ` ${p.winProb}%`}
                       </Badge>
                     </td>
                     <td data-label="" onClick={(e) => e.stopPropagation()}>
-                      {p.statusCd !== 'SALES' && hasRole(user, 'PM', 'EXEC', 'ADMIN', 'SALES') && (
+                      {p.statusCd !== 'PROPOSAL' && hasRole(user, 'PM', 'EXEC', 'ADMIN', 'SALES') && (
                         <Link className="btn sm" to={`/project-mm/${p.prjCd}`}>
                           MM
                         </Link>
@@ -190,7 +190,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
           <Select value={f.prjType} onChange={(prjType) => set({ prjType })} options={TYPE_OPTS} disabled={!isNew} />
         </Field>
         <Field label="상태" required>
-          <Select value={f.statusCd} onChange={(statusCd) => set({ statusCd })} options={isSales ? { SALES: '영업중' } : PRJ_STATUS} />
+          <Select value={f.statusCd} onChange={(statusCd) => set({ statusCd })} options={isSales ? { PROPOSAL: '제안' } : PRJ_STATUS} />
         </Field>
         <Field label="프로젝트명" required full>
           <input value={f.prjNm ?? ''} onChange={(e) => set({ prjNm: e.target.value })} />
@@ -230,7 +230,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
         <Field label="상주 여부">
           <Select value={f.residentType} onChange={(residentType) => set({ residentType: residentType || null })} options={RESIDENT} placeholder="-" />
         </Field>
-        <Field label="수주확률 (%)" hint="영업중 프로젝트 참고용">
+        <Field label="수주확률 (%)" hint="제안 프로젝트 참고용">
           <input type="number" min={0} max={100} value={f.winProb ?? ''} onChange={(e) => set({ winProb: numOrNull(e.target.value) })} />
         </Field>
         {!isSales && (
