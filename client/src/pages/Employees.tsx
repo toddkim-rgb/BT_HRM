@@ -31,7 +31,6 @@ export interface Employee {
 }
 
 const blank: Partial<Employee> & { initialPassword?: string } = {
-  empId: '',
   email: '',
   name: '',
   deptCd: '',
@@ -74,7 +73,7 @@ export default function Employees() {
       />
       <Card>
         <div className="filters">
-          <input type="search" placeholder="이름·사번·이메일·소속·기술 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input type="search" placeholder="이름·이메일·소속·기술 검색" value={q} onChange={(e) => setQ(e.target.value)} />
           <Select value={employType} onChange={setEmployType} options={EMPLOY_TYPE} placeholder="고용형태 전체" />
           <Select value={status} onChange={setStatus} options={EMP_STATUS} placeholder="재직·휴직" />
         </div>
@@ -88,7 +87,6 @@ export default function Employees() {
             <table className="tbl responsive">
               <thead>
                 <tr>
-                  <th>사번</th>
                   <th>성명</th>
                   <th>소속</th>
                   <th>직급</th>
@@ -103,9 +101,6 @@ export default function Employees() {
               <tbody>
                 {data.map((e) => (
                   <tr key={e.empId} className="clickable" onClick={() => setDetail(e.empId)}>
-                    <td data-label="사번" className="nowrap">
-                      {e.empId}
-                    </td>
                     <td data-label="성명">
                       <strong>{e.name}</strong>
                     </td>
@@ -207,9 +202,9 @@ function EmployeeDetail({ empId, onClose, onEdit }: { empId: string; onClose: ()
       ) : (
         <div className="stack">
           <dl className="desc-list">
-            <dt>사번 / 성명</dt>
+            <dt>성명</dt>
             <dd>
-              {data.empId} / <strong>{data.name}</strong>
+              <strong>{data.name}</strong>
             </dd>
             <dt>소속 / 직급</dt>
             <dd>
@@ -293,8 +288,12 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
     try {
       const body = { ...f, partnerId: needsPartner ? f.partnerId : null };
       if (isNew) {
-        const r = await api.post<{ empId: string }>('/employees', body);
-        toast(`등록했습니다. (사번 ${r.empId}, 로그인 ${f.email}, 초기 비밀번호: ${f.initialPassword || r.empId} — 첫 로그인 시 변경)`);
+        const r = await api.post<{ empId: string; tempPassword: string | null }>('/employees', body);
+        if (r.tempPassword) {
+          setCreated({ email: f.email ?? '', password: r.tempPassword });
+          return;
+        }
+        toast(`등록했습니다. (로그인 ${f.email}, 첫 로그인 시 비밀번호 변경)`);
       } else {
         await api.put(`/employees/${initial.empId}`, body);
         toast('저장했습니다.');
@@ -308,6 +307,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
   };
 
   const [tempPw, setTempPw] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
   const resetPw = async () => {
     if (!window.confirm(`${initial.name}님의 비밀번호를 초기화하고 임시 비밀번호를 발급할까요?`)) return;
     try {
@@ -320,7 +320,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
 
   return (
     <Modal
-      title={isNew ? '인력 등록' : `인력 수정 · ${initial.empId}`}
+      title={isNew ? '인력 등록' : `인력 수정 · ${initial.name}`}
       onClose={onClose}
       wide
       footer={
@@ -343,9 +343,6 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
       <div className="form-grid">
         <Field label="고용형태" required>
           <Select value={f.employType} onChange={(employType) => set({ employType })} options={EMPLOY_TYPE} />
-        </Field>
-        <Field label="사번" required={!needsPartner} hint={needsPartner && isNew ? '비우면 P-xxxx 자동부여' : undefined}>
-          <input value={f.empId ?? ''} disabled={!isNew} onChange={(e) => set({ empId: e.target.value })} />
         </Field>
         {needsPartner && (
           <Field label="협력사" required full>
@@ -396,12 +393,20 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
           </label>
         </Field>
         {isNew && (
-          <Field label="초기 비밀번호" hint="비우면 사번과 동일 · 첫 로그인 시 변경 강제">
+          <Field label="초기 비밀번호" hint="비우면 임시 비밀번호 자동 발급 · 첫 로그인 시 변경 강제">
             <input value={f.initialPassword ?? ''} onChange={(e) => set({ initialPassword: e.target.value })} />
           </Field>
         )}
       </div>
       <p className="muted small">주민등록번호·주소·연봉 등 민감 개인정보는 수집하지 않습니다.</p>
+      {created && (
+        <Modal title="인력 등록 완료" onClose={onSaved} footer={<button className="btn primary" onClick={onSaved}>확인</button>}>
+          <p style={{ marginTop: 0 }}>
+            로그인 이메일 <strong>{created.email}</strong>의 임시 비밀번호입니다. 창을 닫으면 다시 볼 수 없으니 본인에게 직접 전달하세요. 첫 로그인 시 새 비밀번호를 설정해야 합니다.
+          </p>
+          <div className="temp-pw">{created.password}</div>
+        </Modal>
+      )}
       {tempPw && (
         <Modal title="임시 비밀번호 발급" onClose={() => setTempPw(null)} footer={<button className="btn primary" onClick={() => setTempPw(null)}>확인</button>}>
           <p style={{ marginTop: 0 }}>
@@ -414,8 +419,8 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
   );
 }
 
-const CSV_HEADERS = ['empId', 'name', 'deptCd', 'gradeCd', 'jobCd', 'skillLevel', 'skillStack', 'employType', 'partnerId', 'careerStartDt', 'email', 'phone', 'role'];
-const CSV_HEADER_KO = ['사번', '성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일(로그인ID·필수)', '연락처', '권한(EMP/PM/EXEC/ADMIN/SALES)'];
+const CSV_HEADERS = ['name', 'deptCd', 'gradeCd', 'jobCd', 'skillLevel', 'skillStack', 'employType', 'partnerId', 'careerStartDt', 'email', 'phone', 'role'];
+const CSV_HEADER_KO = ['성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일(로그인ID·필수)', '연락처', '권한(EMP/PM/EXEC/ADMIN/SALES)'];
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -447,14 +452,22 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
+function downloadTempPasswords(rows: { email?: string; name?: string; tempPassword?: string; error?: string }[]) {
+  const lines = ['성명,로그인 이메일,임시 비밀번호', ...rows.filter((r) => !r.error).map((r) => `${r.name},${r.email},${r.tempPassword}`)];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = '인력_임시비밀번호.csv';
+  a.click();
+}
+
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
-  const [result, setResult] = useState<{ created: number; failed: number; results: { row: number; empId?: string; error?: string }[] } | null>(null);
+  const [result, setResult] = useState<{ created: number; failed: number; results: { row: number; email?: string; name?: string; tempPassword?: string; error?: string }[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const template = () => {
-    const csv = '﻿' + [CSV_HEADER_KO.join(','), '20260001,홍길동,SI사업팀,대리,개발,중급,"Java, React",REG,,2019-01-02,hong@example.com,010-0000-0000,EMP'].join('\r\n');
+    const csv = '﻿' + [CSV_HEADER_KO.join(','), '홍길동,SI사업팀,대리,개발,중급,"Java, React",REG,,2019-01-02,hong@example.com,010-0000-0000,EMP'].join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     a.download = '인력_일괄등록_양식.csv';
@@ -518,6 +531,14 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
         <input type="file" accept=".csv,text/csv" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} style={{ maxWidth: 320 }} />
       </div>
       <ErrorBox error={err} />
+      {result && result.created > 0 && (
+        <div className="row" style={{ marginBottom: 10 }}>
+          <button className="btn" onClick={() => downloadTempPasswords(result.results)}>
+            임시 비밀번호 목록 내려받기 (CSV)
+          </button>
+          <span className="muted small">등록된 인력은 첫 로그인 시 비밀번호를 변경해야 합니다. 파일은 전달 후 삭제하세요.</span>
+        </div>
+      )}
       {result && (
         <div className={`alert ${result.failed ? 'warn' : 'good'}`}>
           등록 {result.created}건 / 실패 {result.failed}건
@@ -532,7 +553,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
           <table className="tbl">
             <thead>
               <tr>
-                {['사번', '성명', '이메일', '소속', '직급', '등급', '고용형태', '협력사'].map((h) => (
+                {['성명', '이메일', '소속', '직급', '등급', '고용형태', '협력사'].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -540,7 +561,6 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
             <tbody>
               {rows.slice(0, 50).map((r, i) => (
                 <tr key={i}>
-                  <td>{r.empId ?? '(자동)'}</td>
                   <td>{r.name}</td>
                   <td>{r.email}</td>
                   <td>{r.deptCd}</td>

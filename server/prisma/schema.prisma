@@ -12,7 +12,7 @@ datasource db {
 }
 
 model Employee {
-  empId         String   @id // 자사 사번, 협력사·프리랜서는 P-xxxx 자동부여
+  empId         String   @id // 내부 관리 번호 (자동 부여, 화면 비표시 — 사번 아님)
   name          String
   deptCd        String // 소속(본부/팀)
   gradeCd       String // 직급
@@ -363,7 +363,6 @@ model AccountRequest {
   reqType      String // PW_RESET / ID_INQUIRY
   name         String
   email        String?
-  empId        String?
   contact      String?
   message      String?
   matchedEmpId String? // 입력값과 일치하는 인력 (관리자 확인용)

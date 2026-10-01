@@ -9,7 +9,6 @@ interface Req {
   reqType: 'PW_RESET' | 'ID_INQUIRY';
   name: string;
   email: string | null;
-  empId: string | null;
   contact: string | null;
   message: string | null;
   matchedEmpId: string | null;
@@ -69,13 +68,13 @@ export default function AccountRequests() {
                       <strong>{r.name}</strong>
                     </td>
                     <td data-label="입력 정보" className="small">
-                      {[r.email, r.empId && `사번 ${r.empId}`, r.contact && `연락처 ${r.contact}`].filter(Boolean).join(' · ')}
+                      {[r.email, r.contact && `연락처 ${r.contact}`].filter(Boolean).join(' · ')}
                       {r.message && <div className="muted">“{r.message}”</div>}
                     </td>
                     <td data-label="일치 계정" className="small">
                       {r.matched ? (
                         <>
-                          <Badge tone="good">일치</Badge> {r.matched.name} ({r.matched.empId}) · {r.matched.deptCd}
+                          <Badge tone="good">일치</Badge> {r.matched.name} · {r.matched.deptCd} · {r.matched.email}
                         </>
                       ) : (
                         <Badge tone="bad">일치 계정 없음</Badge>
@@ -119,7 +118,7 @@ function HandleDialog({ req, onClose }: { req: Req; onClose: () => void }) {
   const [issued, setIssued] = useState<{ tempPassword: string; email: string; name: string; phone: string | null } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const { data: emps } = useFetch<{ empId: string; name: string; email: string; deptCd: string }[]>('/employees');
+  const { data: emps } = useFetch<{ empId: string; name: string; email: string; deptCd: string; phone: string | null }[]>('/employees');
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -191,7 +190,7 @@ function HandleDialog({ req, onClose }: { req: Req; onClose: () => void }) {
         <div className="stack" style={{ gap: 10 }}>
           <dl className="desc-list">
             <dt>입력 정보</dt>
-            <dd>{[req.email, req.empId && `사번 ${req.empId}`, req.contact && `연락처 ${req.contact}`].filter(Boolean).join(' · ')}</dd>
+            <dd>{[req.email, req.contact && `연락처 ${req.contact}`].filter(Boolean).join(' · ')}</dd>
             {req.message && (
               <>
                 <dt>메모</dt>
@@ -215,7 +214,7 @@ function HandleDialog({ req, onClose }: { req: Req; onClose: () => void }) {
                   value={empId}
                   onChange={setEmpId}
                   placeholder="선택"
-                  options={(emps ?? []).map((e) => [e.empId, `${e.name} · ${e.deptCd}`] as [string, string])}
+                  options={(emps ?? []).map((e) => [e.empId, `${e.name} · ${e.deptCd}${e.phone ? ` · ${e.phone}` : ''}`] as [string, string])}
                 />
               </Field>
               {selected && (

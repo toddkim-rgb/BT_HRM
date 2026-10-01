@@ -95,10 +95,10 @@ export default function Login() {
 function FindIdDialog({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<'lookup' | 'inquiry'>('lookup');
   const [name, setName] = useState('');
-  const [empId, setEmpId] = useState('');
+  const [phone, setPhone] = useState('');
   const [contact, setContact] = useState('');
   const [message, setMessage] = useState('');
-  const [masked, setMasked] = useState<string | null>(null);
+  const [masked, setMasked] = useState<string[] | null>(null);
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -114,10 +114,10 @@ function FindIdDialog({ onClose }: { onClose: () => void }) {
       setBusy(false);
     }
   };
-  const lookup = () => run(async () => setMasked((await api.post<{ maskedEmail: string }>('/auth/id-lookup', { name, empId })).maskedEmail));
+  const lookup = () => run(async () => setMasked((await api.post<{ maskedEmails: string[] }>('/auth/id-lookup', { name, phone })).maskedEmails));
   const inquire = () =>
     run(async () => {
-      await api.post('/auth/id-inquiry', { name, empId: empId || null, contact, message: message || null });
+      await api.post('/auth/id-inquiry', { name, contact, message: message || null });
       setSent(true);
     });
 
@@ -132,7 +132,7 @@ function FindIdDialog({ onClose }: { onClose: () => void }) {
               로그인으로
             </button>
           ) : (
-            <button className="btn primary" disabled={busy || !name.trim() || !empId.trim()} onClick={lookup}>
+            <button className="btn primary" disabled={busy || !name.trim() || !phone.trim()} onClick={lookup}>
               찾기
             </button>
           )
@@ -149,7 +149,7 @@ function FindIdDialog({ onClose }: { onClose: () => void }) {
     >
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={tab === 'lookup'} className={tab === 'lookup' ? 'active' : ''} onClick={() => setTab('lookup')}>
-          성명·사번으로 찾기
+          성명·연락처로 찾기
         </button>
         <button role="tab" aria-selected={tab === 'inquiry'} className={tab === 'inquiry' ? 'active' : ''} onClick={() => setTab('inquiry')}>
           관리자에게 문의
@@ -160,9 +160,11 @@ function FindIdDialog({ onClose }: { onClose: () => void }) {
         masked ? (
           <div className="stack" style={{ gap: 10 }}>
             <p style={{ margin: 0 }}>등록된 로그인 이메일입니다. 일부는 보안을 위해 가렸습니다.</p>
-            <div className="temp-pw" style={{ fontSize: 18, userSelect: 'text' }}>
-              {masked}
-            </div>
+            {masked.map((m) => (
+              <div key={m} className="temp-pw" style={{ fontSize: 18, userSelect: 'text' }}>
+                {m}
+              </div>
+            ))}
             <p className="muted small" style={{ margin: 0 }}>
               기억나지 않으면 '관리자에게 문의' 탭에서 문의를 남겨 주세요.
             </p>
@@ -172,8 +174,8 @@ function FindIdDialog({ onClose }: { onClose: () => void }) {
             <Field label="성명" required>
               <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
             </Field>
-            <Field label="사번" required hint="협력사·프리랜서는 P-0001 형식">
-              <input value={empId} onChange={(e) => setEmpId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && lookup()} />
+            <Field label="연락처" required hint="인력 정보에 등록된 휴대전화 번호 (- 없이 입력해도 됩니다)">
+              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && lookup()} placeholder="010-0000-0000" />
             </Field>
           </div>
         )
@@ -185,9 +187,6 @@ function FindIdDialog({ onClose }: { onClose: () => void }) {
         <div className="stack" style={{ gap: 10 }}>
           <Field label="성명" required>
             <input value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <Field label="사번" hint="알면 입력 (확인이 빨라집니다)">
-            <input value={empId} onChange={(e) => setEmpId(e.target.value)} />
           </Field>
           <Field label="연락받을 연락처" required hint="전화번호 또는 메신저 ID">
             <input value={contact} onChange={(e) => setContact(e.target.value)} />

@@ -67,25 +67,33 @@ authRouter.post('/password-reset-request', async (req, res) => {
   res.json({ ok: true });
 });
 
-// ID(이메일) 찾기: 성명 + 사번이 일치하면 일부를 가린 이메일
+/** 성명 + 연락처(숫자만 비교)로 인력 찾기 */
+async function findByNameAndPhone(name: string, phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 7) return [];
+  const cands = await prisma.employee.findMany({ where: { name, statusCd: { not: 'RETIRED' }, phone: { not: null } }, select: { empId: true, email: true, phone: true } });
+  return cands.filter((c) => (c.phone ?? '').replace(/\D/g, '') === digits);
+}
+
+// ID(이메일) 찾기: 성명 + 연락처가 일치하면 일부를 가린 이메일
 authRouter.post('/id-lookup', async (req, res) => {
   rateLimit(`idlookup:${ip(req)}`, 10, 10 * 60 * 1000);
-  const body = parse(z.object({ name: z.string().trim().min(1, '성명을 입력하세요'), empId: z.string().trim().min(1, '사번을 입력하세요') }), req.body);
-  const emp = await prisma.employee.findUnique({ where: { empId: body.empId }, select: { name: true, email: true, statusCd: true } });
-  if (!emp || emp.name !== body.name || emp.statusCd === 'RETIRED') throw new HttpError(404, '일치하는 계정이 없습니다. 관리자에게 문의를 남겨 주세요.');
-  res.json({ maskedEmail: maskEmail(emp.email) });
+  const body = parse(z.object({ name: z.string().trim().min(1, '성명을 입력하세요'), phone: z.string().trim().min(1, '연락처를 입력하세요') }), req.body);
+  const found = await findByNameAndPhone(body.name, body.phone);
+  if (!found.length) throw new HttpError(404, '일치하는 계정이 없습니다. 연락처가 등록되지 않았을 수 있으니 관리자에게 문의를 남겨 주세요.');
+  res.json({ maskedEmails: found.map((f) => maskEmail(f.email)) });
 });
 
 // ID 문의 → 관리자 처리 대기
 authRouter.post('/id-inquiry', async (req, res) => {
   rateLimit(`idinq:${ip(req)}`, 5, 10 * 60 * 1000);
   const body = parse(
-    z.object({ name: z.string().trim().min(1, '성명을 입력하세요'), empId: optStr, contact: z.string().trim().min(1, '연락받을 연락처를 입력하세요'), message: optStr }),
+    z.object({ name: z.string().trim().min(1, '성명을 입력하세요'), contact: z.string().trim().min(1, '연락받을 연락처를 입력하세요'), message: optStr }),
     req.body,
   );
-  const cand = body.empId ? await prisma.employee.findUnique({ where: { empId: body.empId }, select: { empId: true, name: true } }) : null;
+  const found = await findByNameAndPhone(body.name, body.contact);
   await prisma.accountRequest.create({
-    data: { reqType: 'ID_INQUIRY', name: body.name, empId: body.empId, contact: body.contact, message: body.message, matchedEmpId: cand?.name === body.name ? cand.empId : null },
+    data: { reqType: 'ID_INQUIRY', name: body.name, contact: body.contact, message: body.message, matchedEmpId: found.length === 1 ? found[0].empId : null },
   });
   res.json({ ok: true });
 });

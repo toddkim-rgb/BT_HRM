@@ -1,3 +1,4 @@
+// empId는 내부 관리 번호(화면 비표시). 데모 데이터는 고정값 사용
 // 초기 데이터: 공통코드·관리자·공휴일·마일스톤 템플릿 + 데모 데이터
 // 실행: npm run db:seed  (데모 제외: SEED_DEMO=N npm run db:seed)
 import { PrismaClient } from '@prisma/client';
@@ -72,16 +73,16 @@ async function demo() {
   });
 
   const emps = [
-    { empId: 'E1001', email: 'ceo.kim@example.com', name: '김대표', deptCd: '경영진', gradeCd: '이사', skillLevel: '특급', employType: 'REG', role: 'EXEC', careerStartDt: '2002-03-01', utilTarget: false },
-    { empId: 'E2001', email: 'sujin.lee@example.com', name: '이수진', deptCd: 'SI사업팀', gradeCd: '부장', skillLevel: '특급', employType: 'REG', role: 'PM', careerStartDt: '2008-03-01' },
-    { empId: 'E2002', email: 'junho.park@example.com', name: '박준호', deptCd: 'SM사업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'PM', careerStartDt: '2011-07-01' },
-    { empId: 'E3001', email: 'gildong.hong@example.com', name: '홍길동', deptCd: 'SI사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '개발', skillStack: 'React, Java, Oracle', careerStartDt: '2019-01-02' },
-    { empId: 'E3002', email: 'chulsoo.kim@example.com', name: '김철수', deptCd: 'SI사업팀', gradeCd: '과장', skillLevel: '고급', employType: 'REG', role: 'EMP', jobCd: '설계', skillStack: 'Spring, PostgreSQL', careerStartDt: '2014-02-01' },
-    { empId: 'E3003', email: 'younghee.lee@example.com', name: '이영희', deptCd: 'SM사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '운영', skillStack: 'Oracle, Linux', careerStartDt: '2018-05-01' },
-    { empId: 'E3004', email: 'minsu.jung@example.com', name: '정민수', deptCd: 'SM사업팀', gradeCd: '사원', skillLevel: '초급', employType: 'CONT', role: 'EMP', jobCd: '개발', skillStack: 'Vue, Node.js', careerStartDt: '2024-01-02' },
-    { empId: 'S1001', email: 'sales.choi@example.com', name: '최영업', deptCd: '영업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'SALES', careerStartDt: '2012-01-02', utilTarget: false },
-    { empId: 'P-0001', email: 'kang@hanbit.example.com', name: '강협력', deptCd: 'SI사업팀', gradeCd: '책임', skillLevel: '고급', employType: 'PARTNER', partnerId: 'PT-001', role: 'EMP', jobCd: '개발', careerStartDt: '2013-01-01' },
-    { empId: 'P-0002', email: 'yoon.free@example.com', name: '윤프리', deptCd: 'SM사업팀', gradeCd: '선임', skillLevel: '중급', employType: 'FREE', partnerId: 'PT-002', role: 'EMP', jobCd: '운영', careerStartDt: '2017-01-01' },
+    { empId: 'E1001', phone: '010-1000-1001', email: 'ceo.kim@example.com', name: '김대표', deptCd: '경영진', gradeCd: '이사', skillLevel: '특급', employType: 'REG', role: 'EXEC', careerStartDt: '2002-03-01', utilTarget: false },
+    { empId: 'E2001', phone: '010-2000-2001', email: 'sujin.lee@example.com', name: '이수진', deptCd: 'SI사업팀', gradeCd: '부장', skillLevel: '특급', employType: 'REG', role: 'PM', careerStartDt: '2008-03-01' },
+    { empId: 'E2002', phone: '010-2000-2002', email: 'junho.park@example.com', name: '박준호', deptCd: 'SM사업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'PM', careerStartDt: '2011-07-01' },
+    { empId: 'E3001', phone: '010-3000-3001', email: 'gildong.hong@example.com', name: '홍길동', deptCd: 'SI사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '개발', skillStack: 'React, Java, Oracle', careerStartDt: '2019-01-02' },
+    { empId: 'E3002', phone: '010-3000-3002', email: 'chulsoo.kim@example.com', name: '김철수', deptCd: 'SI사업팀', gradeCd: '과장', skillLevel: '고급', employType: 'REG', role: 'EMP', jobCd: '설계', skillStack: 'Spring, PostgreSQL', careerStartDt: '2014-02-01' },
+    { empId: 'E3003', phone: '010-3000-3003', email: 'younghee.lee@example.com', name: '이영희', deptCd: 'SM사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '운영', skillStack: 'Oracle, Linux', careerStartDt: '2018-05-01' },
+    { empId: 'E3004', phone: '010-3000-3004', email: 'minsu.jung@example.com', name: '정민수', deptCd: 'SM사업팀', gradeCd: '사원', skillLevel: '초급', employType: 'CONT', role: 'EMP', jobCd: '개발', skillStack: 'Vue, Node.js', careerStartDt: '2024-01-02' },
+    { empId: 'S1001', phone: '010-5000-1001', email: 'sales.choi@example.com', name: '최영업', deptCd: '영업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'SALES', careerStartDt: '2012-01-02', utilTarget: false },
+    { empId: 'P-0001', phone: '010-7000-0001', email: 'kang@hanbit.example.com', name: '강협력', deptCd: 'SI사업팀', gradeCd: '책임', skillLevel: '고급', employType: 'PARTNER', partnerId: 'PT-001', role: 'EMP', jobCd: '개발', careerStartDt: '2013-01-01' },
+    { empId: 'P-0002', phone: '010-7000-0002', email: 'yoon.free@example.com', name: '윤프리', deptCd: 'SM사업팀', gradeCd: '선임', skillLevel: '중급', employType: 'FREE', partnerId: 'PT-002', role: 'EMP', jobCd: '운영', careerStartDt: '2017-01-01' },
   ];
   for (const e of emps) await prisma.employee.create({ data: { ...e, passwordHash: pw } });
 

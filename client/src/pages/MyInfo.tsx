@@ -29,8 +29,6 @@ export default function MyInfo() {
         <div className="grid cols-2">
           <Card title="인력 정보">
             <dl className="desc-list">
-              <dt>사번</dt>
-              <dd>{data.empId}</dd>
               <dt>성명</dt>
               <dd>
                 <strong>{data.name}</strong>
