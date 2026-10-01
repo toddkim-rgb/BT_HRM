@@ -18,7 +18,7 @@ npm run setup   # .env 생성 + 의존성 설치 + DB 생성 + 초기 데이터
 npm run dev     # API(4000) + 웹(5173) 동시 실행
 ```
 
-브라우저에서 http://localhost:5173 에 접속합니다.
+브라우저에서 **http://localhost:5173** 에 접속합니다. (개발 중 http://localhost:4000 으로 들어오면 5173으로 자동 이동합니다.)
 
 운영 배포는 `npm run build` 후 `npm start`로 실행하며, API 서버(4000)가 빌드된 화면도 함께 제공합니다.
 

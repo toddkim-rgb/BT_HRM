@@ -31,11 +31,15 @@ api.use('/stats', statsRouter);
 api.use('/admin', adminRouter);
 app.use('/api/v1', api);
 
-// 운영: 빌드된 프론트엔드 정적 서빙
+// 운영(npm start = 빌드된 dist/index.js 실행): 빌드된 프론트엔드 정적 서빙
+// 개발(npm run dev = tsx로 src/index.ts 실행): 예전 빌드가 열리지 않도록 화면은 Vite(5173)로 안내
+const isProduction = import.meta.url.endsWith('.js');
 const clientDist = path.resolve(import.meta.dirname, '../../client/dist');
-if (fs.existsSync(clientDist)) {
+if (isProduction && fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
   app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+} else if (!isProduction) {
+  app.get(/^\/(?!api\/).*/, (req, res) => res.redirect(`http://localhost:5173${req.originalUrl}`));
 }
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
