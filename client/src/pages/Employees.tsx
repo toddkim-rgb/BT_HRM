@@ -1,0 +1,548 @@
+import { useState } from 'react';
+import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
+import { api, qs } from '../lib/api';
+import { hasRole, useAuth } from '../lib/auth';
+import { ASG_ROLE, ASG_STATUS, EMP_STATUS, EMPLOY_TYPE, ROLE_LABEL, SKILL_LEVELS } from '../lib/codes';
+import { label } from '../lib/format';
+import { useFetch } from '../lib/hooks';
+
+export interface Employee {
+  empId: string;
+  name: string;
+  deptCd: string;
+  gradeCd: string;
+  jobCd: string | null;
+  skillLevel: string;
+  skillStack: string | null;
+  employType: string;
+  partnerId: string | null;
+  partner?: { partnerNm: string } | null;
+  careerStartDt: string | null;
+  careerYears: number | null;
+  email: string | null;
+  phone: string | null;
+  statusCd: string;
+  hireDt: string | null;
+  retireDt: string | null;
+  role: string;
+  utilTarget: boolean;
+  allocTotal?: number;
+  overAlloc?: number;
+}
+
+const blank: Partial<Employee> & { initialPassword?: string } = {
+  empId: '',
+  name: '',
+  deptCd: '',
+  gradeCd: '',
+  skillLevel: '중급',
+  employType: 'REG',
+  statusCd: 'ACTIVE',
+  role: 'EMP',
+  utilTarget: true,
+};
+
+export default function Employees() {
+  const { user } = useAuth();
+  const isAdmin = hasRole(user, 'ADMIN');
+  const [q, setQ] = useState('');
+  const [employType, setEmployType] = useState('');
+  const [status, setStatus] = useState('');
+  const { data, error, loading, reload } = useFetch<Employee[]>(`/employees${qs({ q, employType, status, includeRetired: status === 'RETIRED' ? 'Y' : undefined })}`);
+  const [edit, setEdit] = useState<Partial<Employee> | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+
+  return (
+    <div>
+      <PageHeader
+        title="인력"
+        desc="자사·협력사 인력 마스터. 투입률 합계는 오늘 기준이며 100% 초과분은 과투입으로 표시합니다."
+        actions={
+          isAdmin && (
+            <>
+              <button className="btn" onClick={() => setImportOpen(true)}>
+                엑셀(CSV) 일괄 등록
+              </button>
+              <button className="btn primary" onClick={() => setEdit({ ...blank })}>
+                + 인력 등록
+              </button>
+            </>
+          )
+        }
+      />
+      <Card>
+        <div className="filters">
+          <input type="search" placeholder="이름·사번·소속·기술 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Select value={employType} onChange={setEmployType} options={EMPLOY_TYPE} placeholder="고용형태 전체" />
+          <Select value={status} onChange={setStatus} options={EMP_STATUS} placeholder="재직·휴직" />
+        </div>
+        <ErrorBox error={error} />
+        {loading && !data ? (
+          <Loading />
+        ) : !data?.length ? (
+          <Empty />
+        ) : (
+          <div className="table-wrap">
+            <table className="tbl responsive">
+              <thead>
+                <tr>
+                  <th>사번</th>
+                  <th>성명</th>
+                  <th>소속</th>
+                  <th>직급</th>
+                  <th>기술등급</th>
+                  <th>고용형태</th>
+                  <th className="num">경력</th>
+                  <th className="num">투입률</th>
+                  <th>상태</th>
+                  {isAdmin && <th>권한</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((e) => (
+                  <tr key={e.empId} className="clickable" onClick={() => setDetail(e.empId)}>
+                    <td data-label="사번" className="nowrap">
+                      {e.empId}
+                    </td>
+                    <td data-label="성명">
+                      <strong>{e.name}</strong>
+                    </td>
+                    <td data-label="소속">{e.deptCd}</td>
+                    <td data-label="직급">{e.gradeCd}</td>
+                    <td data-label="기술등급">{e.skillLevel}</td>
+                    <td data-label="고용형태">
+                      {label(EMPLOY_TYPE, e.employType)}
+                      {e.partner && <div className="small muted">{e.partner.partnerNm}</div>}
+                    </td>
+                    <td data-label="경력" className="num">
+                      {e.careerYears != null ? `${e.careerYears}년` : '-'}
+                    </td>
+                    <td data-label="투입률" className="num">
+                      {e.allocTotal ? `${e.allocTotal}%` : e.utilTarget ? <Badge tone="warn">대기</Badge> : <span className="muted small">대상 아님</span>}
+                      {!!e.overAlloc && (
+                        <div>
+                          <Badge tone="bad">과투입 +{e.overAlloc}%</Badge>
+                        </div>
+                      )}
+                    </td>
+                    <td data-label="상태">
+                      <Badge code={e.statusCd}>{label(EMP_STATUS, e.statusCd)}</Badge>
+                    </td>
+                    {isAdmin && <td data-label="권한">{label(ROLE_LABEL, e.role)}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {detail && (
+        <EmployeeDetail
+          empId={detail}
+          onClose={() => setDetail(null)}
+          onEdit={
+            isAdmin
+              ? (e) => {
+                  setDetail(null);
+                  setEdit(e);
+                }
+              : undefined
+          }
+        />
+      )}
+      {edit && (
+        <EmployeeForm
+          initial={edit}
+          onClose={() => setEdit(null)}
+          onSaved={() => {
+            setEdit(null);
+            reload();
+          }}
+        />
+      )}
+      {importOpen && (
+        <ImportModal
+          onClose={() => setImportOpen(false)}
+          onDone={() => {
+            reload();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EmployeeDetail({ empId, onClose, onEdit }: { empId: string; onClose: () => void; onEdit?: (e: Employee) => void }) {
+  const { data, loading, error } = useFetch<Employee & { assignments: { asgId: number; prjCd: string; roleCd: string; startDt: string; endDt: string; allocRate: number; status: string; project: { prjNm: string } }[] }>(
+    `/employees/${empId}`,
+  );
+  return (
+    <Modal
+      title="인력 상세"
+      onClose={onClose}
+      wide
+      footer={
+        onEdit &&
+        data && (
+          <button className="btn primary" onClick={() => onEdit(data)}>
+            수정
+          </button>
+        )
+      }
+    >
+      <ErrorBox error={error} />
+      {loading || !data ? (
+        <Loading />
+      ) : (
+        <div className="stack">
+          <dl className="desc-list">
+            <dt>사번 / 성명</dt>
+            <dd>
+              {data.empId} / <strong>{data.name}</strong>
+            </dd>
+            <dt>소속 / 직급</dt>
+            <dd>
+              {data.deptCd} / {data.gradeCd} {data.jobCd && `(${data.jobCd})`}
+            </dd>
+            <dt>고용형태</dt>
+            <dd>
+              {label(EMPLOY_TYPE, data.employType)} {data.partner && `· ${data.partner.partnerNm}`}
+            </dd>
+            <dt>기술</dt>
+            <dd>
+              {data.skillLevel} {data.skillStack && `· ${data.skillStack}`}
+            </dd>
+            <dt>경력</dt>
+            <dd>{data.careerYears != null ? `${data.careerYears}년 (IT 경력 시작 ${data.careerStartDt})` : '-'}</dd>
+            <dt>연락처</dt>
+            <dd>{[data.email, data.phone].filter(Boolean).join(' · ') || '-'}</dd>
+            <dt>상태</dt>
+            <dd>
+              {label(EMP_STATUS, data.statusCd)} {data.hireDt && `· 입사 ${data.hireDt}`} {data.retireDt && `· 퇴사 ${data.retireDt}`}
+            </dd>
+          </dl>
+          <div>
+            <h2 style={{ marginBottom: 8 }}>투입 이력</h2>
+            {!data.assignments.length ? (
+              <Empty>투입 이력이 없습니다.</Empty>
+            ) : (
+              <div className="table-wrap">
+                <table className="tbl responsive">
+                  <thead>
+                    <tr>
+                      <th>프로젝트</th>
+                      <th>역할</th>
+                      <th>기간</th>
+                      <th className="num">투입률</th>
+                      <th>상태</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.assignments.map((a) => (
+                      <tr key={a.asgId}>
+                        <td data-label="프로젝트">
+                          <strong>{a.prjCd}</strong> <span className="small muted">{a.project.prjNm}</span>
+                        </td>
+                        <td data-label="역할">{label(ASG_ROLE, a.roleCd)}</td>
+                        <td data-label="기간" className="nowrap">
+                          {a.startDt} ~ {a.endDt}
+                        </td>
+                        <td data-label="투입률" className="num">
+                          {a.allocRate}%
+                        </td>
+                        <td data-label="상태">
+                          <Badge code={a.status}>{label(ASG_STATUS, a.status)}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee> & { initialPassword?: string }; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const isNew = !('careerYears' in initial); // 조회해 온 인력에는 careerYears가 있음
+  const [f, setF] = useState({ ...initial });
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { data: partners } = useFetch<{ partnerId: string; partnerNm: string; statusCd: string }[]>('/admin/partners');
+  const set = (patch: Partial<typeof f>) => setF((s) => ({ ...s, ...patch }));
+  const needsPartner = f.employType === 'PARTNER' || f.employType === 'FREE';
+
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const body = { ...f, partnerId: needsPartner ? f.partnerId : null };
+      if (isNew) {
+        const r = await api.post<{ empId: string }>('/employees', body);
+        toast(`등록했습니다. (사번 ${r.empId}, 초기 비밀번호: ${f.initialPassword || r.empId})`);
+      } else {
+        await api.put(`/employees/${initial.empId}`, body);
+        toast('저장했습니다.');
+      }
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resetPw = async () => {
+    const pw = window.prompt('새 비밀번호 (4자 이상)');
+    if (!pw) return;
+    try {
+      await api.post(`/employees/${initial.empId}/reset-password`, { password: pw });
+      toast('비밀번호를 초기화했습니다.');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'bad');
+    }
+  };
+
+  return (
+    <Modal
+      title={isNew ? '인력 등록' : `인력 수정 · ${initial.empId}`}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          {!isNew && (
+            <button className="btn ghost" onClick={resetPw} style={{ marginRight: 'auto' }}>
+              비밀번호 초기화
+            </button>
+          )}
+          <button className="btn" onClick={onClose}>
+            취소
+          </button>
+          <button className="btn primary" disabled={busy} onClick={save}>
+            저장
+          </button>
+        </>
+      }
+    >
+      <ErrorBox error={err} />
+      <div className="form-grid">
+        <Field label="고용형태" required>
+          <Select value={f.employType} onChange={(employType) => set({ employType })} options={EMPLOY_TYPE} />
+        </Field>
+        <Field label="사번" required={!needsPartner} hint={needsPartner && isNew ? '비우면 P-xxxx 자동부여' : undefined}>
+          <input value={f.empId ?? ''} disabled={!isNew} onChange={(e) => set({ empId: e.target.value })} />
+        </Field>
+        {needsPartner && (
+          <Field label="협력사" required full>
+            <Select
+              value={f.partnerId}
+              onChange={(partnerId) => set({ partnerId })}
+              placeholder="선택"
+              options={(partners ?? []).filter((p) => p.statusCd === 'ACTIVE' || p.partnerId === f.partnerId).map((p) => [p.partnerId, p.partnerNm] as [string, string])}
+            />
+          </Field>
+        )}
+        <Field label="성명" required>
+          <input value={f.name ?? ''} onChange={(e) => set({ name: e.target.value })} />
+        </Field>
+        <Field label="소속 (본부/팀)" required>
+          <input value={f.deptCd ?? ''} onChange={(e) => set({ deptCd: e.target.value })} />
+        </Field>
+        <Field label="직급" required>
+          <input value={f.gradeCd ?? ''} onChange={(e) => set({ gradeCd: e.target.value })} />
+        </Field>
+        <Field label="직무">
+          <input value={f.jobCd ?? ''} onChange={(e) => set({ jobCd: e.target.value })} placeholder="개발, 설계, 운영…" />
+        </Field>
+        <Field label="기술등급" required>
+          <Select value={f.skillLevel} onChange={(skillLevel) => set({ skillLevel })} options={SKILL_LEVELS.map((s) => [s, s] as [string, string])} />
+        </Field>
+        <Field label="IT 경력 시작일" hint="경력연수 자동 계산">
+          <input type="date" value={f.careerStartDt ?? ''} onChange={(e) => set({ careerStartDt: e.target.value })} />
+        </Field>
+        <Field label="주요 기술스택" full>
+          <input value={f.skillStack ?? ''} onChange={(e) => set({ skillStack: e.target.value })} placeholder="예: Java, Spring, Oracle" />
+        </Field>
+        <Field label="업무 이메일">
+          <input type="email" value={f.email ?? ''} onChange={(e) => set({ email: e.target.value })} />
+        </Field>
+        <Field label="연락처">
+          <input value={f.phone ?? ''} onChange={(e) => set({ phone: e.target.value })} />
+        </Field>
+        <Field label="상태" required>
+          <Select value={f.statusCd} onChange={(statusCd) => set({ statusCd })} options={EMP_STATUS} />
+        </Field>
+        <Field label="시스템 권한" required>
+          <Select value={f.role} onChange={(role) => set({ role })} options={ROLE_LABEL} />
+        </Field>
+        <Field label="입사일">
+          <input type="date" value={f.hireDt ?? ''} onChange={(e) => set({ hireDt: e.target.value })} />
+        </Field>
+        <Field label="퇴사일">
+          <input type="date" value={f.retireDt ?? ''} onChange={(e) => set({ retireDt: e.target.value })} />
+        </Field>
+        <Field label="투입 대상" hint="관리·영업·경영진 등은 해제 (가동률·대기 인원 집계 제외)">
+          <label className="check" style={{ minHeight: 38 }}>
+            <input type="checkbox" checked={f.utilTarget ?? true} onChange={(e) => set({ utilTarget: e.target.checked })} /> 가동률 집계 대상
+          </label>
+        </Field>
+        {isNew && (
+          <Field label="초기 비밀번호" hint="비우면 사번과 동일">
+            <input value={f.initialPassword ?? ''} onChange={(e) => set({ initialPassword: e.target.value })} />
+          </Field>
+        )}
+      </div>
+      <p className="muted small">주민등록번호·주소·연봉 등 민감 개인정보는 수집하지 않습니다.</p>
+    </Modal>
+  );
+}
+
+const CSV_HEADERS = ['empId', 'name', 'deptCd', 'gradeCd', 'jobCd', 'skillLevel', 'skillStack', 'employType', 'partnerId', 'careerStartDt', 'email', 'phone', 'hireDt', 'role'];
+const CSV_HEADER_KO = ['사번', '성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일', '연락처', '입사일', '권한(EMP/PM/EXEC/ADMIN/SALES)'];
+
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (c === '"') quoted = false;
+      else cell += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') {
+      row.push(cell);
+      cell = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell);
+      if (row.some((x) => x.trim())) rows.push(row);
+      row = [];
+      cell = '';
+    } else cell += c;
+  }
+  row.push(cell);
+  if (row.some((x) => x.trim())) rows.push(row);
+  return rows;
+}
+
+function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [result, setResult] = useState<{ created: number; failed: number; results: { row: number; empId?: string; error?: string }[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const template = () => {
+    const csv = '﻿' + [CSV_HEADER_KO.join(','), '20260001,홍길동,SI사업팀,대리,개발,중급,"Java, React",REG,,2019-01-02,hong@example.com,010-0000-0000,2026-01-02,EMP'].join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = '인력_일괄등록_양식.csv';
+    a.click();
+  };
+
+  const onFile = async (file: File) => {
+    setErr(null);
+    setResult(null);
+    const text = (await file.text()).replace(/^﻿/, '');
+    const all = parseCsv(text);
+    if (all.length < 2) return setErr('데이터 행이 없습니다.');
+    setRows(
+      all.slice(1).map((r) => {
+        const o: Record<string, string> = {};
+        CSV_HEADERS.forEach((h, i) => {
+          const v = (r[i] ?? '').trim();
+          if (v) o[h] = v;
+        });
+        return o;
+      }),
+    );
+  };
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await api.post<typeof result>('/employees/import', { rows });
+      setResult(r);
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="인력 일괄 등록"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            닫기
+          </button>
+          <button className="btn primary" disabled={!rows.length || busy || !!result} onClick={run}>
+            {rows.length}건 등록
+          </button>
+        </>
+      }
+    >
+      <p className="muted" style={{ marginTop: 0 }}>
+        엑셀에서 양식을 채운 뒤 <b>CSV UTF-8</b>로 저장해 올려 주세요. 열 순서는 양식과 같아야 합니다.
+      </p>
+      <div className="row" style={{ marginBottom: 12 }}>
+        <button className="btn" onClick={template}>
+          양식 내려받기
+        </button>
+        <input type="file" accept=".csv,text/csv" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} style={{ maxWidth: 320 }} />
+      </div>
+      <ErrorBox error={err} />
+      {result && (
+        <div className={`alert ${result.failed ? 'warn' : 'good'}`}>
+          등록 {result.created}건 / 실패 {result.failed}건
+          {result.results
+            .filter((r) => r.error)
+            .map((r) => `\n${r.row}행: ${r.error}`)
+            .join('')}
+        </div>
+      )}
+      {!!rows.length && !result && (
+        <div className="table-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                {['사번', '성명', '소속', '직급', '등급', '고용형태', '협력사'].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(0, 50).map((r, i) => (
+                <tr key={i}>
+                  <td>{r.empId ?? '(자동)'}</td>
+                  <td>{r.name}</td>
+                  <td>{r.deptCd}</td>
+                  <td>{r.gradeCd}</td>
+                  <td>{r.skillLevel}</td>
+                  <td>{r.employType}</td>
+                  <td>{r.partnerId}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length > 50 && <p className="muted small">외 {rows.length - 50}건</p>}
+        </div>
+      )}
+    </Modal>
+  );
+}

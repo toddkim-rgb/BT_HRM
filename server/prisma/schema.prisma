@@ -1,0 +1,362 @@
+// SM·SI 인력관리 시스템 — 명세서 13장 기준
+// 날짜는 'YYYY-MM-DD' 문자열, 연월은 'YYYY-MM', 주차는 'YYYY-Www'(ISO, 월~일)
+// 개발: SQLite / 운영: provider·url만 바꿔 PostgreSQL 등으로 전환
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  empId         String   @id // 자사 사번, 협력사·프리랜서는 P-xxxx 자동부여
+  name          String
+  deptCd        String // 소속(본부/팀)
+  gradeCd       String // 직급
+  jobCd         String? // 직무
+  skillLevel    String // 초급/중급/고급/특급
+  skillStack    String?
+  employType    String // REG/CONT/FREE/PARTNER
+  partnerId     String?
+  careerStartDt String?
+  email         String?
+  phone         String?
+  statusCd      String   @default("ACTIVE") // ACTIVE/LEAVE/RETIRED
+  hireDt        String?
+  retireDt      String?
+  utilTarget    Boolean  @default(true) // 가동률·투입 현황 집계 대상 (관리·영업·경영진은 false)
+  role          String   @default("EMP") // EMP(R-01)/PM(R-02)/EXEC(R-03)/ADMIN(R-04)/SALES(R-05)
+  passwordHash  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  partner          Partner?          @relation(fields: [partnerId], references: [partnerId])
+  partnerContracts PartnerContract[]
+  costRates        CostRate[]
+  assignments      Assignment[]
+  weeklyWorks      WeeklyWork[]
+  timesheets       Timesheet[]
+  alerts           Alert[]
+  pmProjects       Project[]         @relation("ProjectPm")
+}
+
+model Partner {
+  partnerId       String   @id
+  partnerNm       String
+  bizRegNo        String?
+  contactNm       String?
+  contactPhone    String?
+  contractStartDt String?
+  contractEndDt   String?
+  statusCd        String   @default("ACTIVE") // ACTIVE/STOPPED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employees Employee[]
+  contracts PartnerContract[]
+}
+
+model PartnerContract {
+  pcId        Int      @id @default(autoincrement())
+  partnerId   String
+  empId       String
+  prjCd       String?
+  startDt     String
+  endDt       String
+  monthlyRate Int
+  contractMm  Float?
+  contractAmt Int?
+  statusCd    String   @default("ACTIVE") // ACTIVE/ENDED/EXTENDED
+  createdAt   DateTime @default(now())
+
+  partner  Partner  @relation(fields: [partnerId], references: [partnerId])
+  employee Employee @relation(fields: [empId], references: [empId])
+}
+
+model CostRate {
+  crId         Int      @id @default(autoincrement())
+  empId        String?
+  gradeCd      String? // 등급별 표준 원가 (empId 없을 때)
+  monthlyCost  Int
+  applyStartDt String
+  createdAt    DateTime @default(now())
+
+  employee Employee? @relation(fields: [empId], references: [empId])
+}
+
+model Project {
+  prjCd           String   @id // {사업구분}-{연도}-{일련번호}, 공통코드는 NP-xxx
+  prjType         String // SM/SI/IN/PS/ETC/NP
+  prjNm           String
+  customerNm      String?
+  contractType    String? // PRIME/SUB
+  primeContractor String?
+  startDt         String?
+  endDt           String?
+  contractMm      Float?
+  contractAmt     Int?
+  revenueMethod   String? // MONTHLY/MM
+  winProb         Int? // 참고 표시용 (수급 가중 미적용)
+  plOpenYn        Boolean  @default(false)
+  pmEmpId         String?
+  residentType    String? // ONSITE/OFFSITE/MIXED
+  statusCd        String   @default("ACTIVE") // SALES/WON/ACTIVE/DONE/STOP/LOST
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  pm            Employee?        @relation("ProjectPm", fields: [pmEmpId], references: [empId])
+  assignments   Assignment[]
+  billRates     BillRate[]
+  demandPlans   DemandPlan[]
+  expenses      ProjectExpense[]
+  timesheets    Timesheet[]
+  workItems     WorkItem[]
+  issues        WeeklyIssue[]
+  milestones    Milestone[]
+  msVersions    MsVersion[]
+  weeklyComment WeeklyComment[]
+}
+
+model BillRate {
+  brId         Int      @id @default(autoincrement())
+  prjCd        String
+  roleCd       String
+  gradeCd      String
+  monthlyRate  Int
+  applyStartDt String
+  createdAt    DateTime @default(now())
+
+  project Project @relation(fields: [prjCd], references: [prjCd])
+}
+
+model Assignment {
+  asgId        Int      @id @default(autoincrement())
+  empId        String
+  prjCd        String
+  roleCd       String // PM/PL/DESIGN/DEV/OPS ...
+  startDt      String
+  endDt        String
+  allocRate    Int // 0~100
+  residentType String   @default("ONSITE")
+  canceled     Boolean  @default(false) // 진행 상태는 날짜로 계산
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee Employee @relation(fields: [empId], references: [empId])
+  project  Project  @relation(fields: [prjCd], references: [prjCd])
+}
+
+model DemandPlan {
+  dpId      Int      @id @default(autoincrement())
+  prjCd     String
+  roleCd    String
+  gradeCd   String
+  headcount Int
+  startYm   String
+  endYm     String
+  allocRate Int      @default(100)
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [prjCd], references: [prjCd])
+}
+
+model WeeklyWork {
+  wwId         Int       @id @default(autoincrement())
+  empId        String
+  reportWeek   String
+  statusCd     String    @default("DRAFT") // DRAFT/SUBMITTED/APPROVED/REJECTED
+  remark       String?
+  submittedAt  DateTime?
+  approvedBy   String?
+  approvedAt   DateTime?
+  rejectReason String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  employee   Employee      @relation(fields: [empId], references: [empId])
+  timesheets Timesheet[]
+  workItems  WorkItem[]
+  issues     WeeklyIssue[]
+
+  @@unique([empId, reportWeek])
+}
+
+model Timesheet {
+  tsId   Int    @id @default(autoincrement())
+  wwId   Int
+  empId  String
+  prjCd  String
+  workDt String
+  md     Float
+
+  weeklyWork WeeklyWork @relation(fields: [wwId], references: [wwId], onDelete: Cascade)
+  employee   Employee   @relation(fields: [empId], references: [empId])
+  project    Project    @relation(fields: [prjCd], references: [prjCd])
+
+  @@unique([empId, prjCd, workDt])
+}
+
+model WorkItem {
+  wiId           Int     @id @default(autoincrement())
+  wwId           Int
+  prjCd          String
+  msId           Int?
+  itemType       String // ACTUAL/PLAN
+  seq            Int     @default(0)
+  workNm         String
+  content        String?
+  progressBefore Int?
+  progressAfter  Int?
+  targetProgress Int?
+  dueDt          String?
+  statusCd       String? // NORMAL/DELAY/DONE
+  delayReason    String?
+  smWorkType     String? // PERIODIC/REQUEST/INCIDENT/IMPROVE/ETC
+  smCount        Int?
+
+  weeklyWork WeeklyWork @relation(fields: [wwId], references: [wwId], onDelete: Cascade)
+  project    Project    @relation(fields: [prjCd], references: [prjCd])
+  milestone  Milestone? @relation(fields: [msId], references: [msId])
+}
+
+model WeeklyIssue {
+  wisId        Int     @id @default(autoincrement())
+  wwId         Int
+  prjCd        String
+  issueType    String // ISSUE/RISK/REQUEST
+  severity     String // H/M/L
+  content      String
+  actionPlan   String?
+  supportReqYn Boolean @default(false)
+  onepageYn    Boolean @default(false)
+
+  weeklyWork WeeklyWork @relation(fields: [wwId], references: [wwId], onDelete: Cascade)
+  project    Project    @relation(fields: [prjCd], references: [prjCd])
+}
+
+model Milestone {
+  msId          Int     @id @default(autoincrement())
+  prjCd         String
+  seq           Int
+  msNm          String
+  deliverable   String?
+  statusCd      String  @default("PLANNED") // PLANNED/IN_PROGRESS/DONE/CANCELED
+  actualStartDt String?
+  doneDt        String?
+
+  project   Project      @relation(fields: [prjCd], references: [prjCd])
+  schedules MsSchedule[]
+  workItems WorkItem[]
+}
+
+model MsVersion {
+  verId        Int      @id @default(autoincrement())
+  prjCd        String
+  versionNo    Int
+  baselineYn   Boolean  @default(false)
+  changeReason String
+  createdBy    String?
+  createdAt    DateTime @default(now())
+
+  project   Project      @relation(fields: [prjCd], references: [prjCd])
+  schedules MsSchedule[]
+
+  @@unique([prjCd, versionNo])
+}
+
+model MsSchedule {
+  schId       Int    @id @default(autoincrement())
+  msId        Int
+  verId       Int
+  planStartDt String
+  planEndDt   String
+
+  milestone Milestone @relation(fields: [msId], references: [msId])
+  version   MsVersion @relation(fields: [verId], references: [verId])
+}
+
+model MsTemplate {
+  tplId   Int              @id @default(autoincrement())
+  tplNm   String
+  prjType String
+  items   MsTemplateItem[]
+}
+
+model MsTemplateItem {
+  tplItemId     Int     @id @default(autoincrement())
+  tplId         Int
+  seq           Int
+  msNm          String
+  durationRatio Int
+  deliverable   String?
+
+  template MsTemplate @relation(fields: [tplId], references: [tplId], onDelete: Cascade)
+}
+
+model ProjectExpense {
+  exId        Int      @id @default(autoincrement())
+  prjCd       String
+  expenseYm   String
+  amount      Int
+  expenseType String
+  memo        String?
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [prjCd], references: [prjCd])
+}
+
+model Alert {
+  alertId     Int      @id @default(autoincrement())
+  alertCd     String // AL-01 ~ AL-06
+  targetEmpId String
+  refKey      String
+  message     String
+  readYn      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  target Employee @relation(fields: [targetEmpId], references: [empId])
+
+  @@unique([alertCd, targetEmpId, refKey])
+}
+
+model WeeklyReport {
+  reportWeek  String    @id
+  snapshot    String // JSON
+  statusCd    String    @default("DRAFT") // DRAFT/CONFIRMED
+  nextPlan    String?
+  confirmedBy String?
+  confirmedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+}
+
+// report_week는 주차 값일 뿐 WeeklyReport FK 아님 (명세 13.2)
+model WeeklyComment {
+  wcId           Int      @id @default(autoincrement())
+  reportWeek     String
+  prjCd          String
+  planProgress   Float?
+  actualProgress Float?
+  pmOpinion      String?
+  confirmedYn    Boolean  @default(false)
+  createdBy      String?
+  updatedAt      DateTime @updatedAt
+
+  project Project @relation(fields: [prjCd], references: [prjCd])
+
+  @@unique([reportWeek, prjCd])
+}
+
+model Holiday {
+  dt   String @id
+  name String
+}
+
+model Setting {
+  key   String @id
+  value String
+}

@@ -1,0 +1,15 @@
+{
+  "name": "bt-hrm",
+  "private": true,
+  "description": "SM·SI 사업부문 인력관리 시스템",
+  "scripts": {
+    "setup": "node -e \"const fs=require('fs');fs.existsSync('server/.env')||fs.copyFileSync('server/.env.example','server/.env')\" && npm install && npm install --prefix server && npm install --prefix client && npm run db:setup",
+    "db:setup": "cd server && npx prisma migrate deploy && npm run db:seed",
+    "dev": "concurrently -n api,web -c blue,green \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix server run build && npm --prefix client run build",
+    "start": "npm --prefix server start"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}
