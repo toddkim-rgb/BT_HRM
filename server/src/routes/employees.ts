@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { me, requireRole } from '../auth.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { assignmentStatus, currentAllocations } from '../lib/alloc.js';
+import { tempPassword } from '../lib/password.js';
 import { optDate, optStr, parse } from '../lib/validate.js';
 
 export const employeesRouter = Router();
@@ -116,7 +117,7 @@ employeesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   if (await prisma.employee.findUnique({ where: { empId } })) throw new HttpError(409, `이미 존재하는 사번입니다: ${empId}`);
   const { initialPassword, empId: _e, ...data } = body;
   const created = await prisma.employee.create({
-    data: { ...data, empId, passwordHash: await bcrypt.hash(initialPassword || empId, 10) },
+    data: { ...data, empId, passwordHash: await bcrypt.hash(initialPassword || empId, 10), mustChangePw: true },
   });
   res.status(201).json({ empId: created.empId });
 });
@@ -132,10 +133,13 @@ employeesRouter.put('/:empId', requireRole('ADMIN'), async (req, res) => {
   res.json({ ok: true });
 });
 
+// 관리자 비밀번호 초기화: 임시 비밀번호 발급(1회 표시) → 첫 로그인 시 변경 강제
 employeesRouter.post('/:empId/reset-password', requireRole('ADMIN'), async (req, res) => {
-  const body = parse(z.object({ password: z.string().min(4) }), req.body);
-  await prisma.employee.update({ where: { empId: String(req.params.empId) }, data: { passwordHash: await bcrypt.hash(body.password, 10) } });
-  res.json({ ok: true });
+  const empId = String(req.params.empId);
+  if (!(await prisma.employee.findUnique({ where: { empId } }))) throw notFound('인력');
+  const password = tempPassword();
+  await prisma.employee.update({ where: { empId }, data: { passwordHash: await bcrypt.hash(password, 10), mustChangePw: true } });
+  res.json({ ok: true, tempPassword: password });
 });
 
 // F-030 엑셀(CSV) 일괄 등록: 클라이언트에서 파싱한 행 배열을 받는다
@@ -151,7 +155,7 @@ employeesRouter.post('/import', requireRole('ADMIN'), async (req, res) => {
       if (!empId) throw new HttpError(400, '사번 누락');
       if (await prisma.employee.findUnique({ where: { empId } })) throw new HttpError(409, '사번 중복');
       const { initialPassword, empId: _e, ...data } = body;
-      await prisma.employee.create({ data: { ...data, empId, passwordHash: await bcrypt.hash(initialPassword || empId, 10) } });
+      await prisma.employee.create({ data: { ...data, empId, passwordHash: await bcrypt.hash(initialPassword || empId, 10), mustChangePw: true } });
       results.push({ row: i + 1, empId });
     } catch (e) {
       results.push({ row: i + 1, error: e instanceof Error ? e.message : String(e) });

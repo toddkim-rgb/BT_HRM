@@ -2,9 +2,11 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Loading, ToastProvider } from './components/ui';
 import { AuthProvider, useAuth } from './lib/auth';
+import AccountRequests from './pages/AccountRequests';
 import Assignments from './pages/Assignments';
 import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
+import ForceChangePassword from './pages/ForceChangePassword';
 import Login from './pages/Login';
 import MyInfo from './pages/MyInfo';
 import Partners from './pages/Partners';
@@ -19,6 +21,7 @@ function Routed() {
   const { user, ready } = useAuth();
   if (!ready) return <Loading />;
   if (!user) return <Login />;
+  if (user.mustChangePw) return <ForceChangePassword />;
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -34,6 +37,7 @@ function Routed() {
         <Route path="projects" element={<Projects />} />
         <Route path="partners" element={<Partners />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="account-requests" element={<AccountRequests />} />
         <Route path="me" element={<MyInfo />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

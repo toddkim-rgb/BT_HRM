@@ -6,6 +6,7 @@ export interface User {
   empId: string;
   name: string;
   role: Role;
+  mustChangePw?: boolean; // 초기·임시 비밀번호 → 변경 전까지 다른 화면 이용 불가
 }
 
 interface AuthCtx {
@@ -13,6 +14,8 @@ interface AuthCtx {
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  /** 비밀번호 변경 후 새 토큰 반영 */
+  applySession: (token: string, user: User) => void;
 }
 
 const Ctx = createContext<AuthCtx>(null as never);
@@ -34,18 +37,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api
       .get<User>('/auth/me')
-      .then((u) => setUser({ empId: u.empId, name: u.name, role: u.role }))
+      .then((u) => setUser({ empId: u.empId, name: u.name, role: u.role, mustChangePw: u.mustChangePw }))
       .catch(() => tokenStore.clear())
       .finally(() => setReady(true));
   }, [logout]);
 
+  const applySession = useCallback((token: string, u: User) => {
+    tokenStore.set(token);
+    setUser(u);
+  }, []);
+
   const login = async (email: string, password: string) => {
     const r = await api.post<{ token: string; user: User }>('/auth/login', { email, password });
-    tokenStore.set(r.token);
-    setUser(r.user);
+    applySession(r.token, r.user);
   };
 
-  return <Ctx.Provider value={{ user, ready, login, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, ready, login, logout, applySession }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);

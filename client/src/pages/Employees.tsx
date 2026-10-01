@@ -294,7 +294,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
       const body = { ...f, partnerId: needsPartner ? f.partnerId : null };
       if (isNew) {
         const r = await api.post<{ empId: string }>('/employees', body);
-        toast(`등록했습니다. (사번 ${r.empId}, 로그인 ${f.email}, 초기 비밀번호: ${f.initialPassword || r.empId})`);
+        toast(`등록했습니다. (사번 ${r.empId}, 로그인 ${f.email}, 초기 비밀번호: ${f.initialPassword || r.empId} — 첫 로그인 시 변경)`);
       } else {
         await api.put(`/employees/${initial.empId}`, body);
         toast('저장했습니다.');
@@ -307,12 +307,12 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
     }
   };
 
+  const [tempPw, setTempPw] = useState<string | null>(null);
   const resetPw = async () => {
-    const pw = window.prompt('새 비밀번호 (4자 이상)');
-    if (!pw) return;
+    if (!window.confirm(`${initial.name}님의 비밀번호를 초기화하고 임시 비밀번호를 발급할까요?`)) return;
     try {
-      await api.post(`/employees/${initial.empId}/reset-password`, { password: pw });
-      toast('비밀번호를 초기화했습니다.');
+      const r = await api.post<{ tempPassword: string }>(`/employees/${initial.empId}/reset-password`);
+      setTempPw(r.tempPassword);
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'bad');
     }
@@ -396,12 +396,20 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
           </label>
         </Field>
         {isNew && (
-          <Field label="초기 비밀번호" hint="비우면 사번과 동일">
+          <Field label="초기 비밀번호" hint="비우면 사번과 동일 · 첫 로그인 시 변경 강제">
             <input value={f.initialPassword ?? ''} onChange={(e) => set({ initialPassword: e.target.value })} />
           </Field>
         )}
       </div>
       <p className="muted small">주민등록번호·주소·연봉 등 민감 개인정보는 수집하지 않습니다.</p>
+      {tempPw && (
+        <Modal title="임시 비밀번호 발급" onClose={() => setTempPw(null)} footer={<button className="btn primary" onClick={() => setTempPw(null)}>확인</button>}>
+          <p style={{ marginTop: 0 }}>
+            {initial.name}님({initial.email})의 임시 비밀번호입니다. 창을 닫으면 다시 볼 수 없으니 본인에게 직접 전달하세요. 첫 로그인 시 새 비밀번호를 설정해야 합니다.
+          </p>
+          <div className="temp-pw">{tempPw}</div>
+        </Modal>
+      )}
     </Modal>
   );
 }

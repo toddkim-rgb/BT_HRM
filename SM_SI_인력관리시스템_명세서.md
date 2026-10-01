@@ -1,7 +1,7 @@
-# SM·SI 사업부문 인력관리 시스템 명세서 (v0.9)
+# SM·SI 사업부문 인력관리 시스템 명세서 (v0.10)
 
 > 문서 목적: AI(Claude 등)에게 개발을 지시하기 위한 통합 명세서
-> 변경 이력: v0.1 초안 → v0.2 추가 항목 반영 (단가·손익, 수급계획, 협력사, 알림 / 전사 1장) → v0.3 수행인력 주간 업무보고 입력 추가 (10장) → v0.4 배정 승인 제거, 이슈 작성만 → v0.5 알림 축소, WBS 제거 → v0.6 확인 사항 결정 → v0.7 SI 마일스톤 방식 WBS(C안) 반영 (10.4) → v0.8 수주확률 가중 미적용(Q9), 문서 정합성 정리 → **v0.9 주간 업무보고 승인 절차 삭제(제출 = 확정), 이메일 로그인, 입사일·퇴사일 삭제, 다중 프로젝트 투입 설계(5.5)**
+> 변경 이력: v0.1 초안 → v0.2 추가 항목 반영 (단가·손익, 수급계획, 협력사, 알림 / 전사 1장) → v0.3 수행인력 주간 업무보고 입력 추가 (10장) → v0.4 배정 승인 제거, 이슈 작성만 → v0.5 알림 축소, WBS 제거 → v0.6 확인 사항 결정 → v0.7 SI 마일스톤 방식 WBS(C안) 반영 (10.4) → v0.8 수주확률 가중 미적용(Q9), 문서 정합성 정리 → **v0.9 주간 업무보고 승인 절차 삭제(제출 = 확정), 이메일 로그인, 입사일·퇴사일 삭제, 다중 프로젝트 투입 설계(5.5) → **v0.10 로그인 보조(비밀번호 보기·Caps Lock·초기 비밀번호 변경 강제, 비밀번호 재설정 요청, ID 찾기·문의) (2.1)**
 > 표기: `[가정]` 작성자가 가정한 내용 / `[확인 필요]` 의사결정 필요
 
 ---
@@ -95,6 +95,34 @@ flowchart LR
 | R-03 | 사업부장/경영진 | 전사 현황·손익·수급 조회, 주간보고 확정 | 사업본부장, 대표 |
 | R-04 | 시스템관리자(PMO) | 인력·협력사·프로젝트·단가·기준값 관리 | 경영지원/PMO 담당자 |
 | R-05 | 영업담당 `[가정]` | 수주예정 프로젝트 및 소요인력 등록 | 영업/제안 담당 |
+
+### 2.1 로그인 · 계정 (v0.10)
+
+메일 서버를 쓰지 않으므로(9장, 시스템 알림만) 재설정 링크 메일 대신 **시스템관리자가 처리**합니다.
+
+```mermaid
+flowchart LR
+  L["로그인<br/>이메일 + 비밀번호"] -->|"초기·임시 비밀번호"| C["새 비밀번호 설정<br/>(변경 전 다른 화면·API 차단)"]
+  L -->|"비밀번호 분실"| R["재설정 요청<br/>이메일 + 성명"]
+  L -->|"ID 분실"| I["성명 + 사번 →<br/>가린 이메일 표시"]
+  I -->|"못 찾음"| Q["ID 문의<br/>성명·연락처"]
+  R --> A["관리자 '계정 요청'<br/>본인 확인"]
+  Q --> A
+  A -->|"임시 비밀번호 발급 (1회 표시)"| L
+  A -->|"ID 직접 안내"| L
+```
+
+| 기능 | 내용 |
+|---|---|
+| 비밀번호 보기 | 비밀번호 입력란의 눈 아이콘으로 보이기/숨기기 |
+| Caps Lock 경고 | 비밀번호 입력 중 Caps Lock이 켜져 있으면 경고 표시 |
+| 초기 비밀번호 변경 강제 | 인력 등록 시 초기 비밀번호, 관리자 초기화·재설정 요청 처리 시 **임시 비밀번호** → 첫 로그인 시 새 비밀번호(확인 입력 포함) 설정 전까지 다른 화면·API 이용 불가 |
+| 비밀번호 규칙 | 8자 이상, 영문·숫자 포함, 현재 비밀번호와 달라야 함. 입력 중 충족 여부·확인 일치 표시 |
+| 비밀번호 재설정 요청 | 로그인 화면에서 이메일 + 성명 입력 → 관리자 처리 대기. 계정 존재 여부는 응답으로 알리지 않음 |
+| ID(이메일) 찾기 | 성명 + 사번 일치 시 일부를 가린 이메일 표시 (예: `gi****@example.com`) |
+| ID 문의 | 찾지 못하면 성명·사번(선택)·연락처·문의 내용을 남김 → 관리자가 직접 안내 |
+| 관리자 '계정 요청' | 요청 목록(입력 정보와 일치하는 계정 표시), 임시 비밀번호 발급(10자, 화면에 1회만 표시)·안내 완료·반려, 메뉴에 대기 건수 표시 |
+| 남용 방지 | 로그인(IP+이메일 기준), 재설정 요청·ID 찾기·문의(IP 기준) 횟수 제한 |
 
 ### 데이터 접근 권한 매트릭스
 
@@ -718,6 +746,7 @@ flowchart LR
 | F-002 | 주간 업무보고 작성 | 투입MD·금주 실적(진척률)·차주 계획·이슈를 한 화면에서 작성·제출할 수 있다 | 높음 |
 | F-003 | 제출 후 수정 | 제출한 보고서를 수정해 다시 제출할 수 있다 (승인 절차 없음) | 중간 |
 | F-004 | 내 알림 | 본인 대상 알림(철수 예정)을 확인할 수 있다 | 낮음 |
+| F-007 | 로그인 보조 | 비밀번호 보기·Caps Lock 경고, ID(이메일) 찾기·문의, 비밀번호 재설정 요청, 초기·임시 비밀번호 변경을 할 수 있다 | 높음 |
 | F-005 | 전주 계획 이월 | 전주 '차주 계획'을 금주 실적 행으로 자동 불러올 수 있다 | 높음 |
 | F-006 | 배정대로 채우기 | 다중 프로젝트 투입 시 배정 투입률 기준으로 요일별 투입MD를 자동 배분할 수 있다 | 중간 |
 
@@ -751,6 +780,7 @@ flowchart LR
 | F-033 | 협력사 관리 | 협력사 마스터, 협력사 인력 계약·단가 관리 | 높음 |
 | F-034 | 기준값 설정 | MM 환산일, 가동률·알림 임계값, 공휴일 캘린더 | 중간 |
 | F-035 | 사용자·권한 관리 | 역할 부여, PM-프로젝트 매핑 | 중간 |
+| F-037 | 계정 요청 처리 | 비밀번호 재설정 요청·ID 문의를 확인하고 임시 비밀번호 발급·안내 완료·반려할 수 있다 | 높음 |
 | F-036 | 마일스톤 템플릿 관리 | 사업유형별 표준 마일스톤·기간 비율·산출물을 관리할 수 있다 | 중간 |
 
 ### 영업담당 (R-05)
@@ -972,6 +1002,17 @@ erDiagram
     boolean read_yn
     datetime created_at
   }
+  ACCOUNT_REQUEST {
+    bigint req_id PK
+    varchar req_type
+    varchar name
+    varchar email
+    varchar emp_id
+    varchar contact
+    varchar matched_emp_id
+    varchar status_cd
+    varchar handled_by
+  }
   WEEKLY_REPORT {
     varchar report_week PK
     json snapshot
@@ -993,7 +1034,7 @@ erDiagram
 
 | 테이블 | 핵심 규칙 |
 |---|---|
-| `employee` | `employ_type`: REG/CONT/FREE/PARTNER, PARTNER·FREE는 `partner_id` 필수. `email` UNIQUE·필수(로그인 ID, 소문자), `util_target` 가동률 집계 대상 여부. 입사일·퇴사일 컬럼 없음 |
+| `employee` | `employ_type`: REG/CONT/FREE/PARTNER, PARTNER·FREE는 `partner_id` 필수. `email` UNIQUE·필수(로그인 ID, 소문자), `util_target` 가동률 집계 대상 여부, `must_change_pw` 초기·임시 비밀번호 변경 강제. 입사일·퇴사일 컬럼 없음 |
 | `project` | `prj_type`: SM/SI/IN/PS/ETC/NP, `revenue_method`: MONTHLY(SM)/MM(SI), `pl_open_yn`: PM 손익 조회 허용, `status_cd`: SALES/WON/ACTIVE/DONE/STOP/LOST |
 | `cost_rate`, `bill_rate` | `apply_start_dt` 기준 이력, 조회 시 해당 월 유효 단가 적용. **접근 권한 분리** |
 | `assignment` | `alloc_rate` 0~100, `status_cd`: PLANNED/ACTIVE/ENDED/CANCELED (날짜로 계산, 취소만 저장) — **승인 절차 없음, 등록 즉시 확정**. 동일 인력의 다른 프로젝트·같은 프로젝트 기간 중복 배정 허용 (5.5) |
@@ -1008,6 +1049,7 @@ erDiagram
 | `weekly_issue` | 주간보고의 하위 항목. `issue_type`: ISSUE/RISK/REQUEST, `severity`: H/M/L, 상태 컬럼 없음, `onepage_yn`은 PM만 변경 |
 | `demand_plan` | 수주확률 가중 없이 소요인력 MM 그대로 예상 수요로 집계 (프로젝트 `win_prob`는 참고 표시용) |
 | `alert` | `alert_cd`: AL-01, AL-03~AL-06 (AL-02 폐지), `ref_key`로 중복 발송 방지 |
+| `account_request` | `req_type`: PW_RESET/ID_INQUIRY, `status_cd`: OPEN/DONE/REJECTED, `matched_emp_id`는 입력값과 일치하는 인력 (관리자 확인용) |
 | `weekly_report` | `report_week`: `2026-W40`, 확정 시 `snapshot` 고정 |
 | 집계 테이블 `[가정]` | `agg_util_monthly`, `agg_pl_monthly`, `agg_supply_monthly` (일 배치 생성) |
 | 공통 컬럼 | `created_by`, `created_at`, `updated_by`, `updated_at` |
@@ -1018,7 +1060,15 @@ erDiagram
 
 | Method | Endpoint | 설명 | 접근 권한 | 기능 ID |
 |---|---|---|---|---|
-| POST | `/api/v1/auth/login` | 로그인 (이메일 + 비밀번호 → JWT) | 전체 | – |
+| POST | `/api/v1/auth/login` | 로그인 (이메일 + 비밀번호 → JWT, 변경 강제 여부 포함) | 전체 | – |
+| PUT | `/api/v1/auth/me/password` | 비밀번호 변경 (변경 강제 해제된 새 토큰 발급) | 본인 | F-007 |
+| POST | `/api/v1/auth/password-reset-request` | 비밀번호 재설정 요청 (로그인 전) | 공개 | F-007 |
+| POST | `/api/v1/auth/id-lookup` | ID 찾기 (성명+사번 → 가린 이메일) | 공개 | F-007 |
+| POST | `/api/v1/auth/id-inquiry` | ID 문의 (로그인 전) | 공개 | F-007 |
+| GET | `/api/v1/admin/account-requests` | 계정 요청 목록 / `count` 대기 건수 | R-04 | F-037 |
+| POST | `/api/v1/admin/account-requests/{id}/issue-temp-password` | 임시 비밀번호 발급 (1회 응답) | R-04 | F-037 |
+| POST | `/api/v1/admin/account-requests/{id}/close` | 안내 완료 / 반려 | R-04 | F-037 |
+| POST | `/api/v1/employees/{empId}/reset-password` | 관리자 비밀번호 초기화 (임시 비밀번호 발급) | R-04 | F-030 |
 | GET | `/api/v1/employees` | 인력 목록 (소속/상태/고용형태 필터) | R-02 이상 | F-030 |
 | POST | `/api/v1/employees/import` | 엑셀 일괄 등록 | R-04 | F-030 |
 | POST | `/api/v1/projects` | 프로젝트 등록 (자동 채번) | R-04, R-05(영업중) | F-031, F-040 |
@@ -1055,7 +1105,7 @@ erDiagram
 | GET | `/api/v1/reports/weekly/{week}/pdf` | PDF 다운로드 | R-03 이상 | F-022 |
 
 - 단가·손익 API는 `/admin/` 경로로 분리하여 권한 검사 일원화
-- 에러 코드: 400 / 401 미인증 / **403 권한 없음** / 404 / 409 충돌(이메일·사번 중복, 제출된 보고서 임시저장) / 422 제출 검증 실패 / 500
+- 에러 코드: 400 / 401 미인증 / **403 권한 없음** (비밀번호 변경 필요 시 `PW_CHANGE_REQUIRED`) / 404 / 409 충돌(이메일·사번 중복, 제출된 보고서 임시저장) / 422 제출 검증 실패 / 429 요청 횟수 초과 / 500
 
 ---
 
@@ -1109,3 +1159,6 @@ erDiagram
 | Q21 | 같은 프로젝트 기간 중복 배정 | ✅ 허용 | 5.2, 5.5 |
 | Q22 | 다중 투입 MD 입력 보조 | ✅ 계획MD 표시 + 배정대로 채우기 | 5.5, 10.3 |
 | Q23 | 진행 중인 달 가동률 분모 | ✅ 오늘까지의 영업일 | 5.3 |
+| Q24 | 비밀번호 재설정 방식 | ✅ 관리자에게 요청 → 임시 비밀번호 발급 (메일 발송 없음) | 2.1 |
+| Q25 | ID 문의 | ✅ 성명+사번으로 가린 이메일 조회, 못 찾으면 관리자 문의 | 2.1 |
+| Q26 | 로그인 보조 | ✅ 비밀번호 보기, Caps Lock 경고, 초기·임시 비밀번호 변경 강제 | 2.1 |

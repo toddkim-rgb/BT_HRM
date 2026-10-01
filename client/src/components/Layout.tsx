@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { useFetch } from '../lib/hooks';
 import { ROLE_LABEL, type Role } from '../lib/codes';
 
 interface NavItem {
@@ -36,6 +37,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
       { to: '/projects', label: '프로젝트', icon: '▣', roles: ALL_MANAGERS },
       { to: '/partners', label: '협력사', icon: '⚑', roles: ['EXEC', 'ADMIN'] },
       { to: '/settings', label: '기준값 설정', icon: '⚙', roles: ['ADMIN'] },
+      { to: '/account-requests', label: '계정 요청', icon: '✉', roles: ['ADMIN'] },
     ],
   },
 ];
@@ -45,6 +47,11 @@ export function Layout() {
   const [open, setOpen] = useState(false);
   const loc = useLocation();
   useEffect(() => setOpen(false), [loc.pathname]);
+  // 관리자: 처리 대기 중인 계정 요청 수 (화면 이동 시 갱신)
+  const { data: reqCount, reload: reloadCount } = useFetch<{ open: number }>(user?.role === 'ADMIN' ? '/admin/account-requests/count' : null);
+  useEffect(() => {
+    if (user?.role === 'ADMIN') reloadCount();
+  }, [loc.pathname, user?.role, reloadCount]);
   if (!user) return null;
 
   const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.roles || i.roles.includes(user.role)) })).filter((g) => g.items.length);
@@ -77,6 +84,7 @@ export function Layout() {
                     {i.icon}
                   </span>
                   {i.label}
+                  {i.to === '/account-requests' && !!reqCount?.open && <span className="nav-badge">{reqCount.open}</span>}
                 </NavLink>
               ))}
             </div>

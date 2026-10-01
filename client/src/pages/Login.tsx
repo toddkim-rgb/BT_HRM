@@ -1,4 +1,7 @@
 import { useState, type FormEvent } from 'react';
+import { PasswordInput } from '../components/PasswordInput';
+import { ErrorBox, Field, Modal } from '../components/ui';
+import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
 const DEMO = [
@@ -17,6 +20,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dialog, setDialog] = useState<'id' | 'pw' | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -42,14 +46,25 @@ export default function Login() {
           <span className="field-label">이메일</span>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" placeholder="name@company.com" autoFocus required />
         </label>
-        <label className="field">
-          <span className="field-label">비밀번호</span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-        </label>
+        <div className="field">
+          <label className="field-label" htmlFor="login-pw">
+            비밀번호
+          </label>
+          <PasswordInput id="login-pw" value={password} onChange={setPassword} required />
+        </div>
         {error && <div className="alert bad">{error}</div>}
         <button className="btn primary block" disabled={busy}>
           {busy ? '로그인 중…' : '로그인'}
         </button>
+        <div className="login-links">
+          <button type="button" onClick={() => setDialog('id')}>
+            아이디(이메일) 찾기
+          </button>
+          <span aria-hidden>|</span>
+          <button type="button" onClick={() => setDialog('pw')}>
+            비밀번호 재설정 요청
+          </button>
+        </div>
         {import.meta.env.DEV && (
           <div className="demo-accounts">
             <div className="muted small">개발용 데모 계정 (클릭하면 입력)</div>
@@ -71,6 +86,179 @@ export default function Login() {
           </div>
         )}
       </form>
+      {dialog === 'id' && <FindIdDialog onClose={() => setDialog(null)} />}
+      {dialog === 'pw' && <ResetRequestDialog initialEmail={email} onClose={() => setDialog(null)} />}
     </div>
+  );
+}
+
+function FindIdDialog({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<'lookup' | 'inquiry'>('lookup');
+  const [name, setName] = useState('');
+  const [empId, setEmpId] = useState('');
+  const [contact, setContact] = useState('');
+  const [message, setMessage] = useState('');
+  const [masked, setMasked] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await fn();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const lookup = () => run(async () => setMasked((await api.post<{ maskedEmail: string }>('/auth/id-lookup', { name, empId })).maskedEmail));
+  const inquire = () =>
+    run(async () => {
+      await api.post('/auth/id-inquiry', { name, empId: empId || null, contact, message: message || null });
+      setSent(true);
+    });
+
+  return (
+    <Modal
+      title="아이디(이메일) 찾기"
+      onClose={onClose}
+      footer={
+        tab === 'lookup' ? (
+          masked ? (
+            <button className="btn primary" onClick={onClose}>
+              로그인으로
+            </button>
+          ) : (
+            <button className="btn primary" disabled={busy || !name.trim() || !empId.trim()} onClick={lookup}>
+              찾기
+            </button>
+          )
+        ) : sent ? (
+          <button className="btn primary" onClick={onClose}>
+            닫기
+          </button>
+        ) : (
+          <button className="btn primary" disabled={busy || !name.trim() || !contact.trim()} onClick={inquire}>
+            문의 남기기
+          </button>
+        )
+      }
+    >
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'lookup'} className={tab === 'lookup' ? 'active' : ''} onClick={() => setTab('lookup')}>
+          성명·사번으로 찾기
+        </button>
+        <button role="tab" aria-selected={tab === 'inquiry'} className={tab === 'inquiry' ? 'active' : ''} onClick={() => setTab('inquiry')}>
+          관리자에게 문의
+        </button>
+      </div>
+      <ErrorBox error={err} />
+      {tab === 'lookup' ? (
+        masked ? (
+          <div className="stack" style={{ gap: 10 }}>
+            <p style={{ margin: 0 }}>등록된 로그인 이메일입니다. 일부는 보안을 위해 가렸습니다.</p>
+            <div className="temp-pw" style={{ fontSize: 18, userSelect: 'text' }}>
+              {masked}
+            </div>
+            <p className="muted small" style={{ margin: 0 }}>
+              기억나지 않으면 '관리자에게 문의' 탭에서 문의를 남겨 주세요.
+            </p>
+          </div>
+        ) : (
+          <div className="stack" style={{ gap: 10 }}>
+            <Field label="성명" required>
+              <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            </Field>
+            <Field label="사번" required hint="협력사·프리랜서는 P-0001 형식">
+              <input value={empId} onChange={(e) => setEmpId(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && lookup()} />
+            </Field>
+          </div>
+        )
+      ) : sent ? (
+        <div className="alert good" style={{ marginBottom: 0 }}>
+          문의를 접수했습니다. 시스템관리자가 확인 후 남겨 주신 연락처로 안내드립니다.
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: 10 }}>
+          <Field label="성명" required>
+            <input value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="사번" hint="알면 입력 (확인이 빨라집니다)">
+            <input value={empId} onChange={(e) => setEmpId(e.target.value)} />
+          </Field>
+          <Field label="연락받을 연락처" required hint="전화번호 또는 메신저 ID">
+            <input value={contact} onChange={(e) => setContact(e.target.value)} />
+          </Field>
+          <Field label="문의 내용">
+            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={2} />
+          </Field>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function ResetRequestDialog({ initialEmail, onClose }: { initialEmail: string; onClose: () => void }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [name, setName] = useState('');
+  const [message, setMessage] = useState('');
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const send = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.post('/auth/password-reset-request', { email, name, message: message || null });
+      setSent(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="비밀번호 재설정 요청"
+      onClose={onClose}
+      footer={
+        sent ? (
+          <button className="btn primary" onClick={onClose}>
+            닫기
+          </button>
+        ) : (
+          <button className="btn primary" disabled={busy || !email.trim() || !name.trim()} onClick={send}>
+            요청하기
+          </button>
+        )
+      }
+    >
+      <ErrorBox error={err} />
+      {sent ? (
+        <div className="alert good" style={{ marginBottom: 0 }}>
+          요청을 접수했습니다. 시스템관리자가 본인 확인 후 임시 비밀번호를 전달해 드립니다. 임시 비밀번호로 로그인하면 새 비밀번호를 설정하게 됩니다.
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: 10 }}>
+          <p className="muted" style={{ margin: 0 }}>
+            메일로 재설정 링크를 보내지 않고, 시스템관리자가 확인 후 임시 비밀번호를 발급합니다.
+          </p>
+          <Field label="로그인 이메일" required>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={!initialEmail} />
+          </Field>
+          <Field label="성명" required>
+            <input value={name} onChange={(e) => setName(e.target.value)} autoFocus={!!initialEmail} />
+          </Field>
+          <Field label="요청 메모" hint="연락받을 방법 등 (선택)">
+            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={2} />
+          </Field>
+        </div>
+      )}
+    </Modal>
   );
 }

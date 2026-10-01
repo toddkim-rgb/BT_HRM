@@ -28,6 +28,7 @@ model Employee {
   utilTarget    Boolean  @default(true) // 가동률·투입 현황 집계 대상 (관리·영업·경영진은 false)
   role          String   @default("EMP") // EMP(R-01)/PM(R-02)/EXEC(R-03)/ADMIN(R-04)/SALES(R-05)
   passwordHash  String
+  mustChangePw  Boolean  @default(false) // 초기·임시 비밀번호 → 첫 로그인 시 변경 강제
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -354,4 +355,21 @@ model Holiday {
 model Setting {
   key   String @id
   value String
+}
+
+// 로그인 화면의 비밀번호 재설정 요청·ID 문의 → 관리자가 처리 (메일 발송 없음)
+model AccountRequest {
+  reqId        Int       @id @default(autoincrement())
+  reqType      String // PW_RESET / ID_INQUIRY
+  name         String
+  email        String?
+  empId        String?
+  contact      String?
+  message      String?
+  matchedEmpId String? // 입력값과 일치하는 인력 (관리자 확인용)
+  statusCd     String    @default("OPEN") // OPEN / DONE / REJECTED
+  handledBy    String?
+  handledAt    DateTime?
+  handleNote   String?
+  createdAt    DateTime  @default(now())
 }
