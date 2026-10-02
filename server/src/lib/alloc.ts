@@ -51,6 +51,18 @@ export async function currentAllocations(): Promise<Map<string, CurrentAlloc[]>>
   return m;
 }
 
+/** 아직 시작 전인 예정 배정: 인력별 투입률 합계와 가장 빠른 시작일 */
+export async function plannedAllocations(): Promise<Map<string, { alloc: number; startDt: string }>> {
+  const t = today();
+  const rows = await prisma.assignment.findMany({ where: { canceled: false, startDt: { gt: t } }, select: { empId: true, allocRate: true, startDt: true } });
+  const m = new Map<string, { alloc: number; startDt: string }>();
+  for (const r of rows) {
+    const cur = m.get(r.empId);
+    m.set(r.empId, { alloc: (cur?.alloc ?? 0) + r.allocRate, startDt: cur && cur.startDt < r.startDt ? cur.startDt : r.startDt });
+  }
+  return m;
+}
+
 /** 배정의 기간 내 계획 MD = 영업일 × 투입률 */
 export function plannedMd(
   a: { startDt: string; endDt: string; allocRate: number },

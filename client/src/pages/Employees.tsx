@@ -28,6 +28,8 @@ export interface Employee {
   allocTotal?: number;
   overAlloc?: number;
   projectCount?: number;
+  plannedAlloc?: number;
+  plannedStartDt?: string | null;
   currentAssignments?: { prjCd: string; prjNm: string; roleCd: string; allocRate: number; endDt: string }[];
 }
 
@@ -147,6 +149,10 @@ export default function Employees() {
                       {e.allocTotal ? (
                         <span title={(e.currentAssignments ?? []).map((a) => `${a.prjNm} ${a.allocRate}%`).join('\n')}>
                           {e.allocTotal}%{(e.projectCount ?? 0) > 1 && <div className="small muted">{e.projectCount}개 프로젝트</div>}
+                        </span>
+                      ) : e.plannedAlloc ? (
+                        <span title={`${e.plannedStartDt}부터 투입 예정`}>
+                          <Badge tone="neutral">예정 {e.plannedAlloc}%</Badge>
                         </span>
                       ) : e.utilTarget ? (
                         <Badge tone="warn">대기</Badge>

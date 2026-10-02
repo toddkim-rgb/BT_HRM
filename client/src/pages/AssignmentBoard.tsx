@@ -32,6 +32,8 @@ interface Emp {
   utilTarget: boolean;
   allocTotal: number;
   overAlloc: number;
+  plannedAlloc: number; // 아직 시작 전인 예정 배정의 투입률 합계
+  plannedStartDt: string | null;
 }
 interface Prj {
   prjCd: string;
@@ -159,9 +161,9 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const kw = q.trim().toLowerCase();
   const pool = emps
     .filter((e) => e.utilTarget)
-    .filter((e) => !benchOnly || e.allocTotal === 0)
+    .filter((e) => !benchOnly || (e.allocTotal === 0 && e.plannedAlloc === 0))
     .filter((e) => !kw || e.name.toLowerCase().includes(kw) || e.deptCd.toLowerCase().includes(kw))
-    .sort((a, b) => a.allocTotal - b.allocTotal || a.name.localeCompare(b.name));
+    .sort((a, b) => a.allocTotal - b.allocTotal || a.plannedAlloc - b.plannedAlloc || a.name.localeCompare(b.name));
 
   return (
     <div className="board">
@@ -169,7 +171,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
         <div className="board-pool-head">
           <strong>인력 {pool.length}명</strong>
           <label className="check small">
-            <input type="checkbox" checked={benchOnly} onChange={(e) => setBenchOnly(e.target.checked)} /> 대기만
+            <input type="checkbox" checked={benchOnly} onChange={(e) => setBenchOnly(e.target.checked)} /> 미배정만
           </label>
         </div>
         <input type="search" placeholder="이름·소속 검색" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -182,12 +184,27 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                   {e.deptCd} · {e.gradeCd} · {e.skillLevel}
                 </small>
               </span>
-              {e.allocTotal === 0 ? <Badge tone="warn">대기</Badge> : e.overAlloc > 0 ? <Badge tone="bad">{e.allocTotal}%</Badge> : <Badge tone={e.allocTotal >= 100 ? 'good' : 'info'}>{e.allocTotal}%</Badge>}
+              <span className="board-emp-badges">
+                {e.allocTotal > 0 ? (
+                  <Badge tone={e.overAlloc > 0 ? 'bad' : e.allocTotal >= 100 ? 'good' : 'info'}>{e.allocTotal}%</Badge>
+                ) : e.plannedAlloc === 0 ? (
+                  <Badge tone="warn">대기</Badge>
+                ) : null}
+                {e.plannedAlloc > 0 && (
+                  <span title={`${e.plannedStartDt}부터 투입 예정`}>
+                    <Badge tone="neutral">예정 {e.plannedAlloc}%</Badge>
+                  </span>
+                )}
+              </span>
             </div>
           ))}
           {!pool.length && <Empty>해당하는 인력이 없습니다.</Empty>}
         </div>
-        <p className="board-hint">프로젝트에서 빼려면 인력 칩을 이 목록으로 끌어다 놓으세요.</p>
+        <p className="board-hint">
+          % = 오늘 투입률 · 예정 = 아직 시작 전인 배정 · 대기 = 배정 없음
+          <br />
+          프로젝트에서 빼려면 인력 칩을 이 목록으로 끌어다 놓으세요.
+        </p>
       </aside>
 
       <div className="board-projects">

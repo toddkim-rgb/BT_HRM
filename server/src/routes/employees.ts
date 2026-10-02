@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { me, requireRole } from '../auth.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
-import { assignmentStatus, currentAllocations } from '../lib/alloc.js';
+import { assignmentStatus, currentAllocations, plannedAllocations } from '../lib/alloc.js';
 import { notRetired } from '../lib/empFilter.js';
 import { initialPasswordHash } from '../lib/password.js';
 import { today } from '../lib/dates.js';
@@ -73,6 +73,7 @@ employeesRouter.get('/', requireRole('PM', 'EXEC', 'ADMIN', 'SALES'), async (req
     orderBy: [{ deptCd: 'asc' }, { name: 'asc' }],
   });
   const alloc = await currentAllocations();
+  const planned = await plannedAllocations();
   res.json(
     rows.map(({ passwordHash: _, ...e }) => {
       const cur = alloc.get(e.empId) ?? [];
@@ -83,6 +84,9 @@ employeesRouter.get('/', requireRole('PM', 'EXEC', 'ADMIN', 'SALES'), async (req
         allocTotal: total,
         overAlloc: Math.max(0, total - 100),
         projectCount: new Set(cur.map((a) => a.prjCd)).size,
+        // 오늘은 투입 전이지만 예정된 배정 (대기와 구분)
+        plannedAlloc: planned.get(e.empId)?.alloc ?? 0,
+        plannedStartDt: planned.get(e.empId)?.startDt ?? null,
         currentAssignments: cur,
       };
     }),
