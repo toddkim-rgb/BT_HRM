@@ -16,6 +16,7 @@ import ProjectWeekly from './pages/ProjectWeekly';
 import Projects from './pages/Projects';
 import Settings from './pages/Settings';
 import Staffing from './pages/Staffing';
+import StaffingDetail from './pages/StaffingDetail';
 import Submissions from './pages/Submissions';
 import Utilization from './pages/Utilization';
 import WeeklyWork from './pages/WeeklyWork';
@@ -38,6 +39,7 @@ function Routed() {
         <Route path="onepage/:week" element={<OnePage />} />
         <Route path="assignments" element={<Assignments />} />
         <Route path="staffing" element={<Staffing />} />
+        <Route path="staffing/:prjCd" element={<StaffingDetail />} />
         <Route path="utilization" element={<Utilization />} />
         <Route path="project-mm" element={<ProjectMm />} />
         <Route path="project-mm/:prjCd" element={<ProjectMm />} />

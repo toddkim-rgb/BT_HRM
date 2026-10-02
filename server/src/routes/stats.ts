@@ -272,7 +272,7 @@ statsRouter.get('/staffing', async (req, res) => {
     where: { canceled: false, startDt: { lte: last.end }, endDt: { gte: start }, ...(scope ? { prjCd: { in: scope } } : {}) },
     include: {
       employee: { select: { name: true, deptCd: true, gradeCd: true, skillLevel: true, employType: true, deletedAt: true } },
-      project: { select: { prjNm: true, prjType: true, statusCd: true, startDt: true, endDt: true, contractMm: true, pm: { select: { name: true } } } },
+      project: { select: { prjNm: true, prjType: true, statusCd: true, customerNm: true, startDt: true, endDt: true, contractMm: true, pm: { select: { name: true } } } },
     },
     orderBy: [{ allocRate: 'desc' }, { startDt: 'asc' }],
   });
@@ -281,6 +281,8 @@ statsRouter.get('/staffing', async (req, res) => {
     where: { workDt: { gte: start, lte: end }, weeklyWork: { statusCd: 'SUBMITTED' }, ...(scope ? { prjCd: { in: scope } } : {}) },
     _sum: { md: true },
   });
+  // 프로젝트별 누적 소요 MD (제출분 전체)
+  const cum = await prisma.timesheet.groupBy({ by: ['prjCd'], where: { weeklyWork: { statusCd: 'SUBMITTED' }, ...(scope ? { prjCd: { in: scope } } : {}) }, _sum: { md: true } });
   const actualOf = (empId: string, prjCd: string) => ts.find((x) => x.empId === empId && x.prjCd === prjCd)?._sum.md ?? 0;
   const inMonth = asg.filter((a) => a.startDt <= end && a.endDt >= start);
 
@@ -312,11 +314,14 @@ statsRouter.get('/staffing', async (req, res) => {
         prjNm: p.prjNm,
         prjType: p.prjType,
         statusCd: p.statusCd,
+        customerNm: p.customerNm,
         pmName: p.pm?.name ?? null,
         startDt: p.startDt,
         endDt: p.endDt,
         contractMm: p.contractMm,
         headcount: empIds.length,
+        allocTotal: members.reduce((s2, m) => s2 + m.allocRate, 0), // 투입률 합계 (100% = 1명 전일)
+        cumMd: cum.find((c) => c.prjCd === prjCd)?._sum.md ?? 0,
         planMd: round1(planMd),
         actualMd,
         planMm: round2(planMd / mdmm),

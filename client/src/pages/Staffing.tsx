@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader } from '../components/ui';
+import { Link, useNavigate } from 'react-router-dom';
+import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, ProgressBar } from '../components/ui';
 import { qs } from '../lib/api';
 import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num } from '../lib/format';
 import { addMonths, today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
 
-interface Member {
+export interface Member {
   asgId: number;
   empId: string;
   name: string;
@@ -22,16 +22,19 @@ interface Member {
   planMd: number;
   actualMd: number;
 }
-interface Prj {
+export interface Prj {
   prjCd: string;
   prjNm: string;
   prjType: string;
   statusCd: string;
+  customerNm: string | null;
   pmName: string | null;
   startDt: string | null;
   endDt: string | null;
   contractMm: number | null;
   headcount: number;
+  allocTotal: number;
+  cumMd: number;
   planMd: number;
   actualMd: number;
   planMm: number;
@@ -51,7 +54,7 @@ interface Person {
   assignments: { asgId: number; prjCd: string; prjNm: string; roleCd: string; allocRate: number; startDt: string; endDt: string; planMd: number; actualMd: number }[];
   timeline: { ym: string; total: number; items: { prjCd: string; pct: number }[] }[];
 }
-interface Resp {
+export interface StaffingResp {
   ym: string;
   months: string[];
   projects: Prj[];
@@ -65,7 +68,7 @@ export default function Staffing() {
   const [ym, setYm] = useState(today().slice(0, 7));
   const [tab, setTab] = useState<Tab>('project');
   const [q, setQ] = useState('');
-  const { data, error, loading } = useFetch<Resp>(`/stats/staffing${qs({ ym })}`);
+  const { data, error, loading } = useFetch<StaffingResp>(`/stats/staffing${qs({ ym })}`);
 
   const kw = q.trim().toLowerCase();
   const projects = (data?.projects ?? []).filter((p) => !kw || p.prjCd.toLowerCase().includes(kw) || p.prjNm.toLowerCase().includes(kw) || p.members.some((m) => m.name.includes(q.trim())));
@@ -75,8 +78,8 @@ export default function Staffing() {
   return (
     <div>
       <PageHeader
-        title="투입 현황"
-        desc="어느 프로젝트에 누가, 얼마나 투입되어 있는지 봅니다. 계획 MD는 배정 투입률 기준, 실적 MD는 제출된 주간 업무보고 기준입니다."
+        title="프로젝트별 투입현황"
+        desc="어느 프로젝트에 누가, 얼마나 투입되어 있는지 봅니다. 카드를 누르면 상세로 이동합니다. 소요 MD는 제출된 주간 업무보고 기준, 계획 MD는 배정 투입률 기준입니다."
         actions={
           <>
             <div className="week-nav">
@@ -123,7 +126,7 @@ export default function Staffing() {
             <div className="filters">
               <input type="search" placeholder="프로젝트·인력·소속 검색" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
-            {tab === 'project' && <ByProject list={projects} />}
+            {tab === 'project' && <ByProject list={projects} ym={ym} />}
             {tab === 'person' && <ByPerson list={people} />}
             {tab === 'timeline' && <Timeline list={people} months={data.months} />}
           </Card>
@@ -133,71 +136,76 @@ export default function Staffing() {
   );
 }
 
-function ByProject({ list }: { list: Prj[] }) {
+/** 프로젝트 카드: 프로젝트명 · 투입인력 · 투입률 · 시작일/종료일 · 소요 MD */
+function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
+  const nav = useNavigate();
   if (!list.length) return <Empty>해당 월에 투입 인력이 있는 프로젝트가 없습니다.</Empty>;
+  const month = Number(ym.slice(5));
   return (
-    <div className="stack" style={{ gap: 12 }}>
-      {list.map((p) => (
-        <div className="item-card" key={p.prjCd} style={{ marginBottom: 0 }}>
-          <div className="item-head">
-            <div className="row">
-              <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge>
-              <strong>{p.prjCd}</strong>
-              <span>{p.prjNm}</span>
+    <div className="prj-cards">
+      {list.map((p) => {
+        const rate = p.planMd ? Math.round((p.actualMd / p.planMd) * 100) : null;
+        return (
+          <button type="button" className="prj-card" key={p.prjCd} onClick={() => nav(`/staffing/${p.prjCd}?ym=${ym}`)} aria-label={`${p.prjNm} 상세 보기`}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <span className="row" style={{ gap: 6 }}>
+                <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge>
+                <span className="muted small">{p.prjCd}</span>
+              </span>
               <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
             </div>
-            <div className="row small">
-              <span className="muted">PM {p.pmName ?? '-'}</span>
-              <strong>{p.headcount}명</strong>
-              <span>
-                실적 <strong>{num(p.actualMd)}</strong> / 계획 {num(p.planMd)} MD
-              </span>
-              <Link className="btn sm" to={`/project-mm/${p.prjCd}`}>
-                MM
-              </Link>
+            <div className="prj-card-title">{p.prjNm}</div>
+            <div className="small muted">
+              {p.customerNm ? `${p.customerNm} · ` : ''}PM {p.pmName ?? '-'}
             </div>
-          </div>
-          <div className="table-wrap" style={{ margin: 0, padding: 0 }}>
-            <table className="tbl responsive">
-              <thead>
-                <tr>
-                  <th>인력</th>
-                  <th>역할</th>
-                  <th className="num">투입률</th>
-                  <th>투입 기간</th>
-                  <th className="num">계획 MD</th>
-                  <th className="num">실적 MD</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.members.map((m) => (
-                  <tr key={m.asgId}>
-                    <td data-label="인력">
-                      <strong>{m.name}</strong>{' '}
-                      <span className="small muted">
-                        {m.skillLevel} · {label(EMPLOY_TYPE, m.employType)}
-                      </span>
-                    </td>
-                    <td data-label="역할">{label(ASG_ROLE, m.roleCd)}</td>
-                    <td data-label="투입률" className="num">
-                      {m.allocRate}%
-                    </td>
-                    <td data-label="투입 기간" className="nowrap small">
-                      {m.startDt} ~ {m.endDt} {!m.active && <Badge tone="neutral">{m.startDt > today() ? '예정' : '종료'}</Badge>}
-                    </td>
-                    <td data-label="계획 MD" className="num">
-                      {num(m.planMd)}
-                    </td>
-                    <td data-label="실적 MD" className="num">
-                      {num(m.actualMd)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
+
+            <dl className="prj-card-facts">
+              <div>
+                <dt>시작일</dt>
+                <dd>{p.startDt ?? '-'}</dd>
+              </div>
+              <div>
+                <dt>종료일</dt>
+                <dd>{p.endDt ?? '-'}</dd>
+              </div>
+              <div>
+                <dt>투입인력</dt>
+                <dd>
+                  <strong>{p.headcount}명</strong>
+                </dd>
+              </div>
+              <div>
+                <dt>투입률 합계</dt>
+                <dd>
+                  <strong>{p.allocTotal}%</strong>
+                </dd>
+              </div>
+            </dl>
+
+            <div className="prj-card-members">
+              {p.members.slice(0, 6).map((m) => (
+                <span className="chip" key={m.asgId}>
+                  {m.name} <small>{m.allocRate}%</small>
+                </span>
+              ))}
+              {p.members.length > 6 && <span className="chip">+{p.members.length - 6}</span>}
+            </div>
+
+            <div className="prj-card-md">
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <span className="small muted">{month}월 소요 MD</span>
+                <span className="small">
+                  <strong>{num(p.actualMd)}</strong> / 계획 {num(p.planMd)}
+                </span>
+              </div>
+              <ProgressBar value={rate} tone={rate != null && rate > 100 ? 'bad' : 'good'} />
+              <div className="small muted" style={{ marginTop: 4 }}>
+                누적 소요 {num(p.cumMd)} MD
+              </div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }

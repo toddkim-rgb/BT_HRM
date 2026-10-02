@@ -371,3 +371,15 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .attn-box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
 @media (max-width: 959px) { .attn-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .attn-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* 프로젝트 카드 (프로젝트별 투입현황) */
+.prj-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.prj-card { text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow); transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; min-width: 0; }
+.prj-card:hover, .prj-card:focus-visible { border-color: var(--primary-2); box-shadow: 0 4px 14px rgba(31, 58, 95, 0.14); transform: translateY(-1px); outline: none; }
+.prj-card-title { font-size: 16px; font-weight: 700; line-height: 1.35; }
+.prj-card-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 4px 0; padding: 10px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.prj-card-facts dt { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.prj-card-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.prj-card-members { display: flex; flex-wrap: wrap; gap: 4px; min-height: 26px; }
+.prj-card-members .chip { cursor: inherit; }
+.prj-card-md { margin-top: auto; display: flex; flex-direction: column; gap: 4px; }
