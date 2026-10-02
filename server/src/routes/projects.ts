@@ -23,7 +23,6 @@ const projectSchema = z.object({
   contractMm: z.number().nonnegative().nullish(),
   contractAmt: z.number().int().nonnegative().nullish(),
   revenueMethod: z.enum(['MONTHLY', 'MM']).nullish(),
-  winProb: z.number().int().min(0).max(100).nullish(),
   plOpenYn: z.boolean().default(false),
   pmEmpId: optStr,
   residentType: z.enum(['ONSITE', 'OFFSITE', 'MIXED']).nullish(),
@@ -91,8 +90,15 @@ projectsRouter.put('/:prjCd', requireRole('ADMIN', 'SALES'), async (req, res) =>
   const cur = await prisma.project.findUnique({ where: { prjCd: String(req.params.prjCd) } });
   if (!cur || cur.prjType === 'NP') throw notFound('프로젝트');
   const body = parse(projectSchema, req.body);
-  if (u.role === 'SALES' && cur.statusCd !== 'PROPOSAL') throw forbidden();
-  if (body.prjType !== cur.prjType) throw new HttpError(400, '사업구분은 변경할 수 없습니다 (코드 체계 유지).');
-  await prisma.project.update({ where: { prjCd: cur.prjCd }, data: body });
-  res.json({ ok: true });
+  if (u.role === 'SALES' && (cur.statusCd !== 'PROPOSAL' || body.statusCd !== 'PROPOSAL')) throw forbidden();
+  if (body.startDt && body.endDt && body.startDt > body.endDt) throw new HttpError(400, '종료일이 시작일보다 빠릅니다.');
+  // 사업구분을 바꾸면 코드({사업구분}-{연도}-{일련번호})를 새 구분으로 다시 부여한다.
+  // 배정·주간보고·마일스톤 등 연결 데이터는 FK(ON UPDATE CASCADE)로 새 코드를 따라간다.
+  let prjCd = cur.prjCd;
+  if (body.prjType !== cur.prjType) {
+    const year = cur.prjCd.split('-')[1] ?? (body.startDt ?? today()).slice(0, 4);
+    prjCd = await nextPrjCd(body.prjType, year);
+  }
+  await prisma.project.update({ where: { prjCd: cur.prjCd }, data: { ...body, prjCd } });
+  res.json({ ok: true, prjCd, codeChanged: prjCd !== cur.prjCd, oldPrjCd: cur.prjCd });
 });

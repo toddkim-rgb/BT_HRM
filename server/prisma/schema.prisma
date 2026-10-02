@@ -100,7 +100,6 @@ model Project {
   contractMm      Float?
   contractAmt     Int?
   revenueMethod   String? // MONTHLY/MM
-  winProb         Int? // 참고 표시용 (수급 가중 미적용)
   plOpenYn        Boolean  @default(false)
   pmEmpId         String?
   residentType    String? // ONSITE/OFFSITE/MIXED

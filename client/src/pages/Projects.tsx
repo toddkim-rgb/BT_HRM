@@ -19,7 +19,6 @@ export interface Project {
   contractMm: number | null;
   contractAmt: number | null;
   revenueMethod: string | null;
-  winProb: number | null;
   plOpenYn: boolean;
   pmEmpId: string | null;
   pmName: string | null;
@@ -109,7 +108,6 @@ export default function Projects() {
                     <td data-label="상태">
                       <Badge code={p.statusCd}>
                         {label(PRJ_STATUS, p.statusCd)}
-                        {p.statusCd === 'PROPOSAL' && p.winProb != null && ` ${p.winProb}%`}
                       </Badge>
                     </td>
                     <td data-label="" onClick={(e) => e.stopPropagation()}>
@@ -150,6 +148,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
   const { data: emps } = useFetch<{ empId: string; name: string; role: string; deptCd: string }[]>('/employees');
   const set = (p: Partial<Project>) => setF((s) => ({ ...s, ...p }));
   const numOrNull = (v: string) => (v === '' ? null : Number(v));
+  const typeChanged = !isNew && f.prjType !== initial.prjType;
 
   const save = async () => {
     setErr(null);
@@ -159,8 +158,8 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
         const r = await api.post<{ prjCd: string }>('/projects', body);
         toast(`등록했습니다. (${r.prjCd})`);
       } else {
-        await api.put(`/projects/${initial.prjCd}`, body);
-        toast('저장했습니다.');
+        const r = await api.put<{ prjCd: string; codeChanged: boolean }>(`/projects/${initial.prjCd}`, body);
+        toast(r.codeChanged ? `저장했습니다. 사업구분 변경으로 코드가 ${initial.prjCd} → ${r.prjCd}(으)로 바뀌었습니다.` : '저장했습니다.', r.codeChanged ? 'info' : 'good');
       }
       onSaved();
     } catch (e) {
@@ -186,8 +185,8 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
     >
       <ErrorBox error={err} />
       <div className="form-grid">
-        <Field label="사업구분" required hint={isNew ? undefined : '코드 체계 유지를 위해 변경 불가'}>
-          <Select value={f.prjType} onChange={(prjType) => set({ prjType })} options={TYPE_OPTS} disabled={!isNew} />
+        <Field label="사업구분" required hint={typeChanged ? `변경하면 코드가 새로 부여됩니다 (현재 ${initial.prjCd})` : undefined}>
+          <Select value={f.prjType} onChange={(prjType) => set({ prjType })} options={TYPE_OPTS} />
         </Field>
         <Field label="상태" required>
           <Select value={f.statusCd} onChange={(statusCd) => set({ statusCd })} options={isSales ? { PROPOSAL: '제안' } : PRJ_STATUS} />
@@ -229,9 +228,6 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
         </Field>
         <Field label="상주 여부">
           <Select value={f.residentType} onChange={(residentType) => set({ residentType: residentType || null })} options={RESIDENT} placeholder="-" />
-        </Field>
-        <Field label="수주확률 (%)" hint="제안 프로젝트 참고용">
-          <input type="number" min={0} max={100} value={f.winProb ?? ''} onChange={(e) => set({ winProb: numOrNull(e.target.value) })} />
         </Field>
         {!isSales && (
           <Field label="PM 손익 공개">
