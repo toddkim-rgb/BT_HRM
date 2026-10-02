@@ -300,3 +300,57 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tabs button.active { color: var(--primary); border-bottom-color: var(--primary); }
 .temp-pw { font-family: ui-monospace, Consolas, monospace; font-size: 22px; font-weight: 700; letter-spacing: 0.06em; background: var(--surface-2); border: 1px dashed var(--border); border-radius: 8px; padding: 10px 14px; text-align: center; user-select: all; }
 .nav-badge { margin-left: auto; background: #e53e3e; color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; font-weight: 700; }
+
+/* 마일스톤 트랙 */
+.ms-track { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.ms-item { flex: 1 0 130px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; background: var(--surface-2); }
+.ms-item.done { background: var(--good-soft); border-color: #bfe5d0; }
+.ms-item.delay { background: var(--bad-soft); border-color: #f3c2c2; }
+.ms-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #b8c2d0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: #fff; }
+.ms-item.done .ms-dot { border-color: var(--good); color: var(--good); }
+.ms-item.delay .ms-dot { border-color: var(--bad); color: var(--bad); }
+.ms-name { font-weight: 700; }
+
+/* 전사 One-Page (A4 가로 1장) */
+.print-only { display: none; }
+.onepage { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; font-size: 12.5px; }
+.op-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; border-bottom: 2px solid var(--primary); padding-bottom: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.op-head h2 { font-size: 18px; display: inline; margin-right: 10px; color: var(--primary); }
+.op-status { color: var(--muted); font-size: 12px; }
+.op-kpis { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.op-kpi { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.op-kpi-label { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.op-kpi-value { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.op-kpi-sub { font-size: 11px; color: var(--muted); min-height: 14px; }
+.op-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; }
+.op-box { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.op-box h3 { font-size: 13px; margin: 0 0 6px; color: var(--primary); }
+.op-box table { width: 100%; border-collapse: collapse; }
+.op-box th { text-align: left; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border); padding: 3px 6px; white-space: nowrap; }
+.op-box td { padding: 4px 6px; border-bottom: 1px solid #eef1f5; vertical-align: top; }
+.op-box th.num, .op-box td.num { text-align: right; }
+.op-sub { font-size: 11px; color: var(--muted); }
+.op-link { color: inherit; }
+.op-list { margin: 0; padding-left: 16px; }
+.op-list li { margin-bottom: 3px; }
+.op-note { white-space: pre-wrap; margin-top: 6px; }
+.onepage textarea { margin-top: 6px; font-size: 12.5px; }
+@media (max-width: 959px) {
+  .op-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .op-grid { grid-template-columns: minmax(0, 1fr); }
+  .op-box { overflow-x: auto; }
+}
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+  html, body { background: #fff !important; }
+  .sidebar, .topbar, .scrim, .no-print, .toasts { display: none !important; }
+  .content { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+  .print-only { display: block; }
+  .onepage { border: 0; box-shadow: none; padding: 0; font-size: 10.5px; }
+  .op-kpis { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .op-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+  .op-kpi-value { font-size: 15px; }
+  .op-box { break-inside: avoid; }
+  .badge { border: 1px solid #ccc; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

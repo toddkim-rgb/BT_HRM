@@ -1,5 +1,5 @@
 // empId는 내부 관리 번호(화면 비표시). 데모 데이터는 고정값 사용
-// 초기 데이터: 공통코드·관리자·공휴일·마일스톤 템플릿 + 데모 데이터
+// 초기 데이터: 공통코드·관리자·공휴일 + 데모 데이터
 // 실행: npm run db:seed  (데모 제외: SEED_DEMO=N npm run db:seed)
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -42,23 +42,6 @@ async function base() {
     create: { empId: 'admin', name: '시스템관리자', deptCd: '경영지원팀', gradeCd: '과장', skillLevel: '중급', email: 'admin@example.com', employType: 'REG', role: 'ADMIN', utilTarget: false, passwordHash: await bcrypt.hash('admin1234', 10) },
     update: {},
   });
-  if (!(await prisma.msTemplate.count())) {
-    await prisma.msTemplate.create({
-      data: {
-        tplNm: 'SI 표준',
-        prjType: 'SI',
-        items: {
-          create: [
-            { seq: 1, msNm: '요구분석 완료', durationRatio: 15, deliverable: '요구사항정의서' },
-            { seq: 2, msNm: '설계 완료', durationRatio: 20, deliverable: '화면·DB·인터페이스 설계서' },
-            { seq: 3, msNm: '개발 완료', durationRatio: 40, deliverable: '소스, 단위테스트 결과' },
-            { seq: 4, msNm: '통합테스트 완료', durationRatio: 15, deliverable: '통합테스트 결과서' },
-            { seq: 5, msNm: '이행·검수 완료', durationRatio: 10, deliverable: '이행계획서, 검수확인서' },
-          ],
-        },
-      },
-    });
-  }
 }
 
 async function demo() {
@@ -111,7 +94,17 @@ async function demo() {
   ];
   await prisma.assignment.createMany({ data: asg.map((a) => ({ ...a, residentType: 'ONSITE', createdBy: 'admin' })) });
 
-  // 9월(W36~W39) 승인된 주간 업무보고 — 가동률 데모용
+  await prisma.milestone.createMany({
+    data: [
+      { prjCd: 'SI-2026-001', seq: 1, msNm: '요구분석 완료', planDt: '2026-06-30', doneDt: '2026-06-30' },
+      { prjCd: 'SI-2026-001', seq: 2, msNm: '설계 완료', planDt: '2026-08-14', doneDt: '2026-08-21' },
+      { prjCd: 'SI-2026-001', seq: 3, msNm: '개발 완료', planDt: '2026-11-13' },
+      { prjCd: 'SI-2026-001', seq: 4, msNm: '통합테스트 완료', planDt: '2026-12-11' },
+      { prjCd: 'SI-2026-001', seq: 5, msNm: '이행·검수 완료', planDt: '2026-12-31' },
+    ],
+  });
+
+  // 9월(W36~W39) 제출된 주간 업무보고 — 가동률 데모용
   const holidays = new Set(HOLIDAYS_2026.map(([d]) => d));
   const weeks = ['2026-W36', '2026-W37', '2026-W38', '2026-W39'];
   const plan: Record<string, (d: string) => [string, number][]> = {

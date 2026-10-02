@@ -322,13 +322,11 @@ weeklyWorksRouter.post('/:empId/:week/submit', async (req, res) => {
   const body = parse(reportSchema.extend({ confirmWarnings: z.boolean().default(false) }), req.body);
   try {
     // 저장·검증을 한 트랜잭션으로: 검증에 걸리면 기존(제출된) 내용이 그대로 유지됨
-    const wwId = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const id = await writeReport(tx, empId, week, body, 'SUBMITTED');
       const v = await validateForSubmit(tx, id, week);
       if (v.errors.length || (v.warnings.length && !body.confirmWarnings)) throw new ValidationAbort(v);
-      return id;
     });
-    await onSubmitted(wwId);
   } catch (e) {
     if (!(e instanceof ValidationAbort)) throw e;
     const { errors, warnings } = e.result;
@@ -337,14 +335,6 @@ weeklyWorksRouter.post('/:empId/:week/submit', async (req, res) => {
   }
   res.json({ ok: true, statusCd: 'SUBMITTED', view: await buildView(empId, week) });
 });
-
-/** 제출 후처리: 연결 작업 항목이 처음 제출되면 마일스톤 자동 진행중 (10.4.3) */
-async function onSubmitted(wwId: number) {
-  const items = await prisma.workItem.findMany({ where: { wwId, itemType: 'ACTUAL', msId: { not: null } }, select: { msId: true } });
-  const ids = [...new Set(items.map((i) => i.msId!))];
-  if (!ids.length) return;
-  await prisma.milestone.updateMany({ where: { msId: { in: ids }, statusCd: 'PLANNED' }, data: { statusCd: 'IN_PROGRESS', actualStartDt: today() } });
-}
 
 // 제출된 보고서 목록 (PM: 담당 프로젝트가 포함된 보고서)
 weeklyWorksRouter.get('/', async (req, res) => {

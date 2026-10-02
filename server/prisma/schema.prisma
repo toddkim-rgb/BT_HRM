@@ -117,7 +117,6 @@ model Project {
   workItems     WorkItem[]
   issues        WeeklyIssue[]
   milestones    Milestone[]
-  msVersions    MsVersion[]
   weeklyComment WeeklyComment[]
 }
 
@@ -237,63 +236,19 @@ model WeeklyIssue {
   project    Project    @relation(fields: [prjCd], references: [prjCd])
 }
 
+// 주요 마일스톤 (v1.0 단순화): PM이 이름·계획일을 등록하고 완료일을 체크
+// 상태는 날짜로 계산: 완료(doneDt 있음) / 지연(계획일 경과·미완료) / 예정
 model Milestone {
-  msId          Int     @id @default(autoincrement())
-  prjCd         String
-  seq           Int
-  msNm          String
-  deliverable   String?
-  statusCd      String  @default("PLANNED") // PLANNED/IN_PROGRESS/DONE/CANCELED
-  actualStartDt String?
-  doneDt        String?
+  msId   Int     @id @default(autoincrement())
+  prjCd  String
+  seq    Int     @default(0)
+  msNm   String
+  planDt String
+  doneDt String?
+  note   String?
 
-  project   Project      @relation(fields: [prjCd], references: [prjCd])
-  schedules MsSchedule[]
+  project   Project    @relation(fields: [prjCd], references: [prjCd])
   workItems WorkItem[]
-}
-
-model MsVersion {
-  verId        Int      @id @default(autoincrement())
-  prjCd        String
-  versionNo    Int
-  baselineYn   Boolean  @default(false)
-  changeReason String
-  createdBy    String?
-  createdAt    DateTime @default(now())
-
-  project   Project      @relation(fields: [prjCd], references: [prjCd])
-  schedules MsSchedule[]
-
-  @@unique([prjCd, versionNo])
-}
-
-model MsSchedule {
-  schId       Int    @id @default(autoincrement())
-  msId        Int
-  verId       Int
-  planStartDt String
-  planEndDt   String
-
-  milestone Milestone @relation(fields: [msId], references: [msId])
-  version   MsVersion @relation(fields: [verId], references: [verId])
-}
-
-model MsTemplate {
-  tplId   Int              @id @default(autoincrement())
-  tplNm   String
-  prjType String
-  items   MsTemplateItem[]
-}
-
-model MsTemplateItem {
-  tplItemId     Int     @id @default(autoincrement())
-  tplId         Int
-  seq           Int
-  msNm          String
-  durationRatio Int
-  deliverable   String?
-
-  template MsTemplate @relation(fields: [tplId], references: [tplId], onDelete: Cascade)
 }
 
 model ProjectExpense {
@@ -322,27 +277,30 @@ model Alert {
   @@unique([alertCd, targetEmpId, refKey])
 }
 
+// 전사 주간 One-Page: 확정 전에는 조회할 때마다 최신 데이터로 계산, 확정 시 snapshot 고정
 model WeeklyReport {
   reportWeek  String    @id
-  snapshot    String // JSON
+  snapshot    String? // JSON (확정 시점 집계)
   statusCd    String    @default("DRAFT") // DRAFT/CONFIRMED
-  nextPlan    String?
+  execNote    String? // ⑤ 주요 이슈·리스크 종합 (사업부장 편집)
+  nextPlan    String? // ⑥ 차주 계획 / 의사결정 필요 사항
   confirmedBy String?
   confirmedAt DateTime?
   updatedAt   DateTime  @updatedAt
 }
 
-// report_week는 주차 값일 뿐 WeeklyReport FK 아님 (명세 13.2)
+// 프로젝트 주간보고: 자동 취합 + PM 종합 의견. 확정 시 snapshot 고정
+// report_week는 주차 값일 뿐 WeeklyReport FK 아님
 model WeeklyComment {
-  wcId           Int      @id @default(autoincrement())
-  reportWeek     String
-  prjCd          String
-  planProgress   Float?
-  actualProgress Float?
-  pmOpinion      String?
-  confirmedYn    Boolean  @default(false)
-  createdBy      String?
-  updatedAt      DateTime @updatedAt
+  wcId        Int       @id @default(autoincrement())
+  reportWeek  String
+  prjCd       String
+  pmOpinion   String?
+  confirmedYn Boolean   @default(false)
+  confirmedBy String?
+  confirmedAt DateTime?
+  snapshot    String? // JSON
+  updatedAt   DateTime  @updatedAt
 
   project Project @relation(fields: [prjCd], references: [prjCd])
 

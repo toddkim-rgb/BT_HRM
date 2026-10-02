@@ -11,6 +11,7 @@ import { authRouter } from './routes/auth.js';
 import { employeesRouter } from './routes/employees.js';
 import { partnersRouter } from './routes/partners.js';
 import { projectsRouter } from './routes/projects.js';
+import { projectWeeklyRouter, reportsRouter } from './routes/reports.js';
 import { statsRouter } from './routes/stats.js';
 import { weeklyWorksRouter } from './routes/weeklyWorks.js';
 
@@ -24,7 +25,9 @@ api.use(requireAuth, blockUntilPasswordChanged);
 api.use('/employees', employeesRouter);
 api.use('/admin/partners', partnersRouter);
 api.use('/admin/account-requests', accountRequestsRouter);
+api.use('/projects', projectWeeklyRouter); // 프로젝트 주간보고·마일스톤
 api.use('/projects', projectsRouter);
+api.use('/reports', reportsRouter);
 api.use('/assignments', assignmentsRouter);
 api.use('/weekly-works', weeklyWorksRouter);
 api.use('/stats', statsRouter);

@@ -9,8 +9,10 @@ import Employees from './pages/Employees';
 import ForceChangePassword from './pages/ForceChangePassword';
 import Login from './pages/Login';
 import MyInfo from './pages/MyInfo';
+import OnePage from './pages/OnePage';
 import Partners from './pages/Partners';
 import ProjectMm from './pages/ProjectMm';
+import ProjectWeekly from './pages/ProjectWeekly';
 import Projects from './pages/Projects';
 import Settings from './pages/Settings';
 import Submissions from './pages/Submissions';
@@ -29,6 +31,10 @@ function Routed() {
         <Route path="weekly" element={<WeeklyWork />} />
         <Route path="weekly/:empId/:week" element={<WeeklyWork />} />
         <Route path="submissions" element={<Submissions />} />
+        <Route path="project-weekly" element={<ProjectWeekly />} />
+        <Route path="project-weekly/:prjCd/:week" element={<ProjectWeekly />} />
+        <Route path="onepage" element={<OnePage />} />
+        <Route path="onepage/:week" element={<OnePage />} />
         <Route path="assignments" element={<Assignments />} />
         <Route path="utilization" element={<Utilization />} />
         <Route path="project-mm" element={<ProjectMm />} />

@@ -19,8 +19,15 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: '대시보드', icon: '◧' },
       { to: '/weekly', label: '주간 업무보고', icon: '✎' },
-      { to: '/submissions', label: '주간보고 현황', icon: '✔', roles: ['PM', 'EXEC', 'ADMIN'] },
       { to: '/assignments', label: '투입 배정', icon: '⇄', roles: ALL_MANAGERS },
+    ],
+  },
+  {
+    group: '주간보고',
+    items: [
+      { to: '/submissions', label: '제출 현황', icon: '✔', roles: ['PM', 'EXEC', 'ADMIN'] },
+      { to: '/project-weekly', label: '프로젝트 주간보고', icon: '▦', roles: ['PM', 'EXEC', 'ADMIN'] },
+      { to: '/onepage', label: '전사 One-Page', icon: '▭', roles: ALL_MANAGERS },
     ],
   },
   {

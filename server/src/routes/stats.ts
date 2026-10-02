@@ -26,10 +26,13 @@ async function submittedTimesheets(start: string, end: string, extra: Record<str
 /** 인력별 월 가동률 */
 export async function utilizationFor(ym: string, empIds?: string[]) {
   const month = monthRange(ym);
-  const start = month.start;
-  // 진행 중인 달은 오늘까지의 영업일만 가용 MD로 계산
+  return utilizationRange(month.start, month.end, empIds);
+}
+
+/** 인력별 기간 가동률 (월·주 공용). 진행 중인 기간은 오늘까지의 영업일만 가용 MD로 계산 */
+export async function utilizationRange(start: string, rangeEnd: string, empIds?: string[]) {
   const t = today();
-  const end = month.end > t ? t : month.end;
+  const end = rangeEnd > t ? t : rangeEnd;
   const holidays = await holidaySet();
   const ts = start <= end ? await submittedTimesheets(start, end, empIds ? { empId: { in: empIds } } : {}) : [];
   // 대상: 퇴사자 제외. 단, 퇴사자도 해당 월 실적이 있으면 포함
@@ -68,7 +71,7 @@ export async function utilizationFor(ym: string, empIds?: string[]) {
   });
 }
 
-function summarize(rows: Awaited<ReturnType<typeof utilizationFor>>) {
+export function summarize(rows: Awaited<ReturnType<typeof utilizationFor>>) {
   const avail = rows.reduce((s, r) => s + r.availMd, 0);
   const total = rows.reduce((s, r) => s + r.totalMd, 0);
   const paid = rows.reduce((s, r) => s + r.paidMd, 0);
