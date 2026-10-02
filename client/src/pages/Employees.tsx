@@ -145,7 +145,7 @@ export default function Employees() {
                     </td>
                     <td data-label="투입률" className="num">
                       {e.allocTotal ? (
-                        <span title={(e.currentAssignments ?? []).map((a) => `${a.prjCd} ${a.allocRate}%`).join('\n')}>
+                        <span title={(e.currentAssignments ?? []).map((a) => `${a.prjNm} ${a.allocRate}%`).join('\n')}>
                           {e.allocTotal}%{(e.projectCount ?? 0) > 1 && <div className="small muted">{e.projectCount}개 프로젝트</div>}
                         </span>
                       ) : e.utilTarget ? (
@@ -320,7 +320,7 @@ function EmployeeDetail({ empId, onClose, onEdit, onDelete }: { empId: string; o
                     {data.assignments.map((a) => (
                       <tr key={a.asgId}>
                         <td data-label="프로젝트">
-                          <strong>{a.prjCd}</strong> <span className="small muted">{a.project.prjNm}</span>
+                          <strong title={a.prjCd}>{a.project.prjNm}</strong>
                         </td>
                         <td data-label="역할">{label(ASG_ROLE, a.roleCd)}</td>
                         <td data-label="기간" className="nowrap">

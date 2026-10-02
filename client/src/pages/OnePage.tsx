@@ -38,10 +38,10 @@ interface Data {
     bench: string[];
     lowUtil: { name: string; util: number }[];
     lowUtilPct: number;
-    releasing: { name: string; prjCd: string; endDt: string }[];
+    releasing: { name: string; prjCd: string; prjNm?: string; endDt: string }[];
     notSubmitted: string[];
-    delayedMilestones: { prjCd: string; msNm: string; planDt: string }[];
-    burnOver80: { prjCd: string; burnRate: number }[];
+    delayedMilestones: { prjCd: string; prjNm?: string; msNm: string; planDt: string }[];
+    burnOver80: { prjCd: string; prjNm?: string; burnRate: number }[];
   };
   issues: { prjCd: string; prjNm: string; issueType: string; severity: string; content: string; actionPlan: string | null; author: string }[];
 }
@@ -199,9 +199,9 @@ export default function OnePage() {
               {a.overAllocated.length > 0 && <li>과투입 {a.overAllocated.length}명: {a.overAllocated.map((o) => `${o.name}(+${o.total - 100}%)`).join(', ')}</li>}
               {a.bench.length > 0 && <li>대기 {a.bench.length}명: {a.bench.join(', ')}</li>}
               {a.lowUtil.length > 0 && <li>저가동({a.lowUtilPct}% 미만) {a.lowUtil.length}명: {a.lowUtil.map((l) => `${l.name}(${l.util}%)`).join(', ')}</li>}
-              {a.releasing.length > 0 && <li>30일 내 철수 예정 {a.releasing.length}건: {a.releasing.map((x) => `${x.name}(${x.prjCd} ~${md(x.endDt)})`).join(', ')}</li>}
-              {a.delayedMilestones.length > 0 && <li className="bad-text">마일스톤 지연 {a.delayedMilestones.length}건: {a.delayedMilestones.map((m) => `${m.prjCd} ${m.msNm}(${md(m.planDt)})`).join(', ')}</li>}
-              {a.burnOver80.length > 0 && <li>계약 MM 80% 이상 소진: {a.burnOver80.map((b) => `${b.prjCd}(${b.burnRate}%)`).join(', ')}</li>}
+              {a.releasing.length > 0 && <li>30일 내 철수 예정 {a.releasing.length}건: {a.releasing.map((x) => `${x.name}(${x.prjNm ?? x.prjCd} ~${md(x.endDt)})`).join(', ')}</li>}
+              {a.delayedMilestones.length > 0 && <li className="bad-text">마일스톤 지연 {a.delayedMilestones.length}건: {a.delayedMilestones.map((m) => `${m.prjNm ?? m.prjCd} — ${m.msNm}(${md(m.planDt)})`).join(', ')}</li>}
+              {a.burnOver80.length > 0 && <li>계약 MM 80% 이상 소진: {a.burnOver80.map((b) => `${b.prjNm ?? b.prjCd}(${b.burnRate}%)`).join(', ')}</li>}
               {a.notSubmitted.length > 0 && <li>주간보고 미제출 {a.notSubmitted.length}명: {a.notSubmitted.join(', ')}</li>}
               {!(a.overAllocated.length || a.bench.length || a.lowUtil.length || a.releasing.length || a.delayedMilestones.length || a.burnOver80.length || a.notSubmitted.length) && <li className="muted">특이사항 없음</li>}
             </ul>
@@ -226,9 +226,8 @@ export default function OnePage() {
                   <tr key={p.prjCd}>
                     <td>
                       <Link to={`/project-weekly/${p.prjCd}/${week}`} className="op-link">
-                        <strong>{p.prjCd}</strong>
+                        <strong>{p.prjNm}</strong>
                       </Link>
-                      <div className="op-sub">{p.prjNm}</div>
                     </td>
                     <td className="nowrap">{p.pmName ?? '-'}</td>
                     <td>
@@ -276,7 +275,7 @@ export default function OnePage() {
             <ul className="op-list">
               {d.projects.filter((p) => p.pmOpinion).map((p) => (
                 <li key={p.prjCd}>
-                  <strong>{p.prjCd}</strong> {p.pmOpinion}
+                  <strong>{p.prjNm}</strong> — {p.pmOpinion}
                 </li>
               ))}
               {!d.projects.some((p) => p.pmOpinion) && <li className="muted">입력된 PM 의견 없음</li>}
@@ -285,7 +284,7 @@ export default function OnePage() {
             <ul className="op-list">
               {d.issues.map((i, n) => (
                 <li key={n}>
-                  <Badge code={i.severity}>{label(SEVERITY, i.severity)}</Badge> <strong>{i.prjCd}</strong> [{label(ISSUE_TYPE, i.issueType)}] {i.content}
+                  <Badge code={i.severity}>{label(SEVERITY, i.severity)}</Badge> <strong>{i.prjNm}</strong> [{label(ISSUE_TYPE, i.issueType)}] {i.content}
                   {i.actionPlan && <span className="muted"> → {i.actionPlan}</span>}
                 </li>
               ))}

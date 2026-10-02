@@ -116,7 +116,7 @@ export default function ProjectWeekly() {
         desc="인력별 주간 업무보고(제출분)를 자동으로 모읍니다. PM은 종합 의견만 적고 확정하면 됩니다."
         actions={
           <>
-            <Select value={prjCd} onChange={(v) => go(v, week)} options={(projects ?? []).map((p) => [p.prjCd, `${p.prjCd} ${p.prjNm}`] as [string, string])} />
+            <Select value={prjCd} onChange={(v) => go(v, week)} options={(projects ?? []).map((p) => [p.prjCd, p.prjNm] as [string, string])} />
             <div className="week-nav">
               <button className="btn sm" onClick={() => go(prjCd, shiftWeek(week, -1))} aria-label="이전 주">
                 ◀
@@ -138,7 +138,7 @@ export default function ProjectWeekly() {
         <>
           <div className="row" style={{ marginBottom: 12 }}>
             <strong>
-              {data.project.prjCd} {data.project.prjNm}
+              {data.project.prjNm}
             </strong>
             <span className="muted small">
               {data.project.customerNm ?? ''} · PM {data.project.pmName ?? '-'}
@@ -336,6 +336,7 @@ export default function ProjectWeekly() {
       {msOpen && data && (
         <MilestoneManager
           prjCd={prjCd}
+          prjNm={data.project.prjNm}
           onClose={() => {
             setMsOpen(false);
             reload();
@@ -373,7 +374,7 @@ export function MilestoneTrack({ list, progress }: { list: Milestone[]; progress
   );
 }
 
-function MilestoneManager({ prjCd, onClose }: { prjCd: string; onClose: () => void }) {
+function MilestoneManager({ prjCd, prjNm, onClose }: { prjCd: string; prjNm: string; onClose: () => void }) {
   const toast = useToast();
   const { data, reload } = useFetch<{ milestones: Milestone[] }>(`/projects/${prjCd}/milestones`);
   const [edit, setEdit] = useState<Partial<Milestone> | null>(null);
@@ -404,7 +405,7 @@ function MilestoneManager({ prjCd, onClose }: { prjCd: string; onClose: () => vo
   };
 
   return (
-    <Modal title={`마일스톤 관리 · ${prjCd}`} onClose={onClose} wide>
+    <Modal title={`마일스톤 관리 · ${prjNm}`} onClose={onClose} wide>
       <p className="muted" style={{ marginTop: 0 }}>
         주요 마일스톤의 이름과 계획일만 등록하면 됩니다. 완료되면 완료 체크를 하세요. 진척률 = 완료 수 ÷ 전체 수, 계획일이 지났는데 완료되지 않으면 '지연'으로 표시됩니다.
       </p>

@@ -132,8 +132,11 @@ projectsRouter.get('/:prjCd/delete-impact', requireRole('ADMIN'), async (req, re
 projectsRouter.delete('/:prjCd', requireRole('ADMIN'), async (req, res) => {
   const prjCd = String(req.params.prjCd);
   const impact = await projectDeleteImpact(prjCd);
-  // 이력이 있으면 프로젝트 코드를 다시 입력해 확인해야 삭제 (투입 MD가 지워지면 과거 가동률·MM이 바뀜)
-  if (impact.hasHistory && req.body?.confirm !== prjCd) throw new HttpError(409, '연결된 데이터가 있습니다. 프로젝트 코드를 입력해 삭제를 확인하세요.', { counts: impact.counts });
+  // 이력이 있으면 프로젝트명(또는 코드)을 다시 입력해 확인해야 삭제 (투입 MD가 지워지면 과거 가동률·MM이 바뀜)
+  const typed = String(req.body?.confirm ?? '').trim();
+  if (impact.hasHistory && typed !== prjCd && typed !== impact.prj.prjNm.trim()) {
+    throw new HttpError(409, '연결된 데이터가 있습니다. 프로젝트명을 입력해 삭제를 확인하세요.', { counts: impact.counts });
+  }
   await prisma.$transaction([
     prisma.timesheet.deleteMany({ where: { prjCd } }),
     prisma.workItem.deleteMany({ where: { prjCd } }),

@@ -1,6 +1,6 @@
 # BT-HRM · SM·SI 사업부문 인력관리 시스템
 
-[SM_SI_인력관리시스템_명세서.md](SM_SI_인력관리시스템_명세서.md)(v1.4)를 기준으로 개발하는 인력관리 시스템입니다.
+[SM_SI_인력관리시스템_명세서.md](SM_SI_인력관리시스템_명세서.md)(v1.5)를 기준으로 개발하는 인력관리 시스템입니다.
 
 | 구분 | 기술 |
 |---|---|
@@ -40,6 +40,16 @@ npm run dev     # API(4000) + 웹(5173) 동시 실행
 1. `server/prisma/schema.prisma`에서 `provider = "postgresql"`로 바꿉니다.
 2. `server/.env`의 `DATABASE_URL`을 운영 DB 주소로 바꿉니다.
 3. `server/prisma/migrations` 폴더를 지우고 `npx prisma migrate dev --name init`으로 마이그레이션을 다시 만듭니다.
+
+### 별도 테스트 환경 (선택)
+
+사용 중인 DB에 테스트 데이터를 넣지 않고 확인하려면, DB를 복사해 다른 포트로 띄웁니다.
+
+```bash
+cp server/prisma/dev.db server/prisma/test-copy.db
+cd server && DATABASE_URL="file:./test-copy.db" PORT=4100 npx tsx src/index.ts
+cd client && API_TARGET=http://localhost:4100 WEB_PORT=5273 npx vite --strictPort
+```
 
 ## 폴더 구조
 

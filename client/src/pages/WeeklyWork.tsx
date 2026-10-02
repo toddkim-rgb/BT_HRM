@@ -98,7 +98,7 @@ export default function WeeklyWork() {
   const submitted = v?.statusCd === 'SUBMITTED';
   const isSm = (prjCd: string) => prjMap.get(prjCd)?.prjType === 'SM';
   const typeOf = (r: TsRow) => r.prjType ?? prjMap.get(r.prjCd)?.prjType ?? (r.prjCd.startsWith('NP-') ? 'NP' : undefined);
-  const nameOf = (r: TsRow) => r.prjNm ?? prjMap.get(r.prjCd)?.prjNm ?? '';
+  const nameOf = (r: { prjCd: string; prjNm?: string }) => r.prjNm ?? prjMap.get(r.prjCd)?.prjNm ?? r.prjCd;
 
   const goWeek = (n: number) => {
     if (dirty && !window.confirm('저장하지 않은 내용이 있습니다. 이동할까요?')) return;
@@ -215,7 +215,7 @@ export default function WeeklyWork() {
 
   const removeRow = (prjCd: string) => {
     const linked = v.actualItems.filter((i) => i.prjCd === prjCd).length + v.planItems.filter((i) => i.prjCd === prjCd).length + v.issues.filter((i) => i.prjCd === prjCd).length;
-    if (linked && !window.confirm(`${prjCd}에 입력한 업무 내용·이슈·계획 ${linked}건도 함께 지워집니다. 계속할까요?`)) return;
+    if (linked && !window.confirm(`${nameOf({ prjCd })}에 입력한 업무 내용·이슈·계획 ${linked}건도 함께 지워집니다. 계속할까요?`)) return;
     update((d) => {
       d.timesheet = d.timesheet.filter((r) => r.prjCd !== prjCd);
       d.actualItems = d.actualItems.filter((i) => i.prjCd !== prjCd);
@@ -280,7 +280,7 @@ export default function WeeklyWork() {
       {submitted && isMine && <div className="alert info">제출된 보고서입니다. 수정이 필요하면 고친 뒤 '수정 제출'을 누르세요. 바로 반영됩니다.</div>}
       {v.plan.length > 1 && (
         <div className="alert info">
-          이번 주 {v.plan.length}개 프로젝트에 투입 중입니다 · {v.plan.map((p) => `${p.prjCd} 계획 ${num(p.plannedMd)}MD`).join(' · ')}
+          이번 주 {v.plan.length}개 프로젝트에 투입 중입니다 · {v.plan.map((p) => `${nameOf({ prjCd: p.prjCd })} 계획 ${num(p.plannedMd)}MD`).join(' · ')}
           {Object.values(v.dayAlloc).some((a) => a > 100) && ' · 투입률 합계가 100%를 넘는 날이 있어 하루 1.0MD 안에서 나눠 입력해야 합니다.'}
         </div>
       )}
@@ -322,10 +322,7 @@ export default function WeeklyWork() {
                 const plan = planOf(r.prjCd);
                 return (
                   <button type="button" key={r.prjCd} className={`ww-card ${r.prjCd === curCd ? 'active' : ''}`} onClick={() => setSel(r.prjCd)} aria-pressed={r.prjCd === curCd}>
-                    <span className="row" style={{ justifyContent: 'space-between' }}>
-                      <span className="small muted">{r.prjCd}</span>
-                      {np ? <Badge tone="neutral">공통</Badge> : <Badge tone="info">{typeOf(r) ?? ''}</Badge>}
-                    </span>
+                    <span className="row">{np ? <Badge tone="neutral">공통</Badge> : <Badge tone="info">{typeOf(r) ?? ''}</Badge>}</span>
                     <strong className="ww-card-name">{nameOf(r)}</strong>
                     <span className="ww-card-md">
                       {num(rowSum(r))}
@@ -363,7 +360,7 @@ export default function WeeklyWork() {
             </div>
           </div>
           <p className="muted small" style={{ marginBottom: 0 }}>
-            카드를 눌러 프로젝트별로 투입시간 → 주간 업무 내용 → 이슈 → 차주 계획 순으로 입력합니다. 하루 합계는 1.0MD를 넘을 수 없고, 휴가는 공통코드 <b>NP-LV</b>로 입력합니다.
+            카드를 눌러 프로젝트별로 투입시간 → 주간 업무 내용 → 이슈 → 차주 계획 순으로 입력합니다. 하루 합계는 1.0MD를 넘을 수 없고, 휴가는 '+ 프로젝트/공통코드'에서 <b>휴가</b>를 추가해 입력합니다.
           </p>
         </Card>
 
@@ -374,7 +371,7 @@ export default function WeeklyWork() {
             title={
               <>
                 <span className="section-no">2</span>
-                {curCd} {nameOf(cur)}
+                {nameOf(cur)}
               </>
             }
             actions={
@@ -704,16 +701,18 @@ function AddRowModal({ projects, onAdd, onClose }: { projects: Project[]; onAdd:
   const list = projects.filter((p) => !q || p.prjCd.toLowerCase().includes(q.toLowerCase()) || p.prjNm.includes(q));
   return (
     <Modal title="프로젝트 / 공통코드 추가" onClose={onClose}>
-      <input type="search" placeholder="코드 또는 이름 검색" value={q} onChange={(e) => setQ(e.target.value)} autoFocus style={{ marginBottom: 10 }} />
+      <input type="search" placeholder="프로젝트명 검색" value={q} onChange={(e) => setQ(e.target.value)} autoFocus style={{ marginBottom: 10 }} />
       <div className="table-wrap">
         <table className="tbl">
           <tbody>
             {list.map((p) => (
               <tr key={p.prjCd} className="clickable" onClick={() => onAdd(p)}>
-                <td className="nowrap">
-                  <strong>{p.prjCd}</strong>
+                <td>
+                  <strong>{p.prjNm}</strong>
                 </td>
-                <td>{p.prjNm}</td>
+                <td className="nowrap" style={{ textAlign: 'right' }}>
+                  <Badge tone={p.prjType === 'NP' ? 'neutral' : 'info'}>{p.prjType === 'NP' ? '공통' : p.prjType}</Badge>
+                </td>
               </tr>
             ))}
           </tbody>

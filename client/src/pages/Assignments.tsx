@@ -37,7 +37,7 @@ export default function Assignments() {
   const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
   const cancel = async (a: Asg) => {
-    if (!window.confirm(`${a.employee.name} · ${a.prjCd} 배정을 취소할까요?`)) return;
+    if (!window.confirm(`${a.employee.name} · ${a.project.prjNm} 배정을 취소할까요?`)) return;
     try {
       await api.post(`/assignments/${a.asgId}/cancel`);
       toast('배정을 취소했습니다.');
@@ -63,7 +63,7 @@ export default function Assignments() {
       />
       <Card>
         <div className="filters">
-          <Select value={prjCd} onChange={setPrjCd} placeholder="프로젝트 전체" options={(projects ?? []).map((p) => [p.prjCd, `${p.prjCd} ${p.prjNm}`] as [string, string])} />
+          <Select value={prjCd} onChange={setPrjCd} placeholder="프로젝트 전체" options={(projects ?? []).map((p) => [p.prjCd, p.prjNm] as [string, string])} />
           <Select value={status} onChange={setStatus} options={{ 'PLANNED,ACTIVE': '투입예정·투입중', ACTIVE: '투입중', PLANNED: '투입예정', ENDED: '종료', CANCELED: '취소', '': '전체' }} />
         </div>
         <ErrorBox error={error} />
@@ -97,8 +97,7 @@ export default function Assignments() {
                         <div className="small muted">{label(EMPLOY_TYPE, a.employee.employType)}</div>
                       </td>
                       <td data-label="프로젝트">
-                        <strong>{a.prjCd}</strong>
-                        <div className="small muted">{a.project.prjNm}</div>
+                        <strong title={a.prjCd}>{a.project.prjNm}</strong>
                       </td>
                       <td data-label="역할">{label(ASG_ROLE, a.roleCd)}</td>
                       <td data-label="기간" className="nowrap small">
@@ -210,7 +209,7 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
       <ErrorBox error={err} />
       <div className="form-grid">
         <Field label="프로젝트" required full>
-          <Select value={f.prjCd} onChange={(prjCd) => set({ prjCd })} disabled={!isNew} options={projects.map((p) => [p.prjCd, `${p.prjCd} ${p.prjNm}`] as [string, string])} />
+          <Select value={f.prjCd} onChange={(prjCd) => set({ prjCd })} disabled={!isNew} options={projects.map((p) => [p.prjCd, p.prjNm] as [string, string])} />
         </Field>
         <Field label="인력" required full>
           <Select
@@ -244,7 +243,7 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
               <ul style={{ margin: '6px 0', paddingLeft: 18 }}>
                 {preview.overlapping.map((o) => (
                   <li key={o.asgId}>
-                    {o.prjCd} {o.project.prjNm} · {label(ASG_ROLE, o.roleCd)} {o.allocRate}% · {o.startDt} ~ {o.endDt}
+                    {o.project.prjNm} · {label(ASG_ROLE, o.roleCd)} {o.allocRate}% · {o.startDt} ~ {o.endDt}
                     {o.prjCd === f.prjCd && ' (같은 프로젝트 중복 배정)'}
                   </li>
                 ))}

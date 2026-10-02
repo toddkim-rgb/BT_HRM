@@ -350,7 +350,7 @@ weeklyWorksRouter.get('/', async (req, res) => {
     where,
     include: {
       employee: { select: { name: true, gradeCd: true, deptCd: true } },
-      timesheets: { select: { prjCd: true, md: true } },
+      timesheets: { select: { prjCd: true, md: true, project: { select: { prjNm: true } } } },
       issues: { select: { severity: true, supportReqYn: true, prjCd: true } },
       workItems: { where: { itemType: 'ACTUAL' }, select: { statusCd: true, prjCd: true } },
     },
@@ -373,6 +373,7 @@ weeklyWorksRouter.get('/', async (req, res) => {
         submittedAt: r.submittedAt,
         totalMd: r.timesheets.reduce((s, t) => s + t.md, 0),
         mdByProject: byPrj,
+        mdProjects: Object.entries(byPrj).map(([prjCd, md]) => ({ prjCd, prjNm: r.timesheets.find((t) => t.prjCd === prjCd)?.project.prjNm ?? prjCd, md })),
         delayCount: r.workItems.filter((w) => w.statusCd === 'DELAY' && inScope(w)).length,
         issueCount: r.issues.filter(inScope).length,
         highIssueCount: r.issues.filter((i) => i.severity === 'H' && inScope(i)).length,
@@ -437,7 +438,7 @@ weeklyWorksRouter.get('/project/:prjCd/:week/status', async (req, res) => {
   // 다른 프로젝트 동시 투입 현황
   const others = await prisma.assignment.findMany({
     where: { empId: { in: empIds }, prjCd: { not: prjCd }, canceled: false, startDt: { lte: days[6] }, endDt: { gte: days[0] } },
-    select: { empId: true, prjCd: true, allocRate: true },
+    select: { empId: true, prjCd: true, allocRate: true, project: { select: { prjNm: true } } },
   });
   const bdays = businessDays(days[0], days[6], holidays);
   res.json(
@@ -451,7 +452,7 @@ weeklyWorksRouter.get('/project/:prjCd/:week/status', async (req, res) => {
         gradeCd: mine[0].employee.gradeCd,
         roleCd: mine.map((a) => a.roleCd).join(', '),
         allocRate: mine.reduce((s, a) => s + a.allocRate, 0),
-        otherProjects: others.filter((o) => o.empId === empId).map((o) => ({ prjCd: o.prjCd, allocRate: o.allocRate })),
+        otherProjects: others.filter((o) => o.empId === empId).map((o) => ({ prjCd: o.prjCd, prjNm: o.project.prjNm, allocRate: o.allocRate })),
         wwId: ww?.wwId ?? null,
         statusCd: ww?.statusCd ?? 'NONE',
         plannedMd: Math.round(plannedMd * 100) / 100,

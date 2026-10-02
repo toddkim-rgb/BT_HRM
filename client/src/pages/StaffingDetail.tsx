@@ -24,7 +24,7 @@ export default function StaffingDetail() {
   return (
     <div>
       <PageHeader
-        title={prj ? `${prjCd} ${prj.prjNm}` : prjCd}
+        title={prj ? prj.prjNm : ''}
         desc={
           prj && (
             <>

@@ -19,7 +19,7 @@ interface Row {
   totalMd: number;
   paidMd: number;
   reportedMd: number;
-  byProject: { prjCd: string; md: number }[];
+  byProject: { prjCd: string; prjNm?: string; md: number }[];
   util: number | null;
   paidUtil: number | null;
   inactive: boolean;
@@ -150,7 +150,7 @@ export default function Utilization() {
                           {num(r.totalMd)}
                           {r.byProject.length > 1 && (
                             <div className="small muted" title="다중 프로젝트 투입">
-                              {r.byProject.map((b) => `${b.prjCd} ${num(b.md)}`).join(' · ')}
+                              {r.byProject.map((b) => `${b.prjNm ?? b.prjCd} ${num(b.md)}`).join(' · ')}
                             </div>
                           )}
                         </td>

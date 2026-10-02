@@ -183,7 +183,7 @@ async function deleteImpact(empId: string, actor: string) {
   if (empId === actor) blockers.push('본인 계정은 삭제할 수 없습니다.');
   if (emp.role === 'ADMIN' && admins === 0) blockers.push('마지막 시스템관리자 계정은 삭제할 수 없습니다.');
   const pmActive = pmProjects.filter((p) => p.statusCd === 'ACTIVE' || p.statusCd === 'PROPOSAL');
-  if (pmActive.length) blockers.push(`PM으로 지정된 진행중·제안 프로젝트가 있습니다. 먼저 PM을 변경하세요: ${pmActive.map((p) => p.prjCd).join(', ')}`);
+  if (pmActive.length) blockers.push(`PM으로 지정된 진행중·제안 프로젝트가 있습니다. 먼저 PM을 변경하세요: ${pmActive.map((p) => p.prjNm).join(', ')}`);
   const history = asg.length + weeklyWorks + timesheets + contracts + costRates + alerts + pmProjects.length;
   return {
     emp,

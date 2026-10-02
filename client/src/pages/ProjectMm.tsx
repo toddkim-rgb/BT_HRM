@@ -74,8 +74,7 @@ function ProjectList() {
                 {rows.map((p) => (
                   <tr key={p.prjCd} className="clickable" onClick={() => nav(`/project-mm/${p.prjCd}`)}>
                     <td data-label="프로젝트">
-                      <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge> <strong>{p.prjCd}</strong>
-                      <div className="small muted">{p.prjNm}</div>
+                      <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge> <strong title={p.prjCd}>{p.prjNm}</strong>
                     </td>
                     <td data-label="PM">{p.pmName ?? '-'}</td>
                     <td data-label="투입인원" className="num">
@@ -128,7 +127,7 @@ function ProjectDetail({ prjCd }: { prjCd: string }) {
   return (
     <div>
       <PageHeader
-        title={`${data.prjCd} ${data.prjNm}`}
+        title={data.prjNm}
         desc={
           <>
             {data.customerNm ?? ''} · {data.startDt} ~ {data.endDt} · PM {data.pmName ?? '-'} · <Badge code={data.statusCd}>{label(PRJ_STATUS, data.statusCd)}</Badge>
@@ -136,7 +135,7 @@ function ProjectDetail({ prjCd }: { prjCd: string }) {
         }
         actions={
           <>
-            <Select value={prjCd} onChange={(v) => nav(`/project-mm/${v}`)} options={(list ?? []).map((p) => [p.prjCd, `${p.prjCd} ${p.prjNm}`] as [string, string])} />
+            <Select value={prjCd} onChange={(v) => nav(`/project-mm/${v}`)} options={(list ?? []).map((p) => [p.prjCd, p.prjNm] as [string, string])} />
             <Link className="btn" to="/project-mm">
               목록
             </Link>

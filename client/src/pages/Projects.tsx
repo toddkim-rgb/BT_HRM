@@ -67,8 +67,8 @@ export default function Projects() {
             <table className="tbl responsive">
               <thead>
                 <tr>
-                  <th>코드</th>
                   <th>프로젝트명</th>
+                  <th>사업구분</th>
                   <th>고객사</th>
                   <th>사업기간</th>
                   <th>PM</th>
@@ -82,11 +82,11 @@ export default function Projects() {
               <tbody>
                 {data.map((p) => (
                   <tr key={p.prjCd} className={canEdit(p) ? 'clickable' : ''} onClick={() => canEdit(p) && setEdit(p)}>
-                    <td data-label="코드" className="nowrap">
-                      <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge> {p.prjCd}
-                    </td>
                     <td data-label="프로젝트명">
-                      <strong>{p.prjNm}</strong>
+                      <strong title={p.prjCd}>{p.prjNm}</strong>
+                    </td>
+                    <td data-label="사업구분" className="nowrap">
+                      <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge>
                     </td>
                     <td data-label="고객사">
                       {p.customerNm ?? '-'}
@@ -156,11 +156,11 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
     try {
       const body = { ...f, contractAmt: f.contractAmt == null ? null : Math.round(f.contractAmt) };
       if (isNew) {
-        const r = await api.post<{ prjCd: string }>('/projects', body);
-        toast(`등록했습니다. (${r.prjCd})`);
+        await api.post('/projects', body);
+        toast(`${f.prjNm} 프로젝트를 등록했습니다.`);
       } else {
-        const r = await api.put<{ prjCd: string; codeChanged: boolean }>(`/projects/${initial.prjCd}`, body);
-        toast(r.codeChanged ? `저장했습니다. 사업구분 변경으로 코드가 ${initial.prjCd} → ${r.prjCd}(으)로 바뀌었습니다.` : '저장했습니다.', r.codeChanged ? 'info' : 'good');
+        await api.put(`/projects/${initial.prjCd}`, body);
+        toast('저장했습니다.');
       }
       onSaved();
     } catch (e) {
@@ -170,7 +170,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
 
   return (
     <Modal
-      title={isNew ? '프로젝트 등록' : `프로젝트 수정 · ${initial.prjCd}`}
+      title={isNew ? '프로젝트 등록' : `프로젝트 수정 · ${initial.prjNm}`}
       onClose={onClose}
       wide
       footer={
@@ -192,7 +192,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
       {removing && initial.prjCd && <DeleteProjectDialog prjCd={initial.prjCd} prjNm={initial.prjNm ?? ''} onClose={() => setRemoving(false)} onDone={onSaved} />}
       <ErrorBox error={err} />
       <div className="form-grid">
-        <Field label="사업구분" required hint={typeChanged ? `변경하면 코드가 새로 부여됩니다 (현재 ${initial.prjCd})` : undefined}>
+        <Field label="사업구분" required hint={typeChanged ? '변경하면 내부 프로젝트 코드가 새 구분으로 다시 부여됩니다 (연결 데이터는 그대로 유지)' : undefined}>
           <Select value={f.prjType} onChange={(prjType) => set({ prjType })} options={TYPE_OPTS} />
         </Field>
         <Field label="상태" required>
@@ -253,21 +253,21 @@ interface DeleteImpact {
   counts: { assignments: number; timesheets: number; totalMd: number; workItems: number; issues: number; milestones: number; weeklyComments: number; etc: number };
 }
 
-/** 프로젝트 삭제: 연결 데이터 건수를 보여 주고, 이력이 있으면 코드를 입력해 확인 */
+/** 프로젝트 삭제: 연결 데이터 건수를 보여 주고, 이력이 있으면 프로젝트명을 입력해 확인 */
 function DeleteProjectDialog({ prjCd, prjNm, onClose, onDone }: { prjCd: string; prjNm: string; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const { data, error } = useFetch<DeleteImpact>(`/projects/${prjCd}/delete-impact`);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const ready = !!data && (!data.hasHistory || typed.trim() === prjCd);
+  const ready = !!data && (!data.hasHistory || typed.trim() === prjNm.trim());
 
   const run = async () => {
     setBusy(true);
     setErr(null);
     try {
       await api.del(`/projects/${prjCd}`, { confirm: typed.trim() });
-      toast(`${prjCd} ${prjNm} 프로젝트를 삭제했습니다.`);
+      toast(`${prjNm} 프로젝트를 삭제했습니다.`);
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -279,7 +279,7 @@ function DeleteProjectDialog({ prjCd, prjNm, onClose, onDone }: { prjCd: string;
   const c = data?.counts;
   return (
     <Modal
-      title={`프로젝트 삭제 · ${prjCd}`}
+      title={`프로젝트 삭제 · ${prjNm}`}
       onClose={onClose}
       footer={
         <>
@@ -320,8 +320,8 @@ function DeleteProjectDialog({ prjCd, prjNm, onClose, onDone }: { prjCd: string;
             <dt>프로젝트 주간보고</dt>
             <dd>{c.weeklyComments}건</dd>
           </dl>
-          <Field label={`확인을 위해 프로젝트 코드 "${prjCd}"를 입력하세요`} required>
-            <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={prjCd} autoFocus />
+          <Field label={`확인을 위해 프로젝트명 "${prjNm}"을(를) 입력하세요`} required>
+            <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={prjNm} autoFocus />
           </Field>
           <p className="muted small" style={{ margin: 0 }}>
             다른 프로젝트의 투입 MD와 개인 주간 업무보고 자체는 지워지지 않습니다. 이미 확정한 전사 One-Page는 확정 시점 내용 그대로 남습니다.

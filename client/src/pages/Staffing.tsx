@@ -52,7 +52,7 @@ interface Person {
   overAlloc: number;
   projectCount: number;
   assignments: { asgId: number; prjCd: string; prjNm: string; roleCd: string; allocRate: number; startDt: string; endDt: string; planMd: number; actualMd: number }[];
-  timeline: { ym: string; total: number; items: { prjCd: string; pct: number }[] }[];
+  timeline: { ym: string; total: number; items: { prjCd: string; prjNm?: string; pct: number }[] }[];
 }
 export interface StaffingResp {
   ym: string;
@@ -74,7 +74,7 @@ export default function Staffing() {
   // 프로젝트 카드는 진행중 프로젝트만 표시
   const activeProjects = (data?.projects ?? []).filter((p) => p.statusCd === 'ACTIVE');
   const projects = activeProjects.filter((p) => !kw || p.prjCd.toLowerCase().includes(kw) || p.prjNm.toLowerCase().includes(kw) || p.members.some((m) => m.name.includes(q.trim())));
-  const people = (data?.people ?? []).filter((p) => !kw || p.name.includes(q.trim()) || p.deptCd.toLowerCase().includes(kw) || p.assignments.some((a) => a.prjCd.toLowerCase().includes(kw)));
+  const people = (data?.people ?? []).filter((p) => !kw || p.name.includes(q.trim()) || p.deptCd.toLowerCase().includes(kw) || p.assignments.some((a) => a.prjNm.toLowerCase().includes(kw)));
   const all = data?.people ?? [];
 
   return (
@@ -152,7 +152,6 @@ function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <span className="row" style={{ gap: 6 }}>
                 <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge>
-                <span className="muted small">{p.prjCd}</span>
               </span>
               <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
             </div>
@@ -250,7 +249,7 @@ function ByPerson({ list }: { list: Person[] }) {
                 {p.assignments.length
                   ? p.assignments.map((a) => (
                       <div key={a.asgId}>
-                        <strong>{a.prjCd}</strong> {a.prjNm} · {label(ASG_ROLE, a.roleCd)} {a.allocRate}% · {a.startDt.slice(5)} ~ {a.endDt.slice(5)}
+                        <strong>{a.prjNm}</strong> · {label(ASG_ROLE, a.roleCd)} {a.allocRate}% · {a.startDt.slice(5)} ~ {a.endDt.slice(5)}
                       </div>
                     ))
                   : '-'}
@@ -268,6 +267,9 @@ function ByPerson({ list }: { list: Person[] }) {
     </div>
   );
 }
+
+/** 타임라인 칸에 넣을 짧은 프로젝트명 */
+const shortName = (name: string) => (name.length > 9 ? `${name.slice(0, 8)}…` : name);
 
 const cellTone = (total: number) => (total === 0 ? 'tl-0' : total > 100 ? 'tl-over' : total >= 80 ? 'tl-full' : 'tl-part');
 
@@ -313,9 +315,9 @@ function Timeline({ list, months }: { list: Person[]; months: string[] }) {
                   <div className="small muted">{p.deptCd}</div>
                 </td>
                 {p.timeline.map((c) => (
-                  <td key={c.ym} className={`tl-cell ${cellTone(c.total)}`} title={c.items.map((i) => `${i.prjCd} ${i.pct}%`).join('\n') || '대기'}>
+                  <td key={c.ym} className={`tl-cell ${cellTone(c.total)}`} title={c.items.map((i) => `${i.prjNm ?? i.prjCd} ${i.pct}%`).join('\n') || '대기'}>
                     <strong>{c.total ? `${c.total}%` : '대기'}</strong>
-                    <div className="tl-items">{c.items.map((i) => `${i.prjCd.replace(/-20(\d\d)-/, '-$1-')} ${i.pct}`).join(' · ')}</div>
+                    <div className="tl-items">{c.items.map((i) => `${shortName(i.prjNm ?? i.prjCd)} ${i.pct}`).join(' · ')}</div>
                   </td>
                 ))}
               </tr>

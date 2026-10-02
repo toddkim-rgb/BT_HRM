@@ -60,7 +60,7 @@ export default function MyInfo() {
             {data.assignments.map((a) => (
               <div key={a.asgId} className="row" style={{ justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                 <span>
-                  <strong>{a.prjCd}</strong> <span className="small muted">{a.project.prjNm}</span>
+                  <strong title={a.prjCd}>{a.project.prjNm}</strong>
                   <div className="small muted">
                     {label(ASG_ROLE, a.roleCd)} · {a.allocRate}% · {a.startDt} ~ {a.endDt}
                   </div>

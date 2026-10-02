@@ -20,7 +20,7 @@ interface Member {
   gradeCd: string;
   roleCd: string;
   allocRate: number;
-  otherProjects: { prjCd: string; allocRate: number }[];
+  otherProjects: { prjCd: string; prjNm?: string; allocRate: number }[];
   wwId: number | null;
   statusCd: string;
   plannedMd: number;
@@ -35,6 +35,7 @@ interface Report {
   submittedAt: string | null;
   totalMd: number;
   mdByProject: Record<string, number>;
+  mdProjects?: { prjCd: string; prjNm: string; md: number }[];
   delayCount: number;
   issueCount: number;
   highIssueCount: number;
@@ -122,8 +123,8 @@ export default function Submissions() {
                         {num(r.totalMd)}
                       </td>
                       <td data-label="프로젝트별 MD" className="small">
-                        {Object.entries(r.mdByProject)
-                          .map(([k, v]) => `${k} ${v}`)
+                        {(r.mdProjects ?? Object.entries(r.mdByProject).map(([prjCd, md]) => ({ prjCd, prjNm: prjCd, md })))
+                          .map((x) => `${x.prjNm} ${x.md}`)
                           .join(' · ')}
                       </td>
                       <td data-label="지연">{r.delayCount ? <Badge code="DELAY">{r.delayCount}</Badge> : '-'}</td>
@@ -163,7 +164,7 @@ function SummaryRow({ p, week, open, onToggle }: { p: Summary; week: string; ope
     <>
       <tr className="clickable" onClick={onToggle}>
         <td data-label="프로젝트">
-          <strong>{p.prjCd}</strong> <span className="small muted">{p.prjNm}</span>
+          <strong title={p.prjCd}>{p.prjNm}</strong>
         </td>
         <td data-label="제출" className="num">
           <Badge tone={done ? 'good' : p.submitted ? 'warn' : 'neutral'}>
@@ -215,7 +216,7 @@ function Members({ prjCd, week }: { prjCd: string; week: string }) {
             <td className="small">
               {m.otherProjects.length ? (
                 <>
-                  {m.otherProjects.map((o) => `${o.prjCd} ${o.allocRate}%`).join(', ')}
+                  {m.otherProjects.map((o) => `${o.prjNm ?? o.prjCd} ${o.allocRate}%`).join(', ')}
                   {m.allocRate + m.otherProjects.reduce((s, o) => s + o.allocRate, 0) > 100 && (
                     <>
                       {' '}

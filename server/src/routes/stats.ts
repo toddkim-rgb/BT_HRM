@@ -19,7 +19,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 async function submittedTimesheets(start: string, end: string, extra: Record<string, unknown> = {}) {
   return prisma.timesheet.findMany({
     where: { workDt: { gte: start, lte: end }, weeklyWork: { statusCd: 'SUBMITTED' }, ...extra },
-    select: { empId: true, prjCd: true, md: true, workDt: true, project: { select: { prjType: true, prjCd: true } } },
+    select: { empId: true, prjCd: true, md: true, workDt: true, project: { select: { prjType: true, prjCd: true, prjNm: true } } },
   });
 }
 
@@ -66,7 +66,7 @@ export async function utilizationRange(start: string, rangeEnd: string, empIds?:
       totalMd: total,
       paidMd: paid,
       reportedMd: mine.reduce((s, t) => s + t.md, 0),
-      byProject: [...byPrj].map(([prjCd, md]) => ({ prjCd, md })).sort((a, b) => b.md - a.md),
+      byProject: [...byPrj].map(([prjCd, md]) => ({ prjCd, prjNm: mine.find((t) => t.prjCd === prjCd)?.project.prjNm ?? prjCd, md })).sort((a, b) => b.md - a.md),
       util: avail ? round1((total / avail) * 100) : null,
       paidUtil: avail ? round1((paid / avail) * 100) : null,
     };
@@ -387,7 +387,7 @@ statsRouter.get('/staffing', async (req, res) => {
           const bd = businessDays(m.start, m.end, holidays).length;
           const items = asg
             .filter((a) => a.empId === empId && a.startDt <= m.end && a.endDt >= m.start)
-            .map((a) => ({ prjCd: a.prjCd, pct: bd ? Math.round((plannedMd(a, m.start, m.end, holidays) / bd) * 100) : 0 }))
+            .map((a) => ({ prjCd: a.prjCd, prjNm: a.project.prjNm, pct: bd ? Math.round((plannedMd(a, m.start, m.end, holidays) / bd) * 100) : 0 }))
             .filter((x) => x.pct > 0);
           return { ym, total: items.reduce((s2, x) => s2 + x.pct, 0), items };
         }),

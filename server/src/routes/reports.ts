@@ -328,11 +328,11 @@ async function companyWeeklyData(week: string) {
     lowUtilPct: lowUtil,
     releasing: active
       .filter((a) => a.endDt <= in30 && nameOf.has(a.empId))
-      .map((a) => ({ name: a.employee.name, prjCd: a.prjCd, endDt: a.endDt }))
+      .map((a) => ({ name: a.employee.name, prjCd: a.prjCd, prjNm: a.project.prjNm, endDt: a.endDt }))
       .sort((a, b) => a.endDt.localeCompare(b.endDt)),
     notSubmitted,
-    delayedMilestones: prjs.flatMap((p) => p.milestones.filter((m) => msStatus(m) === 'DELAY').map((m) => ({ prjCd: p.prjCd, msNm: m.msNm, planDt: m.planDt }))),
-    burnOver80: projects.filter((p) => p.burnRate != null && p.burnRate >= 80).map((p) => ({ prjCd: p.prjCd, burnRate: p.burnRate })),
+    delayedMilestones: prjs.flatMap((p) => p.milestones.filter((m) => msStatus(m) === 'DELAY').map((m) => ({ prjCd: p.prjCd, prjNm: p.prjNm, msNm: m.msNm, planDt: m.planDt }))),
+    burnOver80: projects.filter((p) => p.burnRate != null && p.burnRate >= 80).map((p) => ({ prjCd: p.prjCd, prjNm: p.prjNm, burnRate: p.burnRate })),
   };
 
   // 주요 이슈: PM이 'One-Page 반영'으로 선택한 건
