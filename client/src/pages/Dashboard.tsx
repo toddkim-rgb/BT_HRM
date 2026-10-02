@@ -121,8 +121,7 @@ function MyAssignments() {
               {list.map((a) => (
                 <tr key={a.asgId}>
                   <td>
-                    <strong>{a.prjCd}</strong>
-                    <div className="small muted">{a.project.prjNm}</div>
+                    <strong title={a.prjCd}>{a.project.prjNm}</strong>
                   </td>
                   <td className="small nowrap">
                     {label(ASG_ROLE, a.roleCd)} · {a.allocRate}%
@@ -164,7 +163,7 @@ function SubmissionSummary() {
           {data.slice(0, 8).map((p) => (
             <div key={p.prjCd} className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
               <span>
-                <strong>{p.prjCd}</strong> <span className="small muted">{p.prjNm}</span>
+                <strong title={p.prjCd}>{p.prjNm}</strong>
               </span>
               <Badge tone={p.assigned && p.submitted === p.assigned ? 'good' : 'warn'}>
                 {p.submitted}/{p.assigned}명
@@ -199,7 +198,7 @@ function ProjectBurn() {
           <Link key={p.prjCd} to={`/project-mm/${p.prjCd}`} style={{ display: 'block', color: 'inherit', marginBottom: 10 }}>
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
               <span>
-                <strong>{p.prjCd}</strong> <span className="small muted">{p.prjNm}</span>
+                <strong title={p.prjCd}>{p.prjNm}</strong>
               </span>
               <span className="num small">
                 {num(p.actualMm, 2)} / {num(p.contractMm)} MM · <strong>{pct(p.burnRate)}</strong>
