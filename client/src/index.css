@@ -354,3 +354,20 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .badge { border: 1px solid #ccc; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* 투입 타임라인 · 주의 인력 */
+.tl-table th, .tl-table td { text-align: center; }
+.tl-table th:first-child, .tl-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); min-width: 110px; z-index: 1; }
+.tl-table th:first-child { background: var(--surface-2); }
+.tl-cell { min-width: 96px; border-left: 2px solid #fff; }
+.tl-items { font-size: 10.5px; color: inherit; opacity: 0.8; white-space: nowrap; }
+.tl-full { background: #d8eee2 !important; color: #14603f; }
+.tl-part { background: #e6f0fa !important; color: #23527c; }
+.tl-over { background: #fbd9d9 !important; color: #a12626; }
+.tl-0 { background: #f1f3f6 !important; color: var(--muted); }
+.legend i.tl-full, .legend i.tl-part, .legend i.tl-over, .legend i.tl-0 { border: 1px solid rgba(0, 0, 0, 0.08); }
+.attn-card { margin-bottom: 16px; }
+.attn-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.attn-box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+@media (max-width: 959px) { .attn-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .attn-grid { grid-template-columns: minmax(0, 1fr); } }

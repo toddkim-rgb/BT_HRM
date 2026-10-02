@@ -3,7 +3,7 @@ import { isManager, me, pmProjectCodes } from '../auth.js';
 import { forbidden, notFound, prisma } from '../db.js';
 import { plannedMd } from '../lib/alloc.js';
 import { addMonths, businessDays, monthRange, today } from '../lib/dates.js';
-import { holidaySet, mdPerMm } from '../lib/settings.js';
+import { getSettings, holidaySet, mdPerMm } from '../lib/settings.js';
 import { usableEmp } from '../lib/empFilter.js';
 import { parse, ymStr } from '../lib/validate.js';
 import { z } from 'zod';
@@ -43,7 +43,7 @@ export async function utilizationRange(start: string, rangeEnd: string, empIds?:
       // 퇴사·삭제 인력은 제외하되, 해당 월 실적이 있으면 포함
       OR: [usableEmp, { empId: { in: reported } }],
     },
-    select: { empId: true, name: true, deptCd: true, gradeCd: true, employType: true, statusCd: true },
+    select: { empId: true, name: true, deptCd: true, gradeCd: true, employType: true, statusCd: true, deletedAt: true },
     orderBy: [{ deptCd: 'asc' }, { name: 'asc' }],
   });
   const bd = start <= end ? businessDays(start, end, holidays).length : 0;
@@ -56,8 +56,10 @@ export async function utilizationRange(start: string, rangeEnd: string, empIds?:
     const total = mine.filter((t) => WORK_TYPES.includes(t.project.prjType)).reduce((s, t) => s + t.md, 0);
     const paid = mine.filter((t) => PAID_TYPES.includes(t.project.prjType)).reduce((s, t) => s + t.md, 0);
     const avail = Math.max(0, bd - leave);
+    const { deletedAt, ...emp } = e;
     return {
-      ...e,
+      ...emp,
+      inactive: !!deletedAt || e.statusCd === 'RETIRED', // 삭제·퇴사 인력 (해당 기간 실적이 있어 포함됨)
       businessDays: bd,
       leaveMd: leave,
       availMd: avail,
@@ -91,7 +93,30 @@ statsRouter.get('/utilization', async (req, res) => {
     });
     empIds = [...new Set([u.empId, ...asg.map((a) => a.empId)])];
   }
-  const rows = await utilizationFor(ym, empIds);
+  const base = await utilizationFor(ym, empIds);
+
+  // 현재 투입률(오늘 기준)과 다음 달 예상 가동률(배정 기준)
+  const holidays = await holidaySet();
+  const t = today();
+  const nextYm = addMonths(ym, 1);
+  const next = monthRange(nextYm);
+  const nextBd = businessDays(next.start, next.end, holidays).length;
+  const asgs = await prisma.assignment.findMany({
+    where: { empId: { in: base.map((r) => r.empId) }, canceled: false, endDt: { gte: t < next.start ? t : next.start } },
+    select: { empId: true, startDt: true, endDt: true, allocRate: true, project: { select: { prjType: true } } },
+  });
+  const rows = base.map((r) => {
+    const mine = asgs.filter((a) => a.empId === r.empId);
+    const nextMd = mine.reduce((s2, a) => s2 + plannedMd(a, next.start, next.end, holidays), 0);
+    const nextPaidMd = mine.filter((a) => PAID_TYPES.includes(a.project.prjType)).reduce((s2, a) => s2 + plannedMd(a, next.start, next.end, holidays), 0);
+    return {
+      ...r,
+      currentAlloc: mine.filter((a) => a.startDt <= t && a.endDt >= t).reduce((s2, a) => s2 + a.allocRate, 0),
+      nextUtil: nextBd ? round1((nextMd / nextBd) * 100) : null,
+      nextPaidUtil: nextBd ? round1((nextPaidMd / nextBd) * 100) : null,
+    };
+  });
+  const lowUtilPct = Number((await getSettings()).LOW_UTIL_PCT) || 70;
   const groups = (key: 'deptCd' | 'employType') =>
     Object.entries(
       rows.reduce<Record<string, typeof rows>>((m, r) => {
@@ -99,7 +124,8 @@ statsRouter.get('/utilization', async (req, res) => {
         return m;
       }, {}),
     ).map(([k, v]) => ({ key: k, ...summarize(v) }));
-  res.json({ ym, summary: summarize(rows), byDept: groups('deptCd'), byEmployType: groups('employType'), rows });
+  const nextAvg = rows.length && nextBd ? round1(rows.reduce((s2, r) => s2 + (r.nextUtil ?? 0), 0) / rows.length) : null;
+  res.json({ ym, nextYm, lowUtilPct, summary: { ...summarize(rows), nextUtil: nextAvg }, byDept: groups('deptCd'), byEmployType: groups('employType'), rows });
 });
 
 /** 인력별 최근 N개월 가동률 추이 */
@@ -221,4 +247,120 @@ statsRouter.get('/summary', async (req, res) => {
     util,
     prevUtil,
   });
+});
+
+/**
+ * 프로젝트별 투입인력 현황판 (v1.0 핵심 ①)
+ * - projects: 프로젝트 → 투입인력(역할·투입률·기간·해당 월 계획/실적 MD)
+ * - people: 인력 → 투입 프로젝트 (다중 투입·과투입·대기)
+ * - timeline: 인력 × 월 투입률 (배정 기준)
+ */
+statsRouter.get('/staffing', async (req, res) => {
+  const u = me(req);
+  if (u.role === 'EMP') throw forbidden();
+  const q = parse(z.object({ ym: ymStr.default(today().slice(0, 7)), months: z.coerce.number().int().min(1).max(12).default(6) }), req.query);
+  const { start, end } = monthRange(q.ym);
+  const holidays = await holidaySet();
+  const mdmm = await mdPerMm();
+  const t = today();
+  const months = Array.from({ length: q.months }, (_, i) => addMonths(q.ym, i));
+  const last = monthRange(months[months.length - 1]);
+
+  // PM은 담당 프로젝트만
+  const scope = u.role === 'PM' ? await pmProjectCodes(u.empId) : null;
+  const asg = await prisma.assignment.findMany({
+    where: { canceled: false, startDt: { lte: last.end }, endDt: { gte: start }, ...(scope ? { prjCd: { in: scope } } : {}) },
+    include: {
+      employee: { select: { name: true, deptCd: true, gradeCd: true, skillLevel: true, employType: true, deletedAt: true } },
+      project: { select: { prjNm: true, prjType: true, statusCd: true, startDt: true, endDt: true, contractMm: true, pm: { select: { name: true } } } },
+    },
+    orderBy: [{ allocRate: 'desc' }, { startDt: 'asc' }],
+  });
+  const ts = await prisma.timesheet.groupBy({
+    by: ['empId', 'prjCd'],
+    where: { workDt: { gte: start, lte: end }, weeklyWork: { statusCd: 'SUBMITTED' }, ...(scope ? { prjCd: { in: scope } } : {}) },
+    _sum: { md: true },
+  });
+  const actualOf = (empId: string, prjCd: string) => ts.find((x) => x.empId === empId && x.prjCd === prjCd)?._sum.md ?? 0;
+  const inMonth = asg.filter((a) => a.startDt <= end && a.endDt >= start);
+
+  // 프로젝트 기준
+  const prjCodes = [...new Set(inMonth.map((a) => a.prjCd))];
+  const projects = prjCodes
+    .map((prjCd) => {
+      const list = inMonth.filter((a) => a.prjCd === prjCd);
+      const p = list[0].project;
+      const members = list.map((a) => ({
+        asgId: a.asgId,
+        empId: a.empId,
+        name: a.employee.name,
+        gradeCd: a.employee.gradeCd,
+        skillLevel: a.employee.skillLevel,
+        employType: a.employee.employType,
+        roleCd: a.roleCd,
+        allocRate: a.allocRate,
+        startDt: a.startDt,
+        endDt: a.endDt,
+        active: a.startDt <= t && a.endDt >= t,
+        planMd: round1(plannedMd(a, start, end, holidays)),
+      }));
+      const empIds = [...new Set(list.map((a) => a.empId))];
+      const planMd = members.reduce((s2, m) => s2 + m.planMd, 0);
+      const actualMd = empIds.reduce((s2, id) => s2 + actualOf(id, prjCd), 0);
+      return {
+        prjCd,
+        prjNm: p.prjNm,
+        prjType: p.prjType,
+        statusCd: p.statusCd,
+        pmName: p.pm?.name ?? null,
+        startDt: p.startDt,
+        endDt: p.endDt,
+        contractMm: p.contractMm,
+        headcount: empIds.length,
+        planMd: round1(planMd),
+        actualMd,
+        planMm: round2(planMd / mdmm),
+        actualMm: round2(actualMd / mdmm),
+        members: members.map((m) => ({ ...m, actualMd: actualOf(m.empId, prjCd) })),
+      };
+    })
+    .sort((a, b) => b.headcount - a.headcount || a.prjCd.localeCompare(b.prjCd));
+
+  // 인력 기준 (전사 조회 권한이면 대기 인력도 포함)
+  const involved = new Map(asg.map((a) => [a.empId, a.employee]));
+  if (!scope) {
+    const all = await prisma.employee.findMany({ where: { AND: [usableEmp, { utilTarget: true }] }, select: { empId: true, name: true, deptCd: true, gradeCd: true, skillLevel: true, employType: true, deletedAt: true } });
+    for (const e of all) if (!involved.has(e.empId)) involved.set(e.empId, e);
+  }
+  const people = [...involved]
+    .filter(([, e]) => !e.deletedAt)
+    .map(([empId, e]) => {
+      const mine = inMonth.filter((a) => a.empId === empId);
+      const currentAlloc = asg.filter((a) => a.empId === empId && a.startDt <= t && a.endDt >= t).reduce((s2, a) => s2 + a.allocRate, 0);
+      return {
+        empId,
+        name: e.name,
+        deptCd: e.deptCd,
+        gradeCd: e.gradeCd,
+        skillLevel: e.skillLevel,
+        employType: e.employType,
+        currentAlloc,
+        overAlloc: Math.max(0, currentAlloc - 100),
+        projectCount: new Set(mine.map((a) => a.prjCd)).size,
+        assignments: mine.map((a) => ({ asgId: a.asgId, prjCd: a.prjCd, prjNm: a.project.prjNm, roleCd: a.roleCd, allocRate: a.allocRate, startDt: a.startDt, endDt: a.endDt, planMd: round1(plannedMd(a, start, end, holidays)), actualMd: actualOf(empId, a.prjCd) })),
+        // 월별 투입률(%) = Σ(배정 영업일 × 투입률) ÷ 그 달 영업일
+        timeline: months.map((ym) => {
+          const m = monthRange(ym);
+          const bd = businessDays(m.start, m.end, holidays).length;
+          const items = asg
+            .filter((a) => a.empId === empId && a.startDt <= m.end && a.endDt >= m.start)
+            .map((a) => ({ prjCd: a.prjCd, pct: bd ? Math.round((plannedMd(a, m.start, m.end, holidays) / bd) * 100) : 0 }))
+            .filter((x) => x.pct > 0);
+          return { ym, total: items.reduce((s2, x) => s2 + x.pct, 0), items };
+        }),
+      };
+    })
+    .sort((a, b) => a.deptCd.localeCompare(b.deptCd) || a.name.localeCompare(b.name));
+
+  res.json({ ym: q.ym, months, projects, people });
 });

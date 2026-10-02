@@ -33,6 +33,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: '현황',
     items: [
+      { to: '/staffing', label: '투입 현황', icon: '▩', roles: ALL_MANAGERS },
       { to: '/utilization', label: '가동률', icon: '▤' },
       { to: '/project-mm', label: '프로젝트 MM', icon: '▥', roles: ALL_MANAGERS },
     ],

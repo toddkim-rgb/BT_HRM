@@ -324,7 +324,7 @@ async function companyWeeklyData(week: string) {
   const attention = {
     overAllocated: [...allocBy].filter(([, v]) => v > 100).map(([empId, v]) => ({ name: nameOf.get(empId) ?? empId, total: v })),
     bench: working.filter((e) => !allocBy.has(e.empId)).map((e) => e.name),
-    lowUtil: utilRows.filter((r) => r.util != null && r.availMd > 0 && r.util < lowUtil && submittedIds.has(r.empId)).map((r) => ({ name: r.name, util: r.util })),
+    lowUtil: utilRows.filter((r) => !r.inactive && r.util != null && r.availMd > 0 && r.util < lowUtil && submittedIds.has(r.empId)).map((r) => ({ name: r.name, util: r.util })),
     lowUtilPct: lowUtil,
     releasing: active
       .filter((a) => a.endDt <= in30 && nameOf.has(a.empId))
