@@ -84,9 +84,11 @@ export default function WeeklyWork() {
   const [err, setErr] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string[] | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [sel, setSel] = useState<string | null>(null); // 선택한 프로젝트 카드
 
   useEffect(() => {
-    setV(data);
+    // 실적·계획·이슈가 달린 프로젝트는 카드가 있어야 하므로 투입시간 행에 없으면 추가
+    setV(data ? withItemRows(data) : data);
     setDirty(false);
     setErr(null);
   }, [data]);
@@ -95,8 +97,8 @@ export default function WeeklyWork() {
   const editable = isMine && v != null;
   const submitted = v?.statusCd === 'SUBMITTED';
   const isSm = (prjCd: string) => prjMap.get(prjCd)?.prjType === 'SM';
-  const workProjects = (v?.timesheet ?? []).filter((r) => r.prjType !== 'NP' && prjMap.get(r.prjCd)?.prjType !== 'NP');
-  const prjOptions: [string, string][] = workProjects.map((r) => [r.prjCd, `${r.prjCd} ${r.prjNm ?? ''}`]);
+  const typeOf = (r: TsRow) => r.prjType ?? prjMap.get(r.prjCd)?.prjType ?? (r.prjCd.startsWith('NP-') ? 'NP' : undefined);
+  const nameOf = (r: TsRow) => r.prjNm ?? prjMap.get(r.prjCd)?.prjNm ?? '';
 
   const goWeek = (n: number) => {
     if (dirty && !window.confirm('저장하지 않은 내용이 있습니다. 이동할까요?')) return;
@@ -180,8 +182,47 @@ export default function WeeklyWork() {
     if (!items.length) return toast('전주 차주 계획이 없습니다.', 'info');
     update((d) => {
       for (const it of items) if (!d.actualItems.some((a) => a.prjCd === it.prjCd && a.workNm === it.workNm)) d.actualItems.push(it);
+      Object.assign(d, withItemRows(d));
     });
-    toast(`전주 계획 ${items.length}건을 불러왔습니다.`, 'info');
+    toast(`전주 계획 ${items.length}건을 불러왔습니다. (프로젝트별 '주간 업무 내용'에서 확인)`, 'info');
+  };
+
+  // MD 일괄 입력: 선택한 프로젝트의 영업일을 한 번에 1 또는 0.5로 채운다 (하루 합계 1.0 이내)
+  const bulkMd = (prjCd: string, val: number | null) => {
+    // 하루 남은 여유(1.0 − 다른 프로젝트 입력)를 넘지 않게 채운다
+    const next: Record<string, number | null> = {};
+    let filled = 0;
+    let limited = 0;
+    if (val != null) {
+      for (const day of v.businessDays) {
+        const others = v.timesheet.filter((r) => r.prjCd !== prjCd).reduce((sum, r) => sum + (r.md[day] ?? 0), 0);
+        const room = 1 - others;
+        const fit: number | null = room >= val ? val : room >= 0.5 ? 0.5 : null;
+        next[day] = fit;
+        if (fit != null) filled++;
+        if (fit !== val) limited++;
+      }
+    }
+    update((d) => {
+      const row = d.timesheet.find((r) => r.prjCd === prjCd);
+      if (row) row.md = next;
+    });
+    if (val == null) return;
+    if (!limited) toast(`영업일 ${filled}일에 ${val}MD씩 입력했습니다.`, 'info');
+    else if (!filled) toast('다른 프로젝트 입력으로 하루 1.0MD가 이미 찼습니다. 입력할 수 있는 날이 없습니다.', 'bad');
+    else toast(`${filled}일에 입력했습니다. 다른 프로젝트 입력 때문에 ${limited}일은 줄이거나 비웠습니다 (하루 합계 1.0MD 이내).`, 'info');
+  };
+
+  const removeRow = (prjCd: string) => {
+    const linked = v.actualItems.filter((i) => i.prjCd === prjCd).length + v.planItems.filter((i) => i.prjCd === prjCd).length + v.issues.filter((i) => i.prjCd === prjCd).length;
+    if (linked && !window.confirm(`${prjCd}에 입력한 업무 내용·이슈·계획 ${linked}건도 함께 지워집니다. 계속할까요?`)) return;
+    update((d) => {
+      d.timesheet = d.timesheet.filter((r) => r.prjCd !== prjCd);
+      d.actualItems = d.actualItems.filter((i) => i.prjCd !== prjCd);
+      d.planItems = d.planItems.filter((i) => i.prjCd !== prjCd);
+      d.issues = d.issues.filter((i) => i.prjCd !== prjCd);
+    });
+    setSel(null);
   };
 
   const statusOf = (it: Item) => {
@@ -191,7 +232,16 @@ export default function WeeklyWork() {
     return it.progressAfter == null ? null : 'NORMAL';
   };
 
-  const defaultPrj = prjOptions[0]?.[0] ?? '';
+  // 선택한 프로젝트 (없으면 첫 카드)
+  const cur = v.timesheet.find((r) => r.prjCd === sel) ?? v.timesheet[0] ?? null;
+  const curCd = cur?.prjCd ?? '';
+  const curNp = cur ? typeOf(cur) === 'NP' : false;
+  const curSm = cur ? typeOf(cur) === 'SM' : false;
+  const countOf = (prjCd: string) => ({
+    actual: v.actualItems.filter((i) => i.prjCd === prjCd).length,
+    plan: v.planItems.filter((i) => i.prjCd === prjCd).length,
+    issue: v.issues.filter((i) => i.prjCd === prjCd).length,
+  });
 
   return (
     <div>
@@ -237,11 +287,11 @@ export default function WeeklyWork() {
       <ErrorBox error={err} />
 
       <div className="stack">
-        {/* ① 투입시간 */}
+        {/* ① 프로젝트 카드 선택 */}
         <Card
           title={
             <>
-              <span className="section-no">1</span>투입시간 (MD)
+              <span className="section-no">1</span>프로젝트 선택
             </>
           }
           actions={
@@ -252,6 +302,9 @@ export default function WeeklyWork() {
                     배정대로 채우기
                   </button>
                 )}
+                <button className="btn sm" onClick={loadCarryover}>
+                  전주 계획 불러오기
+                </button>
                 <button className="btn sm" onClick={() => setAddOpen(true)}>
                   + 프로젝트/공통코드
                 </button>
@@ -259,368 +312,326 @@ export default function WeeklyWork() {
             )
           }
         >
-          <div className="ts-mobile">
+          {!v.timesheet.length ? (
+            <div className="empty">이번 주 배정된 프로젝트가 없습니다. {editable && "'+ 프로젝트/공통코드'로 추가하세요."}</div>
+          ) : (
+            <div className="ww-cards">
+              {v.timesheet.map((r) => {
+                const c = countOf(r.prjCd);
+                const np = typeOf(r) === 'NP';
+                const plan = planOf(r.prjCd);
+                return (
+                  <button type="button" key={r.prjCd} className={`ww-card ${r.prjCd === curCd ? 'active' : ''}`} onClick={() => setSel(r.prjCd)} aria-pressed={r.prjCd === curCd}>
+                    <span className="row" style={{ justifyContent: 'space-between' }}>
+                      <span className="small muted">{r.prjCd}</span>
+                      {np ? <Badge tone="neutral">공통</Badge> : <Badge tone="info">{typeOf(r) ?? ''}</Badge>}
+                    </span>
+                    <strong className="ww-card-name">{nameOf(r)}</strong>
+                    <span className="ww-card-md">
+                      {num(rowSum(r))}
+                      <small> MD{plan != null && ` / 계획 ${num(plan)}`}</small>
+                    </span>
+                    {!np && (
+                      <span className="small muted">
+                        업무 {c.actual} · 이슈 {c.issue} · 계획 {c.plan}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div className="ww-days" aria-label="요일별 합계">
             {v.days.map((d) => {
               const w = dow(d);
               const off = v.holidays.includes(d) || w === '토' || w === '일';
+              const sum = daySum(d);
               return (
-                <div key={d} className={`ts-day ${off ? 'off' : ''}`}>
-                  <div className="ts-day-head">
-                    <span className={v.holidays.includes(d) ? 'bad-text' : off ? 'muted' : ''}>
-                      {mdLabel(d)} ({w}){v.holidays.includes(d) && ' 공휴일'}
-                    </span>
-                    <span className={daySum(d) > 1 ? 'bad-text' : 'muted'}>{daySum(d) ? `${num(daySum(d))}MD` : ''}</span>
+                <div key={d} className={`ww-day ${off ? 'off' : ''} ${sum > 1 ? 'over' : ''}`}>
+                  <span className={v.holidays.includes(d) ? 'bad-text' : ''}>
+                    {w} <small>{mdLabel(d)}</small>
+                  </span>
+                  <strong>{sum ? num(sum) : '-'}</strong>
+                </div>
+              );
+            })}
+            <div className="ww-day total">
+              <span>주간 합계</span>
+              <strong>
+                {num(total)} <small>/ 영업일 {v.businessDays.length}</small>
+              </strong>
+            </div>
+          </div>
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            카드를 눌러 프로젝트별로 투입시간 → 주간 업무 내용 → 이슈 → 차주 계획 순으로 입력합니다. 하루 합계는 1.0MD를 넘을 수 없고, 휴가는 공통코드 <b>NP-LV</b>로 입력합니다.
+          </p>
+        </Card>
+
+        {/* ② 선택한 프로젝트 입력 */}
+        {cur && (
+          <Card
+            className="ww-panel"
+            title={
+              <>
+                <span className="section-no">2</span>
+                {curCd} {nameOf(cur)}
+              </>
+            }
+            actions={
+              editable && (
+                <button className="btn sm danger" onClick={() => removeRow(curCd)}>
+                  이 프로젝트 빼기
+                </button>
+              )
+            }
+          >
+            {/* 투입시간 */}
+            <div className="ww-step">
+              <div className="ww-step-head">
+                <h3>투입시간 (MD)</h3>
+                {editable && (
+                  <div className="row">
+                    <span className="small muted">MD 일괄 입력</span>
+                    <button className="btn sm" onClick={() => bulkMd(curCd, 1)}>
+                      전체 1
+                    </button>
+                    <button className="btn sm" onClick={() => bulkMd(curCd, 0.5)}>
+                      전체 0.5
+                    </button>
+                    <button className="btn sm ghost" onClick={() => bulkMd(curCd, null)}>
+                      지우기
+                    </button>
                   </div>
-                  {v.timesheet.map((r, ri) => (
-                    <div className="ts-day-row" key={r.prjCd}>
-                      <span className="name">
-                        <strong>{r.prjCd}</strong> <span className="small muted">{r.prjNm}</span>
+                )}
+              </div>
+              <div className="ww-md-grid">
+                {v.days.map((d) => {
+                  const w = dow(d);
+                  const off = v.holidays.includes(d) || w === '토' || w === '일';
+                  return (
+                    <label key={d} className={`ww-md-cell ${off ? 'off' : ''} ${daySum(d) > 1 ? 'over' : ''}`}>
+                      <span className={v.holidays.includes(d) ? 'bad-text' : ''}>
+                        {w} <small>{mdLabel(d)}</small>
                       </span>
                       {editable ? (
                         <Select
-                          value={r.md[d] == null ? '' : String(r.md[d])}
+                          value={cur.md[d] == null ? '' : String(cur.md[d])}
                           options={MD_OPTS}
                           onChange={(val) =>
                             update((dr) => {
-                              dr.timesheet[ri].md[d] = val === '' ? null : Number(val);
+                              const row = dr.timesheet.find((x) => x.prjCd === curCd);
+                              if (row) row.md[d] = val === '' ? null : Number(val);
                             })
                           }
                         />
                       ) : (
-                        <span>{r.md[d] ?? '-'}</span>
+                        <strong>{cur.md[d] ?? '-'}</strong>
                       )}
-                    </div>
-                  ))}
+                    </label>
+                  );
+                })}
+                <div className="ww-md-cell total">
+                  <span>합계</span>
+                  <strong>
+                    {num(rowSum(cur))}
+                    {planOf(curCd) != null && <small> / 계획 {num(planOf(curCd))}</small>}
+                  </strong>
                 </div>
-              );
-            })}
-            {v.timesheet.map((r) => (
-              <div className="row" key={r.prjCd} style={{ justifyContent: 'space-between' }}>
-                <span className="small">{r.prjCd}</span>
-                <span className="small">
-                  {num(rowSum(r))}MD{planOf(r.prjCd) != null && <span className="muted"> / 계획 {num(planOf(r.prjCd))}</span>}
-                </span>
               </div>
-            ))}
-            <div className="row" style={{ justifyContent: 'space-between', fontWeight: 700, marginTop: 4 }}>
-              <span>주간 합계</span>
-              <span>{num(total)}MD</span>
             </div>
-          </div>
-          <div className="table-wrap ts-desktop">
-            <table className="tbl ts-table">
-              <thead>
-                <tr>
-                  <th>프로젝트</th>
-                  {v.days.map((d) => {
-                    const w = dow(d);
-                    const hol = v.holidays.includes(d);
+
+            {curNp ? (
+              <p className="muted small" style={{ marginBottom: 0 }}>
+                공통코드(휴가·교육·대기·일반관리)는 투입시간만 입력합니다.
+              </p>
+            ) : (
+              <>
+                {/* 주간 업무 내용 (금주 실적) */}
+                <div className="ww-step">
+                  <div className="ww-step-head">
+                    <h3>주간 업무 내용</h3>
+                    {editable && (
+                      <button className="btn sm" onClick={() => update((d) => void d.actualItems.push({ prjCd: curCd, workNm: '', progressBefore: 0 }))}>
+                        + 업무 추가
+                      </button>
+                    )}
+                  </div>
+                  {!v.actualItems.some((i) => i.prjCd === curCd) && <div className="empty">이번 주 수행한 업무를 추가하세요. 전주에 적은 차주 계획은 자동으로 들어옵니다.</div>}
+                  {v.actualItems.map((it, i) => {
+                    if (it.prjCd !== curCd) return null;
+                    const st = statusOf(it);
+                    const set = (patch: Partial<Item>) =>
+                      update((d) => {
+                        Object.assign(d.actualItems[i], patch);
+                      });
                     return (
-                      <th key={d} className={hol ? 'holiday' : w === '토' || w === '일' ? 'weekend' : ''}>
-                        {w}
-                        <div className="small">{mdLabel(d)}</div>
-                      </th>
+                      <div className="item-card" key={i}>
+                        <div className="item-head">
+                          <div className="row">{st && <Badge code={st}>{ITEM_STATUS[st]}</Badge>}</div>
+                          {editable && (
+                            <button className="btn sm danger" onClick={() => update((d) => void d.actualItems.splice(i, 1))}>
+                              삭제
+                            </button>
+                          )}
+                        </div>
+                        {curSm ? (
+                          <div className="item-grid sm">
+                            <Field label="작업 항목" full>
+                              <input value={it.workNm} disabled={!editable} onChange={(e) => set({ workNm: e.target.value })} />
+                            </Field>
+                            <Field label="업무유형">
+                              <Select value={it.smWorkType ?? 'ETC'} options={SM_WORK_TYPE} disabled={!editable} onChange={(smWorkType) => set({ smWorkType })} />
+                            </Field>
+                            <Field label="처리건수">
+                              <input type="number" min={0} value={it.smCount ?? ''} disabled={!editable} onChange={(e) => set({ smCount: e.target.value === '' ? null : Number(e.target.value) })} />
+                            </Field>
+                            <Field label="주요 내용" full>
+                              <textarea value={it.content ?? ''} disabled={!editable} onChange={(e) => set({ content: e.target.value })} rows={2} />
+                            </Field>
+                          </div>
+                        ) : (
+                          <div className="item-grid ww-actual">
+                            <Field label="작업 항목">
+                              <input value={it.workNm} disabled={!editable} onChange={(e) => set({ workNm: e.target.value })} />
+                            </Field>
+                            <Field label="전주(%)">
+                              <input type="number" min={0} max={100} value={it.progressBefore ?? 0} disabled={!editable} onChange={(e) => set({ progressBefore: Number(e.target.value) })} />
+                            </Field>
+                            <Field label="목표(%)">
+                              <input type="number" min={0} max={100} value={it.targetProgress ?? ''} disabled={!editable} onChange={(e) => set({ targetProgress: e.target.value === '' ? null : Number(e.target.value) })} />
+                            </Field>
+                            <Field label="금주(%)" required>
+                              <input type="number" min={0} max={100} value={it.progressAfter ?? ''} disabled={!editable} onChange={(e) => set({ progressAfter: e.target.value === '' ? null : Number(e.target.value) })} />
+                            </Field>
+                            <Field label="상세 내용" full>
+                              <textarea value={it.content ?? ''} disabled={!editable} onChange={(e) => set({ content: e.target.value })} rows={2} />
+                            </Field>
+                            {st === 'DELAY' && (
+                              <Field label="지연 사유" required full>
+                                <input value={it.delayReason ?? ''} disabled={!editable} onChange={(e) => set({ delayReason: e.target.value })} placeholder="목표 대비 미달 사유를 입력하세요" />
+                              </Field>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                  <th>합계</th>
-                  <th>계획</th>
-                  {editable && <th />}
-                </tr>
-              </thead>
-              <tbody>
-                {v.timesheet.map((r, ri) => (
-                  <tr key={r.prjCd}>
-                    <td>
-                      <div className="nowrap">
-                        <strong>{r.prjCd}</strong>
-                      </div>
-                      <div className="small muted">{r.prjNm}</div>
-                    </td>
-                    {v.days.map((d) => (
-                      <td key={d} className={daySum(d) > 1 ? 'over' : ''}>
-                        {editable ? (
-                          <Select
-                            value={r.md[d] == null ? '' : String(r.md[d])}
-                            options={MD_OPTS}
-                            onChange={(val) =>
-                              update((dr) => {
-                                dr.timesheet[ri].md[d] = val === '' ? null : Number(val);
-                              })
-                            }
-                          />
-                        ) : (
-                          (r.md[d] ?? '')
-                        )}
-                      </td>
-                    ))}
-                    <td className="num">
-                      <strong>{num(rowSum(r))}</strong>
-                    </td>
-                    <td className="num muted" title="배정 투입률 기준 이번 주 계획 MD">
-                      {planOf(r.prjCd) != null ? num(planOf(r.prjCd)) : '-'}
-                    </td>
+                </div>
+
+                {/* 이슈 */}
+                <div className="ww-step">
+                  <div className="ww-step-head">
+                    <h3>이슈 / 리스크</h3>
                     {editable && (
-                      <td>
-                        <button
-                          className="icon-btn"
-                          aria-label="행 삭제"
-                          onClick={() =>
-                            update((dr) => {
-                              dr.timesheet.splice(ri, 1);
-                            })
-                          }
-                        >
-                          ✕
-                        </button>
-                      </td>
+                      <button className="btn sm" onClick={() => update((d) => void d.issues.push({ prjCd: curCd, issueType: 'ISSUE', severity: 'M', content: '', supportReqYn: false }))}>
+                        + 이슈 추가
+                      </button>
                     )}
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td>일 합계</td>
-                  {v.days.map((d) => (
-                    <td key={d} className={daySum(d) > 1 ? 'over bad-text' : ''}>
-                      {daySum(d) ? num(daySum(d)) : ''}
-                    </td>
-                  ))}
-                  <td className="num">{num(total)}</td>
-                  <td className="num muted">{num(v.plan.reduce((s, p) => s + p.plannedMd, 0))}</td>
-                  {editable && <td />}
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-          <p className="muted small" style={{ marginBottom: 0 }}>
-            0.5MD 단위, 하루 합계는 1.0MD를 넘을 수 없습니다. 이번 주 영업일 {v.businessDays.length}일 · 휴가는 공통코드 <b>NP-LV</b>로 입력합니다. 배정된 프로젝트는 자동으로 표시됩니다.
-          </p>
-        </Card>
+                  </div>
+                  {!v.issues.some((i) => i.prjCd === curCd) && <div className="empty">이슈가 없으면 비워 두세요.</div>}
+                  {v.issues.map((it, i) => {
+                    if (it.prjCd !== curCd) return null;
+                    const set = (patch: Partial<Issue>) =>
+                      update((d) => {
+                        Object.assign(d.issues[i], patch);
+                      });
+                    return (
+                      <div className="item-card" key={i}>
+                        <div className="item-grid plan">
+                          <Field label="구분">
+                            <Select value={it.issueType} options={ISSUE_TYPE} disabled={!editable} onChange={(issueType) => set({ issueType })} />
+                          </Field>
+                          <Field label="중요도">
+                            <Select value={it.severity} options={SEVERITY} disabled={!editable} onChange={(severity) => set({ severity })} />
+                          </Field>
+                          <Field label="지원요청">
+                            <label className="check" style={{ minHeight: 38 }}>
+                              <input type="checkbox" checked={it.supportReqYn} disabled={!editable} onChange={(e) => set({ supportReqYn: e.target.checked })} /> PM 지원 필요
+                            </label>
+                          </Field>
+                          <Field label=" ">
+                            {editable ? (
+                              <button className="btn sm danger" onClick={() => update((d) => void d.issues.splice(i, 1))}>
+                                삭제
+                              </button>
+                            ) : (
+                              <span />
+                            )}
+                          </Field>
+                          <Field label="내용" required full>
+                            <textarea value={it.content} disabled={!editable} onChange={(e) => set({ content: e.target.value })} rows={2} />
+                          </Field>
+                          <Field label="조치계획 / 요청사항" full>
+                            <input value={it.actionPlan ?? ''} disabled={!editable} onChange={(e) => set({ actionPlan: e.target.value })} />
+                          </Field>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
 
-        {/* ② 금주 실적 */}
-        <Card
-          title={
-            <>
-              <span className="section-no">2</span>금주 실적
-            </>
-          }
-          actions={
-            editable && (
-              <>
-                <button className="btn sm" onClick={loadCarryover}>
-                  전주 계획 불러오기
-                </button>
-                <button
-                  className="btn sm"
-                  disabled={!defaultPrj}
-                  onClick={() =>
-                    update((d) => {
-                      d.actualItems.push({ prjCd: defaultPrj, workNm: '', progressBefore: 0 });
-                    })
-                  }
-                >
-                  + 실적
-                </button>
+                {/* 차주 계획 */}
+                <div className="ww-step">
+                  <div className="ww-step-head">
+                    <h3>차주 계획</h3>
+                    {editable && (
+                      <button className="btn sm" onClick={() => update((d) => void d.planItems.push({ prjCd: curCd, workNm: '' }))}>
+                        + 계획 추가
+                      </button>
+                    )}
+                  </div>
+                  {!v.planItems.some((i) => i.prjCd === curCd) && <div className="empty">다음 주 계획을 추가하세요. (보고서 전체에 최소 1건, 차주 전일 휴가 시 예외)</div>}
+                  {v.planItems.map((it, i) => {
+                    if (it.prjCd !== curCd) return null;
+                    const set = (patch: Partial<Item>) =>
+                      update((d) => {
+                        Object.assign(d.planItems[i], patch);
+                      });
+                    return (
+                      <div className="item-card" key={i}>
+                        <div className="item-grid plan">
+                          <Field label="작업 항목" full>
+                            <input value={it.workNm} disabled={!editable} onChange={(e) => set({ workNm: e.target.value })} />
+                          </Field>
+                          {curSm ? (
+                            <Field label="업무유형">
+                              <Select value={it.smWorkType ?? 'ETC'} options={SM_WORK_TYPE} disabled={!editable} onChange={(smWorkType) => set({ smWorkType })} />
+                            </Field>
+                          ) : (
+                            <Field label="목표 진척률(%)">
+                              <input type="number" min={0} max={100} value={it.targetProgress ?? ''} disabled={!editable} onChange={(e) => set({ targetProgress: e.target.value === '' ? null : Number(e.target.value) })} />
+                            </Field>
+                          )}
+                          <Field label="완료 예정일">
+                            <input type="date" value={it.dueDt ?? ''} disabled={!editable} onChange={(e) => set({ dueDt: e.target.value || null })} />
+                          </Field>
+                          <Field label=" ">
+                            {editable ? (
+                              <button className="btn sm danger" onClick={() => update((d) => void d.planItems.splice(i, 1))}>
+                                삭제
+                              </button>
+                            ) : (
+                              <span />
+                            )}
+                          </Field>
+                          <Field label="계획 내용" full>
+                            <input value={it.content ?? ''} disabled={!editable} onChange={(e) => set({ content: e.target.value })} />
+                          </Field>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </>
-            )
-          }
-        >
-          {!v.actualItems.length && <div className="empty">실적 항목이 없습니다.{editable && !defaultPrj && ' 먼저 ①에 프로젝트를 추가하세요.'}</div>}
-          {v.actualItems.map((it, i) => {
-            const sm = isSm(it.prjCd);
-            const st = statusOf(it);
-            const set = (patch: Partial<Item>) =>
-              update((d) => {
-                Object.assign(d.actualItems[i], patch);
-              });
-            return (
-              <div className="item-card" key={i}>
-                <div className="item-head">
-                  <div className="row">
-                    {st && <Badge code={st}>{ITEM_STATUS[st]}</Badge>}
-                    {sm && <Badge tone="info">SM</Badge>}
-                  </div>
-                  {editable && (
-                    <button className="btn sm danger" onClick={() => update((d) => void d.actualItems.splice(i, 1))}>
-                      삭제
-                    </button>
-                  )}
-                </div>
-                {sm ? (
-                  <div className="item-grid sm">
-                    <Field label="프로젝트">
-                      <PrjSelect value={it.prjCd} options={prjOptions} disabled={!editable} onChange={(prjCd) => set({ prjCd })} />
-                    </Field>
-                    <Field label="작업 항목">
-                      <input value={it.workNm} disabled={!editable} onChange={(e) => set({ workNm: e.target.value })} />
-                    </Field>
-                    <Field label="업무유형">
-                      <Select value={it.smWorkType ?? 'ETC'} options={SM_WORK_TYPE} disabled={!editable} onChange={(smWorkType) => set({ smWorkType })} />
-                    </Field>
-                    <Field label="처리건수">
-                      <input type="number" min={0} value={it.smCount ?? ''} disabled={!editable} onChange={(e) => set({ smCount: e.target.value === '' ? null : Number(e.target.value) })} />
-                    </Field>
-                    <Field label="주요 내용" full>
-                      <textarea value={it.content ?? ''} disabled={!editable} onChange={(e) => set({ content: e.target.value })} rows={2} />
-                    </Field>
-                  </div>
-                ) : (
-                  <div className="item-grid">
-                    <Field label="프로젝트">
-                      <PrjSelect value={it.prjCd} options={prjOptions} disabled={!editable} onChange={(prjCd) => set({ prjCd })} />
-                    </Field>
-                    <Field label="작업 항목">
-                      <input value={it.workNm} disabled={!editable} onChange={(e) => set({ workNm: e.target.value })} />
-                    </Field>
-                    <Field label="전주(%)">
-                      <input type="number" min={0} max={100} value={it.progressBefore ?? 0} disabled={!editable} onChange={(e) => set({ progressBefore: Number(e.target.value) })} />
-                    </Field>
-                    <Field label="목표(%)">
-                      <input type="number" min={0} max={100} value={it.targetProgress ?? ''} disabled={!editable} onChange={(e) => set({ targetProgress: e.target.value === '' ? null : Number(e.target.value) })} />
-                    </Field>
-                    <Field label="금주(%)" required>
-                      <input type="number" min={0} max={100} value={it.progressAfter ?? ''} disabled={!editable} onChange={(e) => set({ progressAfter: e.target.value === '' ? null : Number(e.target.value) })} />
-                    </Field>
-                    <Field label="상세 내용" full>
-                      <textarea value={it.content ?? ''} disabled={!editable} onChange={(e) => set({ content: e.target.value })} rows={2} />
-                    </Field>
-                    {st === 'DELAY' && (
-                      <Field label="지연 사유" required full>
-                        <input value={it.delayReason ?? ''} disabled={!editable} onChange={(e) => set({ delayReason: e.target.value })} placeholder="목표 대비 미달 사유를 입력하세요" />
-                      </Field>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </Card>
+            )}
+          </Card>
+        )}
 
-        {/* ③ 차주 계획 */}
+        {/* ③ 특이사항 */}
         <Card
           title={
             <>
-              <span className="section-no">3</span>차주 계획
-            </>
-          }
-          actions={
-            editable && (
-              <button className="btn sm" disabled={!defaultPrj} onClick={() => update((d) => void d.planItems.push({ prjCd: defaultPrj, workNm: '' }))}>
-                + 계획
-              </button>
-            )
-          }
-        >
-          {!v.planItems.length && <div className="empty">차주 계획이 없습니다. (최소 1건, 차주 전일 휴가 시 예외)</div>}
-          {v.planItems.map((it, i) => {
-            const sm = isSm(it.prjCd);
-            const set = (patch: Partial<Item>) =>
-              update((d) => {
-                Object.assign(d.planItems[i], patch);
-              });
-            return (
-              <div className="item-card" key={i}>
-                <div className="item-grid plan">
-                  <Field label="프로젝트">
-                    <PrjSelect value={it.prjCd} options={prjOptions} disabled={!editable} onChange={(prjCd) => set({ prjCd })} />
-                  </Field>
-                  <Field label="작업 항목">
-                    <input value={it.workNm} disabled={!editable} onChange={(e) => set({ workNm: e.target.value })} />
-                  </Field>
-                  {sm ? (
-                    <Field label="업무유형">
-                      <Select value={it.smWorkType ?? 'ETC'} options={SM_WORK_TYPE} disabled={!editable} onChange={(smWorkType) => set({ smWorkType })} />
-                    </Field>
-                  ) : (
-                    <Field label="목표 진척률(%)">
-                      <input type="number" min={0} max={100} value={it.targetProgress ?? ''} disabled={!editable} onChange={(e) => set({ targetProgress: e.target.value === '' ? null : Number(e.target.value) })} />
-                    </Field>
-                  )}
-                  <Field label="완료 예정일">
-                    <input type="date" value={it.dueDt ?? ''} disabled={!editable} onChange={(e) => set({ dueDt: e.target.value || null })} />
-                  </Field>
-                  <Field label="계획 내용" full>
-                    <div className="row" style={{ flexWrap: 'nowrap' }}>
-                      <input value={it.content ?? ''} disabled={!editable} onChange={(e) => set({ content: e.target.value })} />
-                      {editable && (
-                        <button className="btn sm danger" onClick={() => update((d) => void d.planItems.splice(i, 1))}>
-                          삭제
-                        </button>
-                      )}
-                    </div>
-                  </Field>
-                </div>
-              </div>
-            );
-          })}
-        </Card>
-
-        {/* ④ 이슈/리스크 */}
-        <Card
-          title={
-            <>
-              <span className="section-no">4</span>이슈 / 리스크
-            </>
-          }
-          actions={
-            editable && (
-              <button
-                className="btn sm"
-                disabled={!defaultPrj}
-                onClick={() => update((d) => void d.issues.push({ prjCd: defaultPrj, issueType: 'ISSUE', severity: 'M', content: '', supportReqYn: false }))}
-              >
-                + 신규 이슈
-              </button>
-            )
-          }
-        >
-          {!v.issues.length && <div className="empty">이슈가 없으면 생략할 수 있습니다.</div>}
-          {v.issues.map((it, i) => {
-            const set = (patch: Partial<Issue>) =>
-              update((d) => {
-                Object.assign(d.issues[i], patch);
-              });
-            return (
-              <div className="item-card" key={i}>
-                <div className="item-grid plan">
-                  <Field label="프로젝트">
-                    <PrjSelect value={it.prjCd} options={prjOptions} disabled={!editable} onChange={(prjCd) => set({ prjCd })} />
-                  </Field>
-                  <Field label="구분">
-                    <Select value={it.issueType} options={ISSUE_TYPE} disabled={!editable} onChange={(issueType) => set({ issueType })} />
-                  </Field>
-                  <Field label="중요도">
-                    <Select value={it.severity} options={SEVERITY} disabled={!editable} onChange={(severity) => set({ severity })} />
-                  </Field>
-                  <Field label="지원요청">
-                    <label className="check" style={{ minHeight: 38 }}>
-                      <input type="checkbox" checked={it.supportReqYn} disabled={!editable} onChange={(e) => set({ supportReqYn: e.target.checked })} /> PM 지원 필요
-                    </label>
-                  </Field>
-                  <Field label="내용" required full>
-                    <textarea value={it.content} disabled={!editable} onChange={(e) => set({ content: e.target.value })} rows={2} />
-                  </Field>
-                  <Field label="조치계획 / 요청사항" full>
-                    <div className="row" style={{ flexWrap: 'nowrap' }}>
-                      <input value={it.actionPlan ?? ''} disabled={!editable} onChange={(e) => set({ actionPlan: e.target.value })} />
-                      {editable && (
-                        <button className="btn sm danger" onClick={() => update((d) => void d.issues.splice(i, 1))}>
-                          삭제
-                        </button>
-                      )}
-                    </div>
-                  </Field>
-                </div>
-              </div>
-            );
-          })}
-        </Card>
-
-        {/* ⑤ 특이사항 */}
-        <Card
-          title={
-            <>
-              <span className="section-no">5</span>특이사항 / 건의
+              <span className="section-no">3</span>특이사항 / 건의
             </>
           }
         >
@@ -647,6 +658,7 @@ export default function WeeklyWork() {
           onClose={() => setAddOpen(false)}
           onAdd={(p) => {
             update((d) => void d.timesheet.push({ prjCd: p.prjCd, prjNm: p.prjNm, prjType: p.prjType, md: {} }));
+            setSel(p.prjCd);
             setAddOpen(false);
           }}
         />
@@ -680,9 +692,11 @@ export default function WeeklyWork() {
   );
 }
 
-function PrjSelect({ value, options, onChange, disabled }: { value: string; options: [string, string][]; onChange: (v: string) => void; disabled?: boolean }) {
-  const opts = options.some(([k]) => k === value) ? options : [[value, value] as [string, string], ...options];
-  return <Select value={value} options={opts} onChange={onChange} disabled={disabled} />;
+/** 실적·계획·이슈에 쓰인 프로젝트가 투입시간 행에 없으면 추가 (카드로 보여 주기 위해) */
+function withItemRows(view: View): View {
+  const have = new Set(view.timesheet.map((r) => r.prjCd));
+  const extra = [...new Set([...view.actualItems, ...view.planItems, ...view.issues].map((i) => i.prjCd))].filter((c) => !have.has(c));
+  return extra.length ? { ...view, timesheet: [...view.timesheet, ...extra.map((prjCd) => ({ prjCd, md: {} }))] } : view;
 }
 
 function AddRowModal({ projects, onAdd, onClose }: { projects: Project[]; onAdd: (p: Project) => void; onClose: () => void }) {
