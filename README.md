@@ -1,6 +1,6 @@
 # BT-HRM · SM·SI 사업부문 인력관리 시스템
 
-[SM_SI_인력관리시스템_명세서.md](SM_SI_인력관리시스템_명세서.md)(v1.5)를 기준으로 개발하는 인력관리 시스템입니다.
+[SM_SI_인력관리시스템_명세서.md](SM_SI_인력관리시스템_명세서.md)(v1.6)를 기준으로 개발하는 인력관리 시스템입니다.
 
 | 구분 | 기술 |
 |---|---|
@@ -48,7 +48,7 @@ npm run dev     # API(4000) + 웹(5173) 동시 실행
 ```bash
 cp server/prisma/dev.db server/prisma/test-copy.db
 cd server && DATABASE_URL="file:./test-copy.db" PORT=4100 npx tsx src/index.ts
-cd client && API_TARGET=http://localhost:4100 WEB_PORT=5273 npx vite --strictPort
+cd client && API_TARGET=http://localhost:4100 WEB_PORT=5273 node node_modules/vite/bin/vite.js --strictPort
 ```
 
 ## 폴더 구조
@@ -71,7 +71,7 @@ client/
 | 구분 | 범위 | 상태 |
 |---|---|---|
 | 기반 | 이메일 로그인·권한, 로그인 보조(비밀번호 재설정 요청·ID 찾기), 인력(삭제·복구)·협력사·프로젝트 기준정보, 기준값·공휴일 | ✅ 완료 |
-| 투입 | 투입 배정(다중 프로젝트 투입·과투입 %), 프로젝트 MM | ✅ 완료 |
+| 투입 | 투입 배정 보드(드래그 앤 드롭으로 추가·삭제·이동, 다중 프로젝트 투입·과투입 %), 프로젝트 MM | ✅ 완료 |
 | 주간보고 자동화 | 개인 주간 업무보고(프로젝트 카드 선택 입력·MD 일괄 입력·전주 계획 이월·배정대로 채우기·제출 검증) → 프로젝트 주간보고(자동 취합·주요 마일스톤·PM 의견·확정) → 전사 One-Page(자동 집계·확정·인쇄/PDF) | ✅ 완료 |
 | 프로젝트별 투입인력 | 프로젝트별 투입현황(프로젝트 카드 → 상세, 인력별, 6개월 타임라인), 다중 투입·과투입·대기 표시 | ✅ 완료 |
 | 인력별 가동률 | 월 가동률(총/유상), 주의 인력(대기·저가동·과투입·투입 공백), 다음 달 예상 가동률, 6개월 추이 | ✅ 완료 |

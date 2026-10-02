@@ -6,6 +6,7 @@ import { ASG_ROLE, ASG_STATUS, EMPLOY_TYPE } from '../lib/codes';
 import { label } from '../lib/format';
 import { today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
+import { AssignmentBoard } from './AssignmentBoard';
 
 interface Asg {
   asgId: number;
@@ -29,6 +30,8 @@ export default function Assignments() {
   const { data, error, loading, reload } = useFetch<Asg[]>(`/assignments${qs({ prjCd, status })}`);
   const { data: projects } = useFetch<{ prjCd: string; prjNm: string; pmEmpId: string | null; statusCd: string }[]>('/projects');
   const [edit, setEdit] = useState<Partial<Asg> | null>(null);
+  const [view, setView] = useState<'board' | 'list'>('board');
+  const [refreshKey, setRefreshKey] = useState(0); // 저장 후 보드 새로고침
   const toast = useToast();
 
   const myProjects = (projects ?? []).filter((p) => !['DONE', 'STOP'].includes(p.statusCd) && (user?.role === 'ADMIN' || p.pmEmpId === user?.empId));
@@ -52,7 +55,7 @@ export default function Assignments() {
     <div>
       <PageHeader
         title="투입 배정"
-        desc="PM이 등록하면 즉시 확정됩니다. 투입률 합계가 100%를 넘어도 저장되며 과투입으로 표시됩니다."
+        desc="배정 보드에서 인력을 프로젝트로 끌어다 놓으면 바로 배정되고, 프로젝트의 인력을 인력 목록으로 끌어내면 빠집니다. 한 프로젝트에 여러 명, 한 사람을 여러 프로젝트에 배정할 수 있습니다."
         actions={
           hasRole(user, 'PM', 'ADMIN') && (
             <button className="btn primary" disabled={!myProjects.length} onClick={() => setEdit({ prjCd: prjCd || myProjects[0]?.prjCd, allocRate: 100, residentType: 'ONSITE', roleCd: 'DEV', startDt: t })}>
@@ -62,6 +65,18 @@ export default function Assignments() {
         }
       />
       <Card>
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={view === 'board'} className={view === 'board' ? 'active' : ''} onClick={() => setView('board')}>
+            배정 보드
+          </button>
+          <button role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
+            목록
+          </button>
+        </div>
+        {view === 'board' ? (
+          <AssignmentBoard onEdit={(a) => setEdit(a)} refreshKey={refreshKey} />
+        ) : (
+          <>
         <div className="filters">
           <Select value={prjCd} onChange={setPrjCd} placeholder="프로젝트 전체" options={(projects ?? []).map((p) => [p.prjCd, p.prjNm] as [string, string])} />
           <Select value={status} onChange={setStatus} options={{ 'PLANNED,ACTIVE': '투입예정·투입중', ACTIVE: '투입중', PLANNED: '투입예정', ENDED: '종료', CANCELED: '취소', '': '전체' }} />
@@ -138,6 +153,8 @@ export default function Assignments() {
             </table>
           </div>
         )}
+          </>
+        )}
       </Card>
       {edit && (
         <AssignmentForm
@@ -147,6 +164,7 @@ export default function Assignments() {
           onSaved={() => {
             setEdit(null);
             reload();
+            setRefreshKey((k) => k + 1);
           }}
         />
       )}
@@ -165,7 +183,7 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
     overAlloc: number;
     overlapping: { asgId: number; prjCd: string; roleCd: string; startDt: string; endDt: string; allocRate: number; project: { prjNm: string } }[];
   } | null>(null);
-  const { data: emps } = useFetch<{ empId: string; name: string; deptCd: string; skillLevel: string; employType: string; allocTotal: number }[]>('/employees?status=ACTIVE');
+  const { data: emps } = useFetch<{ empId: string; name: string; deptCd: string; skillLevel: string; employType: string; allocTotal: number }[]>('/employees');
   const set = (p: Partial<Asg>) => setF((s) => ({ ...s, ...p }));
 
   useEffect(() => {
