@@ -42,7 +42,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   next();
 }
 
-/** 초기·임시 비밀번호 사용자는 비밀번호 변경 전까지 다른 API 사용 불가 */
+/** 초기 비밀번호(이메일 주소) 사용자는 비밀번호 변경 전까지 다른 API 사용 불가 */
 export function blockUntilPasswordChanged(req: Request, _res: Response, next: NextFunction) {
   if (req.user?.mustChangePw) throw new HttpError(403, '비밀번호를 변경한 뒤 이용할 수 있습니다.', { code: 'PW_CHANGE_REQUIRED' });
   next();

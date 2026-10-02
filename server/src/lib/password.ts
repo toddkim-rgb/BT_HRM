@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { HttpError } from '../db.js';
 
 /** 새 비밀번호 규칙: 8자 이상, 영문·숫자 포함 */
@@ -8,18 +8,9 @@ export function assertPasswordPolicy(pw: string) {
   }
 }
 
-/** 임시 비밀번호 (헷갈리는 문자 제외, 영문·숫자 포함 10자) */
-export function tempPassword(): string {
-  const letters = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ';
-  const digits = '23456789';
-  const all = letters + digits;
-  const pick = (set: string) => set[crypto.randomInt(set.length)];
-  const chars = [pick(letters), pick(digits), ...Array.from({ length: 8 }, () => pick(all))];
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = crypto.randomInt(i + 1);
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-  return chars.join('');
+/** 초기 비밀번호 = 본인 이메일 주소(소문자). 첫 로그인 시 변경 강제(mustChangePw)와 함께 쓴다 */
+export function initialPasswordHash(email: string): Promise<string> {
+  return bcrypt.hash(email.trim().toLowerCase(), 10);
 }
 
 /** 이메일 일부 가리기: gildong.hong@example.com → gi****@example.com */

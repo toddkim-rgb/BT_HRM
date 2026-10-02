@@ -25,6 +25,9 @@ const HOLIDAYS_2026: [string, string][] = [
   ['2026-12-25', '성탄절'],
 ];
 
+// 시스템관리자 초기 로그인 아이디 (초기 비밀번호도 같은 값)
+const ADMIN_EMAIL = 'toddkim@softbowl.co.kr';
+
 const NP_CODES: [string, string][] = [
   ['NP-EDU', '교육'],
   ['NP-LV', '휴가'],
@@ -39,7 +42,8 @@ async function base() {
   for (const [dt, name] of HOLIDAYS_2026) await prisma.holiday.upsert({ where: { dt }, create: { dt, name }, update: {} });
   await prisma.employee.upsert({
     where: { empId: 'admin' },
-    create: { empId: 'admin', name: '시스템관리자', deptCd: '경영지원팀', gradeCd: '과장', skillLevel: '중급', email: 'admin@example.com', employType: 'REG', role: 'ADMIN', utilTarget: false, passwordHash: await bcrypt.hash('admin1234', 10) },
+    // 초기 아이디·비밀번호 = ADMIN_EMAIL (첫 로그인 시 비밀번호 변경 강제)
+    create: { empId: 'admin', name: '시스템관리자', deptCd: '경영지원팀', gradeCd: '과장', skillLevel: '중급', email: ADMIN_EMAIL, phone: '010-0000-0000', employType: 'REG', role: 'ADMIN', utilTarget: false, mustChangePw: true, passwordHash: await bcrypt.hash(ADMIN_EMAIL, 10) },
     update: {},
   });
 }

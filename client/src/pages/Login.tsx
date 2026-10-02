@@ -5,7 +5,6 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
 const DEMO = [
-  ['admin@example.com', 'admin1234', '시스템관리자'],
   ['ceo.kim@example.com', '1234', '경영진'],
   ['sujin.lee@example.com', '1234', 'SI PM'],
   ['junho.park@example.com', '1234', 'SM PM'],
@@ -56,6 +55,9 @@ export default function Login() {
         <button className="btn primary block" disabled={busy}>
           {busy ? '로그인 중…' : '로그인'}
         </button>
+        <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>
+          처음 로그인할 때 비밀번호는 이메일 주소와 같습니다.
+        </p>
         <div className="login-links">
           <button type="button" onClick={() => setDialog('id')}>
             아이디(이메일) 찾기
@@ -240,12 +242,12 @@ function ResetRequestDialog({ initialEmail, onClose }: { initialEmail: string; o
       <ErrorBox error={err} />
       {sent ? (
         <div className="alert good" style={{ marginBottom: 0 }}>
-          요청을 접수했습니다. 시스템관리자가 본인 확인 후 임시 비밀번호를 전달해 드립니다. 임시 비밀번호로 로그인하면 새 비밀번호를 설정하게 됩니다.
+          요청을 접수했습니다. 시스템관리자가 본인 확인 후 비밀번호를 초기화합니다. 초기화되면 이메일 주소를 비밀번호로 입력해 로그인하고, 새 비밀번호를 설정하게 됩니다.
         </div>
       ) : (
         <div className="stack" style={{ gap: 10 }}>
           <p className="muted" style={{ margin: 0 }}>
-            메일로 재설정 링크를 보내지 않고, 시스템관리자가 확인 후 임시 비밀번호를 발급합니다.
+            메일로 재설정 링크를 보내지 않고, 시스템관리자가 확인 후 비밀번호를 이메일 주소로 초기화합니다.
           </p>
           <Field label="로그인 이메일" required>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={!initialEmail} />

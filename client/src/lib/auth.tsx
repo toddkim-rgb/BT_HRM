@@ -6,7 +6,7 @@ export interface User {
   empId: string;
   name: string;
   role: Role;
-  mustChangePw?: boolean; // 초기·임시 비밀번호 → 변경 전까지 다른 화면 이용 불가
+  mustChangePw?: boolean; // 초기 비밀번호(이메일 주소) → 변경 전까지 다른 화면 이용 불가
 }
 
 interface AuthCtx {

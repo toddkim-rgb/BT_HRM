@@ -31,7 +31,7 @@ export default function AccountRequests() {
 
   return (
     <div>
-      <PageHeader title="계정 요청" desc="로그인 화면에서 접수된 비밀번호 재설정 요청과 ID 문의입니다. 본인 여부를 확인한 뒤 처리하세요. (메일은 발송하지 않습니다)" />
+      <PageHeader title="계정 요청" desc="로그인 화면에서 접수된 비밀번호 재설정 요청과 ID 문의입니다. 본인 여부를 확인한 뒤 처리하세요. 비밀번호 초기화는 본인 이메일 주소로 되돌립니다. (메일은 발송하지 않습니다)" />
       <Card>
         <div className="filters">
           <Select value={status} onChange={setStatus} options={{ OPEN: '처리 대기', DONE: '처리 완료', REJECTED: '반려', ALL: '전체' }} />
@@ -115,7 +115,7 @@ function HandleDialog({ req, onClose }: { req: Req; onClose: () => void }) {
   const toast = useToast();
   const [empId, setEmpId] = useState(req.matchedEmpId ?? '');
   const [note, setNote] = useState('');
-  const [issued, setIssued] = useState<{ tempPassword: string; email: string; name: string; phone: string | null } | null>(null);
+  const [issued, setIssued] = useState<{ email: string; name: string; phone: string | null } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { data: emps } = useFetch<{ empId: string; name: string; email: string; deptCd: string; phone: string | null }[]>('/employees');
@@ -131,7 +131,7 @@ function HandleDialog({ req, onClose }: { req: Req; onClose: () => void }) {
       setBusy(false);
     }
   };
-  const issue = () => run(async () => setIssued(await api.post<NonNullable<typeof issued>>(`/admin/account-requests/${req.reqId}/issue-temp-password`, { empId })));
+  const issue = () => run(async () => setIssued(await api.post<NonNullable<typeof issued>>(`/admin/account-requests/${req.reqId}/reset-password`, { empId })));
   const close = (statusCd: 'DONE' | 'REJECTED') =>
     run(async () => {
       await api.post(`/admin/account-requests/${req.reqId}/close`, { statusCd, note: note || null });
@@ -156,7 +156,7 @@ function HandleDialog({ req, onClose }: { req: Req; onClose: () => void }) {
             </button>
             {req.reqType === 'PW_RESET' ? (
               <button className="btn primary" disabled={busy || !empId} onClick={issue}>
-                임시 비밀번호 발급
+                비밀번호 초기화
               </button>
             ) : (
               <button className="btn primary" disabled={busy} onClick={() => close('DONE')}>
@@ -170,20 +170,17 @@ function HandleDialog({ req, onClose }: { req: Req; onClose: () => void }) {
       <ErrorBox error={err} />
       {issued ? (
         <div className="stack" style={{ gap: 10 }}>
-          <p style={{ margin: 0 }}>
-            <strong>{issued.name}</strong>님({issued.email})의 임시 비밀번호입니다. 이 창을 닫으면 다시 볼 수 없으니 본인에게 직접 전달하세요{issued.phone ? ` (연락처 ${issued.phone})` : ''}.
-          </p>
-          <div className="temp-pw">{issued.tempPassword}</div>
-          <button
-            className="btn"
-            onClick={() => {
-              navigator.clipboard?.writeText(issued.tempPassword).then(() => toast('복사했습니다.'));
-            }}
-          >
-            복사
-          </button>
+          <div className="alert good" style={{ marginBottom: 0 }}>
+            <strong>{issued.name}</strong>님의 비밀번호를 이메일 주소로 초기화했습니다.
+          </div>
+          <dl className="desc-list">
+            <dt>로그인 아이디</dt>
+            <dd>{issued.email}</dd>
+            <dt>초기 비밀번호</dt>
+            <dd>{issued.email} (아이디와 같음)</dd>
+          </dl>
           <p className="muted small" style={{ margin: 0 }}>
-            임시 비밀번호로 로그인하면 새 비밀번호를 설정해야 다른 화면을 이용할 수 있습니다.
+            본인에게 알려 주세요{issued.phone ? ` (연락처 ${issued.phone})` : ''}. 로그인하면 새 비밀번호를 설정해야 다른 화면을 이용할 수 있습니다.
           </p>
         </div>
       ) : (

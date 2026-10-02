@@ -1,11 +1,10 @@
-import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { z } from 'zod';
 import { me, requireRole } from '../auth.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { assignmentStatus, currentAllocations } from '../lib/alloc.js';
 import { notRetired } from '../lib/empFilter.js';
-import { tempPassword } from '../lib/password.js';
+import { initialPasswordHash } from '../lib/password.js';
 import { today } from '../lib/dates.js';
 import { optDate, optStr, parse } from '../lib/validate.js';
 
@@ -29,7 +28,6 @@ const employeeSchema = z.object({
   statusCd: z.preprocess((v) => (v === '' ? null : v), z.enum(['ACTIVE', 'LEAVE', 'RETIRED']).nullish()).transform((v) => v ?? null), // 선택
   role: z.enum(ROLES).default('EMP'),
   utilTarget: z.boolean().default(true),
-  initialPassword: optStr,
 });
 
 function careerYears(start: string | null): number | null {
@@ -116,48 +114,46 @@ employeesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   const body = parse(employeeSchema, req.body);
   await checkPartner(body.employType, body.partnerId);
   await checkEmail(body.email);
-  const { initialPassword, ...data } = body;
-  // 초기 비밀번호를 비우면 임시 비밀번호 자동 발급 (응답으로 1회 표시), 첫 로그인 시 변경 강제
-  const password = initialPassword || tempPassword();
+  // 초기 비밀번호 = 본인 이메일 주소, 첫 로그인 시 변경 강제
   const created = await prisma.employee.create({
-    data: { ...data, empId: await nextEmpId(), passwordHash: await bcrypt.hash(password, 10), mustChangePw: true },
+    data: { ...body, empId: await nextEmpId(), passwordHash: await initialPasswordHash(body.email), mustChangePw: true },
   });
-  res.status(201).json({ empId: created.empId, tempPassword: initialPassword ? null : password });
+  res.status(201).json({ empId: created.empId });
 });
 
 employeesRouter.put('/:empId', requireRole('ADMIN'), async (req, res) => {
   const body = parse(employeeSchema, req.body);
   await checkPartner(body.employType, body.partnerId);
-  const { initialPassword: _p, ...data } = body;
   const empId = String(req.params.empId);
-  if (!(await prisma.employee.findUnique({ where: { empId } }))) throw notFound('인력');
+  const cur = await prisma.employee.findUnique({ where: { empId } });
+  if (!cur) throw notFound('인력');
   await checkEmail(body.email, empId);
-  await prisma.employee.update({ where: { empId }, data });
+  // 아직 초기 비밀번호 상태(첫 로그인 전)에서 이메일을 바꾸면 초기 비밀번호도 새 이메일로 맞춘다
+  const resetPw = cur.mustChangePw && cur.email !== body.email;
+  await prisma.employee.update({ where: { empId }, data: { ...body, ...(resetPw ? { passwordHash: await initialPasswordHash(body.email) } : {}) } });
   res.json({ ok: true });
 });
 
-// 관리자 비밀번호 초기화: 임시 비밀번호 발급(1회 표시) → 첫 로그인 시 변경 강제
+// 관리자 비밀번호 초기화: 비밀번호를 본인 이메일 주소로 되돌림 → 첫 로그인 시 변경 강제
 employeesRouter.post('/:empId/reset-password', requireRole('ADMIN'), async (req, res) => {
   const empId = String(req.params.empId);
-  if (!(await prisma.employee.findUnique({ where: { empId } }))) throw notFound('인력');
-  const password = tempPassword();
-  await prisma.employee.update({ where: { empId }, data: { passwordHash: await bcrypt.hash(password, 10), mustChangePw: true } });
-  res.json({ ok: true, tempPassword: password });
+  const emp = await prisma.employee.findUnique({ where: { empId } });
+  if (!emp) throw notFound('인력');
+  await prisma.employee.update({ where: { empId }, data: { passwordHash: await initialPasswordHash(emp.email), mustChangePw: true } });
+  res.json({ ok: true, email: emp.email });
 });
 
 // F-030 엑셀(CSV) 일괄 등록: 클라이언트에서 파싱한 행 배열을 받는다
 employeesRouter.post('/import', requireRole('ADMIN'), async (req, res) => {
   const rows = parse(z.array(z.record(z.string(), z.unknown())).max(2000), req.body?.rows);
-  const results: { row: number; email?: string; name?: string; tempPassword?: string; error?: string }[] = [];
+  const results: { row: number; email?: string; name?: string; error?: string }[] = [];
   for (const [i, raw] of rows.entries()) {
     try {
       const body = parse(employeeSchema, raw);
       await checkPartner(body.employType, body.partnerId);
       await checkEmail(body.email);
-      const { initialPassword, ...data } = body;
-      const password = initialPassword || tempPassword();
-      await prisma.employee.create({ data: { ...data, empId: await nextEmpId(), passwordHash: await bcrypt.hash(password, 10), mustChangePw: true } });
-      results.push({ row: i + 1, email: body.email, name: body.name, tempPassword: password });
+      await prisma.employee.create({ data: { ...body, empId: await nextEmpId(), passwordHash: await initialPasswordHash(body.email), mustChangePw: true } });
+      results.push({ row: i + 1, email: body.email, name: body.name });
     } catch (e) {
       results.push({ row: i + 1, error: e instanceof Error ? e.message : String(e) });
     }

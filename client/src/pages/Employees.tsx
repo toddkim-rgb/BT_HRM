@@ -31,7 +31,7 @@ export interface Employee {
   currentAssignments?: { prjCd: string; prjNm: string; roleCd: string; allocRate: number; endDt: string }[];
 }
 
-const blank: Partial<Employee> & { initialPassword?: string } = {
+const blank: Partial<Employee> = {
   email: '',
   name: '',
   deptCd: '',
@@ -428,7 +428,7 @@ function DeleteDialog({ emp, onClose, onDone }: { emp: Employee; onClose: () => 
   );
 }
 
-function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee> & { initialPassword?: string }; onClose: () => void; onSaved: () => void }) {
+function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee>; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
   const isNew = !('careerYears' in initial); // 조회해 온 인력에는 careerYears가 있음
   const [f, setF] = useState({ ...initial });
@@ -444,12 +444,8 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
     try {
       const body = { ...f, partnerId: needsPartner ? f.partnerId : null };
       if (isNew) {
-        const r = await api.post<{ empId: string; tempPassword: string | null }>('/employees', body);
-        if (r.tempPassword) {
-          setCreated({ email: f.email ?? '', password: r.tempPassword });
-          return;
-        }
-        toast(`등록했습니다. (로그인 ${f.email}, 첫 로그인 시 비밀번호 변경)`);
+        await api.post('/employees', body);
+        toast(`등록했습니다. 로그인 아이디와 초기 비밀번호는 모두 ${(f.email ?? '').toLowerCase()} 입니다. (첫 로그인 시 비밀번호 변경)`, 'info');
       } else {
         await api.put(`/employees/${initial.empId}`, body);
         toast('저장했습니다.');
@@ -462,13 +458,11 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
     }
   };
 
-  const [tempPw, setTempPw] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
   const resetPw = async () => {
-    if (!window.confirm(`${initial.name}님의 비밀번호를 초기화하고 임시 비밀번호를 발급할까요?`)) return;
+    if (!window.confirm(`${initial.name}님의 비밀번호를 이메일 주소(${initial.email})로 초기화할까요?\n첫 로그인 시 새 비밀번호를 설정해야 합니다.`)) return;
     try {
-      const r = await api.post<{ tempPassword: string }>(`/employees/${initial.empId}/reset-password`);
-      setTempPw(r.tempPassword);
+      await api.post(`/employees/${initial.empId}/reset-password`);
+      toast(`비밀번호를 이메일 주소(${initial.email})로 초기화했습니다.`, 'info');
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'bad');
     }
@@ -548,29 +542,11 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
             <input type="checkbox" checked={f.utilTarget ?? true} onChange={(e) => set({ utilTarget: e.target.checked })} /> 가동률 집계 대상
           </label>
         </Field>
-        {isNew && (
-          <Field label="초기 비밀번호" hint="비우면 임시 비밀번호 자동 발급 · 첫 로그인 시 변경 강제">
-            <input value={f.initialPassword ?? ''} onChange={(e) => set({ initialPassword: e.target.value })} />
-          </Field>
-        )}
       </div>
+      <p className="muted small">
+        로그인 아이디와 초기 비밀번호는 <strong>업무 이메일 주소</strong>(소문자)입니다. 첫 로그인 시 새 비밀번호를 설정해야 합니다.
+      </p>
       <p className="muted small">주민등록번호·주소·연봉 등 민감 개인정보는 수집하지 않습니다.</p>
-      {created && (
-        <Modal title="인력 등록 완료" onClose={onSaved} footer={<button className="btn primary" onClick={onSaved}>확인</button>}>
-          <p style={{ marginTop: 0 }}>
-            로그인 이메일 <strong>{created.email}</strong>의 임시 비밀번호입니다. 창을 닫으면 다시 볼 수 없으니 본인에게 직접 전달하세요. 첫 로그인 시 새 비밀번호를 설정해야 합니다.
-          </p>
-          <div className="temp-pw">{created.password}</div>
-        </Modal>
-      )}
-      {tempPw && (
-        <Modal title="임시 비밀번호 발급" onClose={() => setTempPw(null)} footer={<button className="btn primary" onClick={() => setTempPw(null)}>확인</button>}>
-          <p style={{ marginTop: 0 }}>
-            {initial.name}님({initial.email})의 임시 비밀번호입니다. 창을 닫으면 다시 볼 수 없으니 본인에게 직접 전달하세요. 첫 로그인 시 새 비밀번호를 설정해야 합니다.
-          </p>
-          <div className="temp-pw">{tempPw}</div>
-        </Modal>
-      )}
     </Modal>
   );
 }
@@ -608,17 +584,9 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-function downloadTempPasswords(rows: { email?: string; name?: string; tempPassword?: string; error?: string }[]) {
-  const lines = ['성명,로그인 이메일,임시 비밀번호', ...rows.filter((r) => !r.error).map((r) => `${r.name},${r.email},${r.tempPassword}`)];
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-  a.download = '인력_임시비밀번호.csv';
-  a.click();
-}
-
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
-  const [result, setResult] = useState<{ created: number; failed: number; results: { row: number; email?: string; name?: string; tempPassword?: string; error?: string }[] } | null>(null);
+  const [result, setResult] = useState<{ created: number; failed: number; results: { row: number; email?: string; name?: string; error?: string }[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -688,12 +656,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
       </div>
       <ErrorBox error={err} />
       {result && result.created > 0 && (
-        <div className="row" style={{ marginBottom: 10 }}>
-          <button className="btn" onClick={() => downloadTempPasswords(result.results)}>
-            임시 비밀번호 목록 내려받기 (CSV)
-          </button>
-          <span className="muted small">등록된 인력은 첫 로그인 시 비밀번호를 변경해야 합니다. 파일은 전달 후 삭제하세요.</span>
-        </div>
+        <div className="alert info">등록된 인력의 로그인 아이디와 초기 비밀번호는 모두 본인 이메일 주소입니다. 첫 로그인 시 비밀번호를 변경해야 합니다.</div>
       )}
       {result && (
         <div className={`alert ${result.failed ? 'warn' : 'good'}`}>
