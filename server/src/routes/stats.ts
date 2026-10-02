@@ -331,6 +331,34 @@ statsRouter.get('/staffing', async (req, res) => {
     })
     .sort((a, b) => b.headcount - a.headcount || a.prjCd.localeCompare(b.prjCd));
 
+  // 진행중인데 해당 월에 배정된 인력이 없는 프로젝트도 카드에 표시 (투입 필요 여부 확인용)
+  const idle = await prisma.project.findMany({
+    where: { statusCd: 'ACTIVE', prjType: { not: 'NP' }, prjCd: { notIn: prjCodes, ...(scope ? { in: scope } : {}) } },
+    include: { pm: { select: { name: true } } },
+    orderBy: { prjCd: 'asc' },
+  });
+  for (const p of idle) {
+    projects.push({
+      prjCd: p.prjCd,
+      prjNm: p.prjNm,
+      prjType: p.prjType,
+      statusCd: p.statusCd,
+      customerNm: p.customerNm,
+      pmName: p.pm?.name ?? null,
+      startDt: p.startDt,
+      endDt: p.endDt,
+      contractMm: p.contractMm,
+      headcount: 0,
+      allocTotal: 0,
+      cumMd: cum.find((c) => c.prjCd === p.prjCd)?._sum.md ?? 0,
+      planMd: 0,
+      actualMd: 0,
+      planMm: 0,
+      actualMm: 0,
+      members: [],
+    });
+  }
+
   // 인력 기준 (전사 조회 권한이면 대기 인력도 포함)
   const involved = new Map(asg.map((a) => [a.empId, a.employee]));
   if (!scope) {

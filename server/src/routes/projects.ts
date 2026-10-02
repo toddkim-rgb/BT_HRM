@@ -102,3 +102,50 @@ projectsRouter.put('/:prjCd', requireRole('ADMIN', 'SALES'), async (req, res) =>
   await prisma.project.update({ where: { prjCd: cur.prjCd }, data: { ...body, prjCd } });
   res.json({ ok: true, prjCd, codeChanged: prjCd !== cur.prjCd, oldPrjCd: cur.prjCd });
 });
+
+// ---- 프로젝트 삭제 (F-031): 삭제 전 연결 데이터 건수를 확인하고, 확인 후 함께 삭제 ----
+
+async function projectDeleteImpact(prjCd: string) {
+  const prj = await prisma.project.findUnique({ where: { prjCd } });
+  if (!prj || prj.prjType === 'NP') throw notFound('프로젝트');
+  const [assignments, timesheets, md, workItems, issues, milestones, weeklyComments, demandPlans, billRates, expenses] = await Promise.all([
+    prisma.assignment.count({ where: { prjCd } }),
+    prisma.timesheet.count({ where: { prjCd } }),
+    prisma.timesheet.aggregate({ where: { prjCd }, _sum: { md: true } }),
+    prisma.workItem.count({ where: { prjCd } }),
+    prisma.weeklyIssue.count({ where: { prjCd } }),
+    prisma.milestone.count({ where: { prjCd } }),
+    prisma.weeklyComment.count({ where: { prjCd } }),
+    prisma.demandPlan.count({ where: { prjCd } }),
+    prisma.billRate.count({ where: { prjCd } }),
+    prisma.projectExpense.count({ where: { prjCd } }),
+  ]);
+  const counts = { assignments, timesheets, totalMd: md._sum.md ?? 0, workItems, issues, milestones, weeklyComments, etc: demandPlans + billRates + expenses };
+  return { prj, counts, hasHistory: assignments + timesheets + workItems + issues + milestones + weeklyComments + demandPlans + billRates + expenses > 0 };
+}
+
+projectsRouter.get('/:prjCd/delete-impact', requireRole('ADMIN'), async (req, res) => {
+  const { prj, ...rest } = await projectDeleteImpact(String(req.params.prjCd));
+  res.json({ prjCd: prj.prjCd, prjNm: prj.prjNm, statusCd: prj.statusCd, ...rest });
+});
+
+projectsRouter.delete('/:prjCd', requireRole('ADMIN'), async (req, res) => {
+  const prjCd = String(req.params.prjCd);
+  const impact = await projectDeleteImpact(prjCd);
+  // 이력이 있으면 프로젝트 코드를 다시 입력해 확인해야 삭제 (투입 MD가 지워지면 과거 가동률·MM이 바뀜)
+  if (impact.hasHistory && req.body?.confirm !== prjCd) throw new HttpError(409, '연결된 데이터가 있습니다. 프로젝트 코드를 입력해 삭제를 확인하세요.', { counts: impact.counts });
+  await prisma.$transaction([
+    prisma.timesheet.deleteMany({ where: { prjCd } }),
+    prisma.workItem.deleteMany({ where: { prjCd } }),
+    prisma.weeklyIssue.deleteMany({ where: { prjCd } }),
+    prisma.assignment.deleteMany({ where: { prjCd } }),
+    prisma.milestone.deleteMany({ where: { prjCd } }),
+    prisma.weeklyComment.deleteMany({ where: { prjCd } }),
+    prisma.demandPlan.deleteMany({ where: { prjCd } }),
+    prisma.billRate.deleteMany({ where: { prjCd } }),
+    prisma.projectExpense.deleteMany({ where: { prjCd } }),
+    prisma.partnerContract.updateMany({ where: { prjCd }, data: { prjCd: null } }),
+    prisma.project.delete({ where: { prjCd } }),
+  ]);
+  res.json({ ok: true, deleted: impact.counts });
+});

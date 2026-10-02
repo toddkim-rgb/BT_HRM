@@ -145,6 +145,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
   const isSales = user?.role === 'SALES';
   const [f, setF] = useState(initial);
   const [err, setErr] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
   const { data: emps } = useFetch<{ empId: string; name: string; role: string; deptCd: string }[]>('/employees');
   const set = (p: Partial<Project>) => setF((s) => ({ ...s, ...p }));
   const numOrNull = (v: string) => (v === '' ? null : Number(v));
@@ -174,6 +175,11 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
       wide
       footer={
         <>
+          {!isNew && user?.role === 'ADMIN' && (
+            <button className="btn danger" onClick={() => setRemoving(true)} style={{ marginRight: 'auto' }}>
+              삭제
+            </button>
+          )}
           <button className="btn" onClick={onClose}>
             취소
           </button>
@@ -183,6 +189,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
         </>
       }
     >
+      {removing && initial.prjCd && <DeleteProjectDialog prjCd={initial.prjCd} prjNm={initial.prjNm ?? ''} onClose={() => setRemoving(false)} onDone={onSaved} />}
       <ErrorBox error={err} />
       <div className="form-grid">
         <Field label="사업구분" required hint={typeChanged ? `변경하면 코드가 새로 부여됩니다 (현재 ${initial.prjCd})` : undefined}>
@@ -237,6 +244,90 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
           </Field>
         )}
       </div>
+    </Modal>
+  );
+}
+
+interface DeleteImpact {
+  hasHistory: boolean;
+  counts: { assignments: number; timesheets: number; totalMd: number; workItems: number; issues: number; milestones: number; weeklyComments: number; etc: number };
+}
+
+/** 프로젝트 삭제: 연결 데이터 건수를 보여 주고, 이력이 있으면 코드를 입력해 확인 */
+function DeleteProjectDialog({ prjCd, prjNm, onClose, onDone }: { prjCd: string; prjNm: string; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const { data, error } = useFetch<DeleteImpact>(`/projects/${prjCd}/delete-impact`);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const ready = !!data && (!data.hasHistory || typed.trim() === prjCd);
+
+  const run = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.del(`/projects/${prjCd}`, { confirm: typed.trim() });
+      toast(`${prjCd} ${prjNm} 프로젝트를 삭제했습니다.`);
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const c = data?.counts;
+  return (
+    <Modal
+      title={`프로젝트 삭제 · ${prjCd}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            취소
+          </button>
+          <button className="btn danger" disabled={!ready || busy} onClick={run}>
+            완전 삭제
+          </button>
+        </>
+      }
+    >
+      <ErrorBox error={error ?? err} />
+      {!data || !c ? (
+        <Loading />
+      ) : !data.hasHistory ? (
+        <div className="alert warn" style={{ marginBottom: 0 }}>
+          <strong>{prjNm}</strong> — 연결된 배정·실적이 없는 프로젝트입니다. 삭제하면 되돌릴 수 없습니다.
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: 12 }}>
+          <div className="alert bad" style={{ marginBottom: 0 }}>
+            <strong>{prjNm}</strong>에 연결된 아래 데이터가 <strong>함께 삭제</strong>되며 되돌릴 수 없습니다. 투입 MD가 지워지면 과거 가동률·MM 수치가 달라집니다. 이력을 남기려면 삭제 대신 상태를 '완료' 또는 '중단'으로 바꾸세요.
+          </div>
+          <dl className="desc-list">
+            <dt>투입 배정</dt>
+            <dd>{c.assignments}건</dd>
+            <dt>투입 MD</dt>
+            <dd>
+              {num(c.totalMd)} MD ({c.timesheets}행)
+            </dd>
+            <dt>주간보고 항목</dt>
+            <dd>
+              실적·계획 {c.workItems}건, 이슈 {c.issues}건
+            </dd>
+            <dt>마일스톤</dt>
+            <dd>{c.milestones}건</dd>
+            <dt>프로젝트 주간보고</dt>
+            <dd>{c.weeklyComments}건</dd>
+          </dl>
+          <Field label={`확인을 위해 프로젝트 코드 "${prjCd}"를 입력하세요`} required>
+            <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={prjCd} autoFocus />
+          </Field>
+          <p className="muted small" style={{ margin: 0 }}>
+            다른 프로젝트의 투입 MD와 개인 주간 업무보고 자체는 지워지지 않습니다. 이미 확정한 전사 One-Page는 확정 시점 내용 그대로 남습니다.
+          </p>
+        </div>
+      )}
     </Modal>
   );
 }

@@ -71,7 +71,9 @@ export default function Staffing() {
   const { data, error, loading } = useFetch<StaffingResp>(`/stats/staffing${qs({ ym })}`);
 
   const kw = q.trim().toLowerCase();
-  const projects = (data?.projects ?? []).filter((p) => !kw || p.prjCd.toLowerCase().includes(kw) || p.prjNm.toLowerCase().includes(kw) || p.members.some((m) => m.name.includes(q.trim())));
+  // 프로젝트 카드는 진행중 프로젝트만 표시
+  const activeProjects = (data?.projects ?? []).filter((p) => p.statusCd === 'ACTIVE');
+  const projects = activeProjects.filter((p) => !kw || p.prjCd.toLowerCase().includes(kw) || p.prjNm.toLowerCase().includes(kw) || p.members.some((m) => m.name.includes(q.trim())));
   const people = (data?.people ?? []).filter((p) => !kw || p.name.includes(q.trim()) || p.deptCd.toLowerCase().includes(kw) || p.assignments.some((a) => a.prjCd.toLowerCase().includes(kw)));
   const all = data?.people ?? [];
 
@@ -79,7 +81,7 @@ export default function Staffing() {
     <div>
       <PageHeader
         title="프로젝트별 투입현황"
-        desc="어느 프로젝트에 누가, 얼마나 투입되어 있는지 봅니다. 카드를 누르면 상세로 이동합니다. 소요 MD는 제출된 주간 업무보고 기준, 계획 MD는 배정 투입률 기준입니다."
+        desc="어느 프로젝트에 누가, 얼마나 투입되어 있는지 봅니다. 진행중인 프로젝트만 카드로 표시하며, 카드를 누르면 상세로 이동합니다. 소요 MD는 제출된 주간 업무보고 기준, 계획 MD는 배정 투입률 기준입니다."
         actions={
           <>
             <div className="week-nav">
@@ -103,7 +105,7 @@ export default function Staffing() {
       ) : data ? (
         <>
           <div className="kpis">
-            <Kpi label="투입 프로젝트" value={`${data.projects.length}개`} />
+            <Kpi label="진행중 프로젝트" value={`${activeProjects.length}개`} sub={activeProjects.some((p) => !p.headcount) ? `투입 인력 없음 ${activeProjects.filter((p) => !p.headcount).length}개` : undefined} />
             <Kpi label="투입 인원" value={`${all.filter((p) => p.assignments.length).length}명`} sub={`${Number(ym.slice(5))}월 배정 기준`} />
             <Kpi label="다중 투입" value={`${all.filter((p) => p.projectCount > 1).length}명`} sub="2개 이상 프로젝트" />
             <Kpi label="과투입 (오늘)" value={`${all.filter((p) => p.overAlloc > 0).length}명`} tone={all.some((p) => p.overAlloc > 0) ? 'bad' : undefined} />
@@ -139,7 +141,7 @@ export default function Staffing() {
 /** 프로젝트 카드: 프로젝트명 · 투입인력 · 투입률 · 시작일/종료일 · 소요 MD */
 function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
   const nav = useNavigate();
-  if (!list.length) return <Empty>해당 월에 투입 인력이 있는 프로젝트가 없습니다.</Empty>;
+  if (!list.length) return <Empty>진행중인 프로젝트가 없습니다.</Empty>;
   const month = Number(ym.slice(5));
   return (
     <div className="prj-cards">
@@ -189,6 +191,7 @@ function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
                 </span>
               ))}
               {p.members.length > 6 && <span className="chip">+{p.members.length - 6}</span>}
+              {!p.members.length && <span className="small warn-text">이 달에 배정된 인력이 없습니다</span>}
             </div>
 
             <div className="prj-card-md">
