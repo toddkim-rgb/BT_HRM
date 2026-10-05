@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { isManager, me, pmProjectCodes } from '../auth.js';
-import { forbidden, notFound, prisma } from '../db.js';
+import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { plannedMd } from '../lib/alloc.js';
-import { addDays, addMonths, businessDays, monthRange, today } from '../lib/dates.js';
+import { addDays, addMonths, businessDays, isValidWeek, monthRange, shiftWeek, today } from '../lib/dates.js';
 import { getSettings, holidaySet, mdPerMm } from '../lib/settings.js';
 import { usableEmp } from '../lib/empFilter.js';
 import { workforce } from '../lib/workforce.js';
+import { lastWeek, weeklyTrend, weeklyUtilization } from '../lib/weeklyUtil.js';
 import { parse, ymStr } from '../lib/validate.js';
 import { z } from 'zod';
 import { PAID_TYPES, WORK_TYPES } from './projects.js';
@@ -24,126 +25,38 @@ async function submittedTimesheets(start: string, end: string, extra: Record<str
   });
 }
 
-/** 인력별 월 가동률 */
-export async function utilizationFor(ym: string, empIds?: string[]) {
-  const month = monthRange(ym);
-  return utilizationRange(month.start, month.end, empIds);
-}
-
-/** 인력별 기간 가동률 (월·주 공용). 진행 중인 기간은 오늘까지의 영업일만 가용 MD로 계산 */
-export async function utilizationRange(start: string, rangeEnd: string, empIds?: string[]) {
-  const t = today();
-  const end = rangeEnd > t ? t : rangeEnd;
-  const holidays = await holidaySet();
-  const ts = start <= end ? await submittedTimesheets(start, end, empIds ? { empId: { in: empIds } } : {}) : [];
-  // 대상: 퇴사자 제외. 단, 퇴사자도 해당 월 실적이 있으면 포함
-  const reported = [...new Set(ts.map((t) => t.empId))];
-  const emps = await prisma.employee.findMany({
-    where: {
-      ...(empIds ? { empId: { in: empIds } } : { utilTarget: true }),
-      // 퇴사·삭제 인력은 제외하되, 해당 월 실적이 있으면 포함
-      OR: [usableEmp, { empId: { in: reported } }],
-    },
-    select: { empId: true, name: true, deptCd: true, gradeCd: true, employType: true, statusCd: true, deletedAt: true },
-    orderBy: [{ deptCd: 'asc' }, { name: 'asc' }],
-  });
-  const bd = start <= end ? businessDays(start, end, holidays).length : 0;
-  return emps.map((e) => {
-    const mine = ts.filter((t) => t.empId === e.empId);
-    // 다중 프로젝트 투입: 프로젝트별 투입 MD
-    const byPrj = new Map<string, number>();
-    for (const t of mine) if (WORK_TYPES.includes(t.project.prjType)) byPrj.set(t.prjCd, (byPrj.get(t.prjCd) ?? 0) + t.md);
-    const leave = mine.filter((t) => t.prjCd === 'NP-LV').reduce((s, t) => s + t.md, 0);
-    const total = mine.filter((t) => WORK_TYPES.includes(t.project.prjType)).reduce((s, t) => s + t.md, 0);
-    const paid = mine.filter((t) => PAID_TYPES.includes(t.project.prjType)).reduce((s, t) => s + t.md, 0);
-    const avail = Math.max(0, bd - leave);
-    const { deletedAt, ...emp } = e;
-    return {
-      ...emp,
-      inactive: !!deletedAt || e.statusCd === 'RETIRED', // 삭제·퇴사 인력 (해당 기간 실적이 있어 포함됨)
-      businessDays: bd,
-      leaveMd: leave,
-      availMd: avail,
-      totalMd: total,
-      paidMd: paid,
-      reportedMd: mine.reduce((s, t) => s + t.md, 0),
-      byProject: [...byPrj].map(([prjCd, md]) => ({ prjCd, prjNm: mine.find((t) => t.prjCd === prjCd)?.project.prjNm ?? prjCd, md })).sort((a, b) => b.md - a.md),
-      util: avail ? round1((total / avail) * 100) : null,
-      paidUtil: avail ? round1((paid / avail) * 100) : null,
-    };
-  });
-}
-
-export function summarize(rows: Awaited<ReturnType<typeof utilizationFor>>) {
-  const avail = rows.reduce((s, r) => s + r.availMd, 0);
-  const total = rows.reduce((s, r) => s + r.totalMd, 0);
-  const paid = rows.reduce((s, r) => s + r.paidMd, 0);
-  return { headcount: rows.length, availMd: avail, totalMd: total, paidMd: paid, util: avail ? round1((total / avail) * 100) : null, paidUtil: avail ? round1((paid / avail) * 100) : null };
-}
+// ---- 가동률 (v1.8 재정의): 주 단위, 그 주 배정 인원 ÷ 등록 인원 (lib/weeklyUtil) ----
 
 statsRouter.get('/utilization', async (req, res) => {
   const u = me(req);
-  const { ym } = parse(z.object({ ym: ymStr.default(today().slice(0, 7)) }), req.query);
-  let empIds: string[] | undefined;
-  if (u.role === 'EMP') empIds = [u.empId];
-  else if (u.role === 'PM') {
-    const { start, end } = monthRange(ym);
-    const asg = await prisma.assignment.findMany({
-      where: { prjCd: { in: await pmProjectCodes(u.empId) }, canceled: false, startDt: { lte: end }, endDt: { gte: start } },
-      select: { empId: true },
-    });
-    empIds = [...new Set([u.empId, ...asg.map((a) => a.empId)])];
-  }
-  const base = await utilizationFor(ym, empIds);
-
-  // 현재 투입률(오늘 기준)과 다음 달 예상 가동률(배정 기준)
-  const holidays = await holidaySet();
-  const t = today();
-  const nextYm = addMonths(ym, 1);
-  const next = monthRange(nextYm);
-  const nextBd = businessDays(next.start, next.end, holidays).length;
-  const asgs = await prisma.assignment.findMany({
-    where: { empId: { in: base.map((r) => r.empId) }, canceled: false, endDt: { gte: t < next.start ? t : next.start } },
-    select: { empId: true, startDt: true, endDt: true, allocRate: true, project: { select: { prjType: true } } },
+  const week = String(req.query.week ?? lastWeek());
+  if (!isValidWeek(week)) throw new HttpError(400, '주차 형식은 YYYY-Www 입니다.');
+  const cur = await weeklyUtilization(week);
+  const prev = await weeklyUtilization(shiftWeek(week, -1));
+  const wf = new Map((await workforce(today())).rows.map((w) => [w.empId, w]));
+  const rows = cur.rows.map((r) => ({ ...r, status: wf.get(r.empId)?.category ?? null, plannedStartDt: wf.get(r.empId)?.plannedStartDt ?? null }));
+  const { rows: _r, ...summary } = cur;
+  res.json({
+    ...summary,
+    prevRate: prev.rate,
+    diff: cur.rate != null && prev.rate != null ? Math.round((cur.rate - prev.rate) * 10) / 10 : null,
+    // 투입인력은 본인 행만, 그 외(PM·경영진·관리자·영업)는 전체
+    rows: u.role === 'EMP' ? rows.filter((r) => r.empId === u.empId) : rows,
+    trend: await weeklyTrend(week, 12, 4),
   });
-  const wf = new Map((await workforce(t)).rows.map((w) => [w.empId, w]));
-  const rows = base.map((r) => {
-    const mine = asgs.filter((a) => a.empId === r.empId);
-    const nextMd = mine.reduce((s2, a) => s2 + plannedMd(a, next.start, next.end, holidays), 0);
-    const nextPaidMd = mine.filter((a) => PAID_TYPES.includes(a.project.prjType)).reduce((s2, a) => s2 + plannedMd(a, next.start, next.end, holidays), 0);
-    return {
-      ...r,
-      currentAlloc: mine.filter((a) => a.startDt <= t && a.endDt >= t).reduce((s2, a) => s2 + a.allocRate, 0),
-      plannedAlloc: wf.get(r.empId)?.planned ?? 0,
-      plannedStartDt: wf.get(r.empId)?.plannedStartDt ?? null,
-      workforce: wf.get(r.empId)?.category ?? null, // 대상 인원이 아니면(휴직 등) null
-      nextUtil: nextBd ? round1((nextMd / nextBd) * 100) : null,
-      nextPaidUtil: nextBd ? round1((nextPaidMd / nextBd) * 100) : null,
-    };
-  });
-  const lowUtilPct = Number((await getSettings()).LOW_UTIL_PCT) || 70;
-  const groups = (key: 'deptCd' | 'employType') =>
-    Object.entries(
-      rows.reduce<Record<string, typeof rows>>((m, r) => {
-        (m[r[key]] ??= []).push(r);
-        return m;
-      }, {}),
-    ).map(([k, v]) => ({ key: k, ...summarize(v) }));
-  const nextAvg = rows.length && nextBd ? round1(rows.reduce((s2, r) => s2 + (r.nextUtil ?? 0), 0) / rows.length) : null;
-  res.json({ ym, nextYm, lowUtilPct, summary: { ...summarize(rows), nextUtil: nextAvg }, byDept: groups('deptCd'), byEmployType: groups('employType'), rows });
 });
 
-/** 인력별 최근 N개월 가동률 추이 */
+/** 인력별 최근 12주 투입 여부 */
 statsRouter.get('/utilization/:empId/trend', async (req, res) => {
   const u = me(req);
-  if (u.role === 'EMP' && u.empId !== String(req.params.empId)) throw forbidden();
-  const months = Math.min(12, Number(req.query.months) || 6);
-  const cur = today().slice(0, 7);
+  const empId = String(req.params.empId);
+  if (u.role === 'EMP' && u.empId !== empId) throw forbidden();
+  const end = String(req.query.week ?? lastWeek());
   const out = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const ym = addMonths(cur, -i);
-    const [r] = await utilizationFor(ym, [String(req.params.empId)]);
-    out.push({ ym, util: r?.util ?? null, paidUtil: r?.paidUtil ?? null, totalMd: r?.totalMd ?? 0 });
+  for (let i = 11; i >= 0; i--) {
+    const w = shiftWeek(end, -i);
+    const r = (await weeklyUtilization(w)).rows.find((x) => x.empId === empId);
+    out.push({ week: w, assigned: r?.assigned ?? false, projects: r?.projects ?? [], reportedMd: r?.reportedMd ?? 0 });
   }
   res.json(out);
 });
@@ -233,9 +146,9 @@ statsRouter.get('/summary', async (req, res) => {
   const t = today();
   // 인원·투입 구분은 전사 One-Page·투입현황·가동률과 같은 기준 (lib/workforce)
   const wf = await workforce(t);
-  const lastYm = addMonths(t.slice(0, 7), -1);
-  const util = summarize(await utilizationFor(t.slice(0, 7)));
-  const prevUtil = summarize(await utilizationFor(lastYm));
+  const lw = lastWeek();
+  const util = await weeklyUtilization(lw);
+  const prevUtil = await weeklyUtilization(shiftWeek(lw, -1));
   const in30 = addDays(t, 30);
   const releasing = await prisma.assignment.count({ where: { canceled: false, endDt: { gte: t, lte: in30 }, empId: { in: wf.rows.map((r) => r.empId) } } });
   res.json({
@@ -248,8 +161,8 @@ statsRouter.get('/summary', async (req, res) => {
     bench: wf.summary.bench,
     overAllocated: wf.summary.overAllocated,
     releasingIn30: releasing,
-    util,
-    prevUtil,
+    util: { week: lw, rate: util.rate, total: util.total, assigned: util.assigned },
+    prevUtil: { week: prevUtil.week, rate: prevUtil.rate },
   });
 });
 

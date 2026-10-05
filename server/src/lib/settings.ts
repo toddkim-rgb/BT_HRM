@@ -10,7 +10,6 @@ export const DEFAULT_SETTINGS = {
   ALERT_PARTNER_END_DAYS: '30', // AL-04
   ALERT_BENCH_WEEKS: '2', // AL-05
   ALERT_PROGRESS_DELAY_PP: '-10', // AL-06
-  LOW_UTIL_PCT: '70', // 저가동 기준
 };
 
 export type SettingKey = keyof typeof DEFAULT_SETTINGS;
@@ -20,6 +19,8 @@ export async function ensureDefaultSettings(): Promise<number> {
   const have = new Set((await prisma.setting.findMany({ select: { key: true } })).map((r) => r.key));
   const missing = Object.entries(DEFAULT_SETTINGS).filter(([k]) => !have.has(k));
   for (const [key, value] of missing) await prisma.setting.create({ data: { key, value } });
+  // 더 이상 쓰지 않는 기준값은 DB에서 정리 (예: v1.8 가동률 재정의로 폐지된 저가동 기준)
+  await prisma.setting.deleteMany({ where: { key: { notIn: Object.keys(DEFAULT_SETTINGS) } } });
   return missing.length;
 }
 

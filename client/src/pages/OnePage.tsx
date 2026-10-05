@@ -12,7 +12,7 @@ interface Data {
   week: string;
   days: string[];
   refDt: string;
-  kpi: { total: number; own: number; partner: number; assigned: number; planned?: number; bench: number; util: number | null; paidUtil: number | null; utilDiff: number | null; paidUtilDiff: number | null; submitted: number; submitTarget: number; highIssues: number };
+  kpi: { total: number; own: number; partner: number; assigned: number; planned?: number; bench: number; util: number | null; utilAssigned: number; utilTotal: number; utilDiff: number | null; submitted: number; submitTarget: number; highIssues: number };
   byType: { type: string; label: string; headcount: number; weekMd: number; monthMm: number }[];
   projects: {
     prjCd: string;
@@ -37,8 +37,7 @@ interface Data {
     overAllocated: { name: string; total: number }[];
     bench: string[];
     planned?: { name: string; startDt: string | null; alloc: number }[];
-    lowUtil: { name: string; util: number }[];
-    lowUtilPct: number;
+    notAssigned?: string[];
     releasing: { name: string; prjCd: string; prjNm?: string; endDt: string }[];
     notSubmitted: string[];
     delayedMilestones: { prjCd: string; prjNm?: string; msNm: string; planDt: string }[];
@@ -159,8 +158,7 @@ export default function OnePage() {
           <OpKpi label="총 인원" value={`${d.kpi.total}명`} sub={`자사 ${d.kpi.own} · 협력사 ${d.kpi.partner}`} />
           <OpKpi label="투입 인원" value={`${d.kpi.assigned}명`} />
           <OpKpi label="대기 인원" value={`${d.kpi.bench}명`} sub={d.kpi.planned ? `투입 예정 ${d.kpi.planned}명 별도` : '현재·예정 배정 없음'} />
-          <OpKpi label="총 가동률" value={pct(d.kpi.util)} sub={diff(d.kpi.utilDiff)} />
-          <OpKpi label="유상 가동률" value={pct(d.kpi.paidUtil)} sub={diff(d.kpi.paidUtilDiff)} />
+          <OpKpi label="가동률 (주간)" value={pct(d.kpi.util)} sub={<>{d.kpi.utilAssigned ?? '-'}/{d.kpi.utilTotal ?? '-'}명 {diff(d.kpi.utilDiff)}</>} />
           <OpKpi label="주간보고 제출" value={`${d.kpi.submitted}/${d.kpi.submitTarget}`} sub={d.kpi.submitted < d.kpi.submitTarget ? '미제출분은 집계 제외' : '전원 제출'} />
           <OpKpi label="중요 이슈(상)" value={`${d.kpi.highIssues}건`} />
         </div>
@@ -200,12 +198,12 @@ export default function OnePage() {
               {a.overAllocated.length > 0 && <li>과투입 {a.overAllocated.length}명: {a.overAllocated.map((o) => `${o.name}(+${o.total - 100}%)`).join(', ')}</li>}
               {a.bench.length > 0 && <li>대기 {a.bench.length}명: {a.bench.join(', ')}</li>}
               {!!a.planned?.length && <li>투입 예정 {a.planned.length}명: {a.planned.map((x) => `${x.name}(${x.startDt ? md(x.startDt) : ''}~)`).join(', ')}</li>}
-              {a.lowUtil.length > 0 && <li>저가동({a.lowUtilPct}% 미만) {a.lowUtil.length}명: {a.lowUtil.map((l) => `${l.name}(${l.util}%)`).join(', ')}</li>}
+              {!!a.notAssigned?.length && <li>금주 미투입(배정 없음) {a.notAssigned.length}명: {a.notAssigned.join(', ')}</li>}
               {a.releasing.length > 0 && <li>30일 내 철수 예정 {a.releasing.length}건: {a.releasing.map((x) => `${x.name}(${x.prjNm ?? x.prjCd} ~${md(x.endDt)})`).join(', ')}</li>}
               {a.delayedMilestones.length > 0 && <li className="bad-text">마일스톤 지연 {a.delayedMilestones.length}건: {a.delayedMilestones.map((m) => `${m.prjNm ?? m.prjCd} — ${m.msNm}(${md(m.planDt)})`).join(', ')}</li>}
               {a.burnOver80.length > 0 && <li>계약 MM 80% 이상 소진: {a.burnOver80.map((b) => `${b.prjNm ?? b.prjCd}(${b.burnRate}%)`).join(', ')}</li>}
               {a.notSubmitted.length > 0 && <li>주간보고 미제출 {a.notSubmitted.length}명: {a.notSubmitted.join(', ')}</li>}
-              {!(a.overAllocated.length || a.bench.length || a.planned?.length || a.lowUtil.length || a.releasing.length || a.delayedMilestones.length || a.burnOver80.length || a.notSubmitted.length) && <li className="muted">특이사항 없음</li>}
+              {!(a.overAllocated.length || a.bench.length || a.planned?.length || a.notAssigned?.length || a.releasing.length || a.delayedMilestones.length || a.burnOver80.length || a.notSubmitted.length) && <li className="muted">특이사항 없음</li>}
             </ul>
           </section>
 

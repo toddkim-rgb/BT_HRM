@@ -4,9 +4,9 @@ import { assertProjectManager, isManager, me, requireRole } from '../auth.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { addDays, businessDays, isValidWeek, shiftWeek, today, weekDays } from '../lib/dates.js';
 import { workforce } from '../lib/workforce.js';
-import { getSettings, holidaySet, mdPerMm } from '../lib/settings.js';
+import { holidaySet, mdPerMm } from '../lib/settings.js';
 import { dateStr, optStr, parse } from '../lib/validate.js';
-import { summarize, utilizationRange } from './stats.js';
+import { weeklyUtilization } from '../lib/weeklyUtil.js';
 
 // 주간보고 자동화 (명세 10·11장)
 // 개인 주간 업무보고(제출분) → 프로젝트 주간보고(자동 취합 + PM 의견) → 전사 One-Page
@@ -234,15 +234,11 @@ async function companyWeeklyData(week: string) {
   const t = today();
   const ref = end > t ? t : end; // 인원·배정 기준일
   const mdmm = await mdPerMm();
-  const settings = await getSettings();
-  const lowUtil = Number(settings.LOW_UTIL_PCT) || 70;
   const holidays = await holidaySet();
 
-  // 가동률 (금주 / 전주)
-  const utilRows = await utilizationRange(start, end);
-  const util = summarize(utilRows);
-  const prevDays = weekDays(shiftWeek(week, -1));
-  const prevUtil = summarize(await utilizationRange(prevDays[0], prevDays[6]));
+  // 가동률 (주간 인원 기준: 그 주 배정 인원 ÷ 등록 인원) — 해당 주 / 전주
+  const util = await weeklyUtilization(week);
+  const prevUtil = await weeklyUtilization(shiftWeek(week, -1));
 
   // 인원·배정 (대시보드·투입현황·가동률과 같은 기준: lib/workforce)
   const wf = await workforce(ref);
@@ -326,8 +322,7 @@ async function companyWeeklyData(week: string) {
     overAllocated: wf.rows.filter((r) => r.current > 100).map((r) => ({ name: r.name, total: r.current })),
     bench: wf.rows.filter((r) => r.category === 'BENCH').map((r) => r.name),
     planned: wf.rows.filter((r) => r.category === 'PLANNED').map((r) => ({ name: r.name, startDt: r.plannedStartDt, alloc: r.planned })),
-    lowUtil: utilRows.filter((r) => !r.inactive && r.util != null && r.availMd > 0 && r.util < lowUtil && submittedIds.has(r.empId)).map((r) => ({ name: r.name, util: r.util })),
-    lowUtilPct: lowUtil,
+    notAssigned: util.rows.filter((r) => !r.assigned).map((r) => r.name), // 그 주 배정이 없어 가동률에서 빠진 인원
     releasing: active
       .filter((a) => a.endDt <= in30 && nameOf.has(a.empId))
       .map((a) => ({ name: a.employee.name, prjCd: a.prjCd, prjNm: a.project.prjNm, endDt: a.endDt }))
@@ -360,10 +355,10 @@ async function companyWeeklyData(week: string) {
       assigned: wf.summary.assigned,
       planned: wf.summary.planned,
       bench: wf.summary.bench,
-      util: util.util,
-      paidUtil: util.paidUtil,
-      utilDiff: util.util != null && prevUtil.util != null ? round1(util.util - prevUtil.util) : null,
-      paidUtilDiff: util.paidUtil != null && prevUtil.paidUtil != null ? round1(util.paidUtil - prevUtil.paidUtil) : null,
+      util: util.rate,
+      utilAssigned: util.assigned,
+      utilTotal: util.total,
+      utilDiff: util.rate != null && prevUtil.rate != null ? round1(util.rate - prevUtil.rate) : null,
       submitted: working.length - notSubmitted.length,
       submitTarget: working.length,
       highIssues,

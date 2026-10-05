@@ -22,12 +22,17 @@ export interface WorkforceRow {
   category: WorkforceCategory;
 }
 
-export async function workforce(ref: string = today()) {
-  const emps = await prisma.employee.findMany({
+/** 대상 인원(등록된 전체 인원): 삭제·퇴사·휴직이 아니고 '투입 대상'인 인력 */
+export function targetEmployees() {
+  return prisma.employee.findMany({
     where: { AND: [usableEmp, { utilTarget: true }, { OR: [{ statusCd: null }, { statusCd: { not: 'LEAVE' } }] }] },
-    select: { empId: true, name: true, deptCd: true, employType: true },
+    select: { empId: true, name: true, deptCd: true, gradeCd: true, employType: true },
     orderBy: [{ deptCd: 'asc' }, { name: 'asc' }],
   });
+}
+
+export async function workforce(ref: string = today()) {
+  const emps = await targetEmployees();
   const asg = await prisma.assignment.findMany({
     where: { canceled: false, endDt: { gte: ref }, empId: { in: emps.map((e) => e.empId) } },
     select: { empId: true, startDt: true, endDt: true, allocRate: true },
@@ -38,7 +43,7 @@ export async function workforce(ref: string = today()) {
     const future = mine.filter((a) => a.startDt > ref);
     const planned = future.reduce((s, a) => s + a.allocRate, 0);
     const plannedStartDt = future.length ? future.map((a) => a.startDt).sort()[0] : null;
-    return { ...e, current, planned, plannedStartDt, category: current > 0 ? 'ASSIGNED' : planned > 0 ? 'PLANNED' : 'BENCH' };
+    return { empId: e.empId, name: e.name, deptCd: e.deptCd, employType: e.employType, current, planned, plannedStartDt, category: current > 0 ? 'ASSIGNED' : planned > 0 ? 'PLANNED' : 'BENCH' };
   });
   const isOwn = (t: string) => t === 'REG' || t === 'CONT';
   return {

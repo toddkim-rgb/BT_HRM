@@ -16,14 +16,14 @@ interface Summary {
   planned: number;
   plannedNames: { name: string; startDt: string | null }[];
   releasingIn30: number;
-  util: { util: number | null; paidUtil: number | null };
-  prevUtil: { util: number | null; paidUtil: number | null };
+  util: { week: string; rate: number | null; total: number; assigned: number };
+  prevUtil: { week: string; rate: number | null };
 }
 
 const diff = (a: number | null, b: number | null) => {
   if (a == null || b == null) return undefined;
   const d = Math.round((a - b) * 10) / 10;
-  return `전월 대비 ${d >= 0 ? '▲' : '▼'}${Math.abs(d)}%p`;
+  return `전주 대비 ${d >= 0 ? '▲' : '▼'}${Math.abs(d)}%p`;
 };
 
 export default function Dashboard() {
@@ -52,8 +52,7 @@ function CompanySummary() {
       <Kpi label="투입 인원" value={`${data.assigned}명`} />
       <Kpi label="투입 예정" value={`${data.planned}명`} sub={data.planned ? data.plannedNames.map((p) => `${p.name}${p.startDt ? ` ${Number(p.startDt.slice(5, 7))}/${Number(p.startDt.slice(8))}~` : ''}`).join(', ') : '시작 전 배정 없음'} />
       <Kpi label="대기 인원" value={`${data.bench}명`} sub="현재·예정 배정 없음" tone={data.bench ? 'warn' : undefined} />
-      <Kpi label="이번 달 총가동률" value={pct(data.util.util)} sub={diff(data.util.util, data.prevUtil.util)} />
-      <Kpi label="이번 달 유상가동률" value={pct(data.util.paidUtil)} sub={diff(data.util.paidUtil, data.prevUtil.paidUtil)} />
+      <Kpi label="지난주 가동률" value={pct(data.util.rate)} sub={`${weekLabel(data.util.week)} · ${data.util.assigned}/${data.util.total}명${diff(data.util.rate, data.prevUtil.rate) ? ` · ${diff(data.util.rate, data.prevUtil.rate)}` : ''}`} />
       <Kpi label="과투입" value={`${data.overAllocated}명`} tone={data.overAllocated ? 'bad' : undefined} />
       <Kpi label="30일 내 철수 예정" value={`${data.releasingIn30}건`} tone={data.releasingIn30 ? 'warn' : undefined} />
     </div>

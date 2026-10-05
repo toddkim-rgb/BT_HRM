@@ -38,5 +38,4 @@ export const SETTING_LABEL: Record<string, string> = {
   ALERT_PARTNER_END_DAYS: '협력사 계약 종료 알림 (D-일)',
   ALERT_BENCH_WEEKS: '장기 대기 알림 (주)',
   ALERT_PROGRESS_DELAY_PP: '진도 지연 기준 (%p)',
-  LOW_UTIL_PCT: '저가동 기준 (%)',
 };
