@@ -1,6 +1,12 @@
+import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { PrismaClient } from '@prisma/client';
 
-export const prisma = new PrismaClient();
+// 운영(Vercel): Turso(SQLite 호환 원격 DB) — TURSO_DATABASE_URL·TURSO_AUTH_TOKEN 환경변수
+// 개발: 로컬 SQLite 파일 (DATABASE_URL)
+const turso = process.env.TURSO_DATABASE_URL;
+export const prisma = turso
+  ? new PrismaClient({ adapter: new PrismaLibSQL({ url: turso, authToken: process.env.TURSO_AUTH_TOKEN }) })
+  : new PrismaClient();
 
 export class HttpError extends Error {
   constructor(

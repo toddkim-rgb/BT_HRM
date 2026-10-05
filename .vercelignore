@@ -1,0 +1,11 @@
+# 로컬 DB(개인정보)·비밀값·빌드 산출물은 업로드하지 않음
+**/*.db
+**/*.db-journal
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/dist
+.claude
+*.log
+인력_임시비밀번호*.csv

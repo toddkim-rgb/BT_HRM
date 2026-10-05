@@ -1,9 +1,10 @@
 // SM·SI 인력관리 시스템 — 명세서 13장 기준
 // 날짜는 'YYYY-MM-DD' 문자열, 연월은 'YYYY-MM', 주차는 'YYYY-Www'(ISO, 월~일)
-// 개발: SQLite / 운영: provider·url만 바꿔 PostgreSQL 등으로 전환
+// 개발: 로컬 SQLite 파일 / 운영(Vercel): Turso (SQLite 호환, src/db.ts 어댑터)
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native", "rhel-openssl-3.0.x"] // rhel = Vercel 서버리스
 }
 
 datasource db {

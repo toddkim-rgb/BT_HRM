@@ -93,3 +93,13 @@ client/
 - **가동률 (v1.8):** 주 단위로 집계합니다. 그 주에 프로젝트 배정이 있는 인원 ÷ 등록된 전체 인원 × 100이며, 부분 투입도 1명으로 셉니다. 기본은 지난주입니다.
 - **배정 상태:** 투입예정·투입중·종료는 날짜로 자동 계산하고, 취소만 따로 저장합니다.
 - **인력 일괄 등록:** 엑셀 양식을 CSV(UTF-8)로 저장해 올리는 방식입니다.
+
+## 운영 배포 (Vercel + Turso)
+
+- 화면: `client/dist` 정적 배포, API: `api/index.js` 서버리스 함수(빌드된 `server/dist/app.js`), DB: Turso(SQLite 호환)
+- 로컬 개발은 그대로 SQLite 파일(`server/prisma/dev.db`)을 씁니다. `TURSO_DATABASE_URL`이 있으면 Turso에 연결합니다 (`server/src/db.ts`).
+- Vercel 환경변수: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `JWT_SECRET`
+- Turso 스키마·데이터: `server/.env.turso`(git·Vercel 업로드 제외)에 URL·토큰을 넣고
+  - `cd server && npx tsx --env-file=.env.turso scripts/turso.ts migrate` (새 마이그레이션 적용, 배포 전 실행)
+  - `npx tsx --env-file=.env.turso scripts/turso.ts import` (로컬 데이터 1회 이관, 빈 DB에서만)
+- 로컬 DB 파일과 `.env`는 `.vercelignore`로 업로드하지 않습니다.

@@ -3,6 +3,7 @@ dist/
 *.db
 *.db-journal
 .env
+.env.*
 !.env.example
 .claude/
 *.log
@@ -10,3 +11,4 @@ dist/
 
 # 임시 비밀번호 목록 (전달 후 삭제)
 인력_임시비밀번호*.csv
+.vercel
