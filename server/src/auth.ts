@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { createHash } from 'node:crypto';
 import { HttpError, forbidden, prisma } from './db.js';
 import { assertMenu } from './lib/permissions.js';
 
@@ -21,7 +22,9 @@ declare global {
   }
 }
 
-const secret = () => process.env.JWT_SECRET || 'dev-secret';
+// 서명 키: JWT_SECRET → (없으면) 운영 DB 토큰에서 파생(서버에만 존재, 사람이 다룰 비밀값 없음) → 개발용
+const derived = process.env.TURSO_AUTH_TOKEN ? createHash('sha256').update(`bt-hrm-jwt:${process.env.TURSO_AUTH_TOKEN}`).digest('hex') : null;
+const secret = () => process.env.JWT_SECRET || derived || 'dev-secret';
 
 export function signToken(user: AuthUser): string {
   return jwt.sign(user, secret(), { expiresIn: '12h' });
