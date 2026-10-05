@@ -4,15 +4,6 @@ import { ErrorBox, Field, Modal } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
-const DEMO = [
-  ['ceo.kim@example.com', '1234', '경영진'],
-  ['sujin.lee@example.com', '1234', 'SI PM'],
-  ['junho.park@example.com', '1234', 'SM PM'],
-  ['gildong.hong@example.com', '1234', '투입인력'],
-  ['minsu.jung@example.com', '1234', '다중 투입'],
-  ['sales.choi@example.com', '1234', '영업담당'],
-];
-
 export default function Login() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
@@ -67,26 +58,6 @@ export default function Login() {
             비밀번호 재설정 요청
           </button>
         </div>
-        {import.meta.env.DEV && (
-          <div className="demo-accounts">
-            <div className="muted small">개발용 데모 계정 (클릭하면 입력)</div>
-            <div className="chips">
-              {DEMO.map(([id, pw, label]) => (
-                <button
-                  type="button"
-                  key={id}
-                  className="chip"
-                  onClick={() => {
-                    setEmail(id);
-                    setPassword(pw);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </form>
       {dialog === 'id' && <FindIdDialog onClose={() => setDialog(null)} />}
       {dialog === 'pw' && <ResetRequestDialog initialEmail={email} onClose={() => setDialog(null)} />}

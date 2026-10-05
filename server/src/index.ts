@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { blockUntilPasswordChanged, requireAuth } from './auth.js';
 import { HttpError } from './db.js';
+import { ensureDefaultSettings } from './lib/settings.js';
 import { accountRequestsRouter } from './routes/accountRequests.js';
 import { adminRouter } from './routes/admin.js';
 import { assignmentsRouter } from './routes/assignments.js';
@@ -55,4 +56,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 const port = Number(process.env.PORT) || 4000;
+ensureDefaultSettings()
+  .then((n) => n && console.log(`기준값 기본값 ${n}건을 DB에 저장했습니다.`))
+  .catch((e) => console.error('기준값 초기화 실패', e));
 app.listen(port, () => console.log(`BT-HRM API listening on http://localhost:${port}`));

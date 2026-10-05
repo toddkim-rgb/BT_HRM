@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { assertProjectManager, isManager, me, requireRole } from '../auth.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { addDays, businessDays, isValidWeek, shiftWeek, today, weekDays } from '../lib/dates.js';
-import { usableEmp } from '../lib/empFilter.js';
+import { workforce } from '../lib/workforce.js';
 import { getSettings, holidaySet, mdPerMm } from '../lib/settings.js';
 import { dateStr, optStr, parse } from '../lib/validate.js';
 import { summarize, utilizationRange } from './stats.js';
@@ -244,9 +244,10 @@ async function companyWeeklyData(week: string) {
   const prevDays = weekDays(shiftWeek(week, -1));
   const prevUtil = summarize(await utilizationRange(prevDays[0], prevDays[6]));
 
-  // 인원·배정
-  const emps = await prisma.employee.findMany({ where: { AND: [usableEmp, { utilTarget: true }] }, select: { empId: true, name: true, employType: true, statusCd: true, deptCd: true } });
-  const working = emps.filter((e) => e.statusCd !== 'LEAVE');
+  // 인원·배정 (대시보드·투입현황·가동률과 같은 기준: lib/workforce)
+  const wf = await workforce(ref);
+  const working = wf.rows;
+  const emps = wf.rows;
   const active = await prisma.assignment.findMany({
     where: { canceled: false, startDt: { lte: ref }, endDt: { gte: ref } },
     select: { empId: true, prjCd: true, allocRate: true, endDt: true, roleCd: true, employee: { select: { name: true } }, project: { select: { prjType: true, prjNm: true } } },
@@ -322,8 +323,9 @@ async function companyWeeklyData(week: string) {
   // 주의 사항
   const in30 = addDays(ref, 30);
   const attention = {
-    overAllocated: [...allocBy].filter(([, v]) => v > 100).map(([empId, v]) => ({ name: nameOf.get(empId) ?? empId, total: v })),
-    bench: working.filter((e) => !allocBy.has(e.empId)).map((e) => e.name),
+    overAllocated: wf.rows.filter((r) => r.current > 100).map((r) => ({ name: r.name, total: r.current })),
+    bench: wf.rows.filter((r) => r.category === 'BENCH').map((r) => r.name),
+    planned: wf.rows.filter((r) => r.category === 'PLANNED').map((r) => ({ name: r.name, startDt: r.plannedStartDt, alloc: r.planned })),
     lowUtil: utilRows.filter((r) => !r.inactive && r.util != null && r.availMd > 0 && r.util < lowUtil && submittedIds.has(r.empId)).map((r) => ({ name: r.name, util: r.util })),
     lowUtilPct: lowUtil,
     releasing: active
@@ -352,11 +354,12 @@ async function companyWeeklyData(week: string) {
     businessDays: businessDays(start, end, holidays).length,
     refDt: ref,
     kpi: {
-      total: working.length,
-      own: working.filter((e) => e.employType === 'REG' || e.employType === 'CONT').length,
-      partner: working.filter((e) => e.employType === 'PARTNER' || e.employType === 'FREE').length,
-      assigned: working.filter((e) => allocBy.has(e.empId)).length,
-      bench: attention.bench.length,
+      total: wf.summary.total,
+      own: wf.summary.own,
+      partner: wf.summary.partner,
+      assigned: wf.summary.assigned,
+      planned: wf.summary.planned,
+      bench: wf.summary.bench,
       util: util.util,
       paidUtil: util.paidUtil,
       utilDiff: util.util != null && prevUtil.util != null ? round1(util.util - prevUtil.util) : null,

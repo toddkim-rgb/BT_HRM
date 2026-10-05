@@ -453,3 +453,5 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 }
 
 .board-emp-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+
+.attn-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }

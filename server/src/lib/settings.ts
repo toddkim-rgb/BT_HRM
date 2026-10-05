@@ -15,6 +15,14 @@ export const DEFAULT_SETTINGS = {
 
 export type SettingKey = keyof typeof DEFAULT_SETTINGS;
 
+/** 기준값이 DB에 없으면 기본값으로 채워 둔다 (서버 시작 시 실행) — 화면·계산은 DB 값을 사용 */
+export async function ensureDefaultSettings(): Promise<number> {
+  const have = new Set((await prisma.setting.findMany({ select: { key: true } })).map((r) => r.key));
+  const missing = Object.entries(DEFAULT_SETTINGS).filter(([k]) => !have.has(k));
+  for (const [key, value] of missing) await prisma.setting.create({ data: { key, value } });
+  return missing.length;
+}
+
 export async function getSettings(): Promise<Record<SettingKey, string>> {
   const rows = await prisma.setting.findMany();
   const out = { ...DEFAULT_SETTINGS };

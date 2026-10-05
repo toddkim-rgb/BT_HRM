@@ -2,9 +2,10 @@ import { Router } from 'express';
 import { isManager, me, pmProjectCodes } from '../auth.js';
 import { forbidden, notFound, prisma } from '../db.js';
 import { plannedMd } from '../lib/alloc.js';
-import { addMonths, businessDays, monthRange, today } from '../lib/dates.js';
+import { addDays, addMonths, businessDays, monthRange, today } from '../lib/dates.js';
 import { getSettings, holidaySet, mdPerMm } from '../lib/settings.js';
 import { usableEmp } from '../lib/empFilter.js';
+import { workforce } from '../lib/workforce.js';
 import { parse, ymStr } from '../lib/validate.js';
 import { z } from 'zod';
 import { PAID_TYPES, WORK_TYPES } from './projects.js';
@@ -105,6 +106,7 @@ statsRouter.get('/utilization', async (req, res) => {
     where: { empId: { in: base.map((r) => r.empId) }, canceled: false, endDt: { gte: t < next.start ? t : next.start } },
     select: { empId: true, startDt: true, endDt: true, allocRate: true, project: { select: { prjType: true } } },
   });
+  const wf = new Map((await workforce(t)).rows.map((w) => [w.empId, w]));
   const rows = base.map((r) => {
     const mine = asgs.filter((a) => a.empId === r.empId);
     const nextMd = mine.reduce((s2, a) => s2 + plannedMd(a, next.start, next.end, holidays), 0);
@@ -112,6 +114,9 @@ statsRouter.get('/utilization', async (req, res) => {
     return {
       ...r,
       currentAlloc: mine.filter((a) => a.startDt <= t && a.endDt >= t).reduce((s2, a) => s2 + a.allocRate, 0),
+      plannedAlloc: wf.get(r.empId)?.planned ?? 0,
+      plannedStartDt: wf.get(r.empId)?.plannedStartDt ?? null,
+      workforce: wf.get(r.empId)?.category ?? null, // 대상 인원이 아니면(휴직 등) null
       nextUtil: nextBd ? round1((nextMd / nextBd) * 100) : null,
       nextPaidUtil: nextBd ? round1((nextPaidMd / nextBd) * 100) : null,
     };
@@ -226,23 +231,22 @@ statsRouter.get('/summary', async (req, res) => {
   const u = me(req);
   if (!(isManager(u) || u.role === 'SALES' || u.role === 'PM')) throw forbidden();
   const t = today();
-  const emps = await prisma.employee.findMany({ where: { AND: [usableEmp, { utilTarget: true }] }, select: { empId: true, employType: true, statusCd: true } });
-  const active = await prisma.assignment.findMany({ where: { canceled: false, startDt: { lte: t }, endDt: { gte: t } }, select: { empId: true, allocRate: true } });
-  const allocBy = new Map<string, number>();
-  for (const a of active) allocBy.set(a.empId, (allocBy.get(a.empId) ?? 0) + a.allocRate);
-  const working = emps.filter((e) => e.statusCd !== 'LEAVE'); // 상태 미지정은 재직으로 간주
+  // 인원·투입 구분은 전사 One-Page·투입현황·가동률과 같은 기준 (lib/workforce)
+  const wf = await workforce(t);
   const lastYm = addMonths(t.slice(0, 7), -1);
   const util = summarize(await utilizationFor(t.slice(0, 7)));
   const prevUtil = summarize(await utilizationFor(lastYm));
-  const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-  const releasing = await prisma.assignment.count({ where: { canceled: false, endDt: { gte: t, lte: in30 } } });
+  const in30 = addDays(t, 30);
+  const releasing = await prisma.assignment.count({ where: { canceled: false, endDt: { gte: t, lte: in30 }, empId: { in: wf.rows.map((r) => r.empId) } } });
   res.json({
-    totalHeadcount: working.length,
-    ownHeadcount: working.filter((e) => e.employType === 'REG' || e.employType === 'CONT').length,
-    partnerHeadcount: working.filter((e) => e.employType === 'PARTNER' || e.employType === 'FREE').length,
-    assigned: working.filter((e) => allocBy.has(e.empId)).length,
-    bench: working.filter((e) => !allocBy.has(e.empId)).length,
-    overAllocated: [...allocBy.values()].filter((v) => v > 100).length,
+    totalHeadcount: wf.summary.total,
+    ownHeadcount: wf.summary.own,
+    partnerHeadcount: wf.summary.partner,
+    assigned: wf.summary.assigned,
+    planned: wf.summary.planned,
+    plannedNames: wf.rows.filter((r) => r.category === 'PLANNED').map((r) => ({ name: r.name, startDt: r.plannedStartDt })),
+    bench: wf.summary.bench,
+    overAllocated: wf.summary.overAllocated,
     releasingIn30: releasing,
     util,
     prevUtil,
@@ -359,6 +363,7 @@ statsRouter.get('/staffing', async (req, res) => {
     });
   }
 
+  const wfMap = new Map((await workforce(t)).rows.map((w) => [w.empId, w]));
   // 인력 기준 (전사 조회 권한이면 대기 인력도 포함)
   const involved = new Map(asg.map((a) => [a.empId, a.employee]));
   if (!scope) {
@@ -370,9 +375,13 @@ statsRouter.get('/staffing', async (req, res) => {
     .map(([empId, e]) => {
       const mine = inMonth.filter((a) => a.empId === empId);
       const currentAlloc = asg.filter((a) => a.empId === empId && a.startDt <= t && a.endDt >= t).reduce((s2, a) => s2 + a.allocRate, 0);
+      const w = wfMap.get(empId);
       return {
         empId,
         name: e.name,
+        inWorkforce: !!w, // 대상 인원(휴직·투입 대상 아님 제외) — 인원 집계는 이 인력만
+        plannedAlloc: w?.planned ?? 0,
+        plannedStartDt: w?.plannedStartDt ?? null,
         deptCd: e.deptCd,
         gradeCd: e.gradeCd,
         skillLevel: e.skillLevel,

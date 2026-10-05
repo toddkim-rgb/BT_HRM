@@ -50,6 +50,9 @@ interface Person {
   employType: string;
   currentAlloc: number;
   overAlloc: number;
+  inWorkforce: boolean; // 대상 인원 (휴직·투입 대상 아님 제외)
+  plannedAlloc: number;
+  plannedStartDt: string | null;
   projectCount: number;
   assignments: { asgId: number; prjCd: string; prjNm: string; roleCd: string; allocRate: number; startDt: string; endDt: string; planMd: number; actualMd: number }[];
   timeline: { ym: string; total: number; items: { prjCd: string; prjNm?: string; pct: number }[] }[];
@@ -76,6 +79,7 @@ export default function Staffing() {
   const projects = activeProjects.filter((p) => !kw || p.prjCd.toLowerCase().includes(kw) || p.prjNm.toLowerCase().includes(kw) || p.members.some((m) => m.name.includes(q.trim())));
   const people = (data?.people ?? []).filter((p) => !kw || p.name.includes(q.trim()) || p.deptCd.toLowerCase().includes(kw) || p.assignments.some((a) => a.prjNm.toLowerCase().includes(kw)));
   const all = data?.people ?? [];
+  const wfAll = all.filter((p) => p.inWorkforce); // 인원 집계 기준 (대시보드·One-Page와 동일)
 
   return (
     <div>
@@ -108,8 +112,9 @@ export default function Staffing() {
             <Kpi label="진행중 프로젝트" value={`${activeProjects.length}개`} sub={activeProjects.some((p) => !p.headcount) ? `투입 인력 없음 ${activeProjects.filter((p) => !p.headcount).length}개` : undefined} />
             <Kpi label="투입 인원" value={`${all.filter((p) => p.assignments.length).length}명`} sub={`${Number(ym.slice(5))}월 배정 기준`} />
             <Kpi label="다중 투입" value={`${all.filter((p) => p.projectCount > 1).length}명`} sub="2개 이상 프로젝트" />
-            <Kpi label="과투입 (오늘)" value={`${all.filter((p) => p.overAlloc > 0).length}명`} tone={all.some((p) => p.overAlloc > 0) ? 'bad' : undefined} />
-            <Kpi label="대기 (오늘)" value={`${all.filter((p) => p.currentAlloc === 0).length}명`} tone={all.some((p) => p.currentAlloc === 0) ? 'warn' : undefined} />
+            <Kpi label="과투입 (오늘)" value={`${wfAll.filter((p) => p.overAlloc > 0).length}명`} tone={wfAll.some((p) => p.overAlloc > 0) ? 'bad' : undefined} />
+            <Kpi label="투입 예정" value={`${wfAll.filter((p) => !p.currentAlloc && p.plannedAlloc > 0).length}명`} sub="시작 전 배정만 있음" />
+            <Kpi label="대기" value={`${wfAll.filter((p) => !p.currentAlloc && !p.plannedAlloc).length}명`} sub="현재·예정 배정 없음" tone={wfAll.some((p) => !p.currentAlloc && !p.plannedAlloc) ? 'warn' : undefined} />
           </div>
           <Card>
             <div className="tabs" role="tablist">
@@ -238,7 +243,12 @@ function ByPerson({ list }: { list: Person[] }) {
               </td>
               <td data-label="소속">{p.deptCd}</td>
               <td data-label="현재 투입률" className="num">
-                {p.currentAlloc ? `${p.currentAlloc}%` : <Badge tone="warn">대기</Badge>}
+                {p.currentAlloc ? `${p.currentAlloc}%` : p.plannedAlloc ? null : <Badge tone="warn">대기</Badge>}
+                {p.plannedAlloc > 0 && (
+                  <div title={`${p.plannedStartDt}부터 투입 예정`}>
+                    <Badge tone="neutral">예정 {p.plannedAlloc}%</Badge>
+                  </div>
+                )}
                 {p.overAlloc > 0 && (
                   <div>
                     <Badge tone="bad">과투입 +{p.overAlloc}%</Badge>

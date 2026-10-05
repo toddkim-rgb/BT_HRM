@@ -24,6 +24,9 @@ interface Row {
   paidUtil: number | null;
   inactive: boolean;
   currentAlloc: number;
+  plannedAlloc: number;
+  plannedStartDt: string | null;
+  workforce: 'ASSIGNED' | 'PLANNED' | 'BENCH' | null;
   nextUtil: number | null;
   nextPaidUtil: number | null;
 }
@@ -46,12 +49,15 @@ interface Resp {
   rows: Row[];
 }
 
-const utilTone = (u: number | null) => (u == null ? undefined : u >= 85 ? 'good' : u >= 70 ? 'warn' : 'bad');
+// 색 기준: 저가동 기준값(기준값 설정 LOW_UTIL_PCT, DB) 미만 = 위험, 기준값+15%p 미만 = 주의
+let LOW_UTIL = 70;
+const utilTone = (u: number | null) => (u == null ? undefined : u >= LOW_UTIL + 15 ? 'good' : u >= LOW_UTIL ? 'warn' : 'bad');
 
 export default function Utilization() {
   const { user } = useAuth();
   const [ym, setYm] = useState(today().slice(0, 7));
   const { data, error, loading } = useFetch<Resp>(`/stats/utilization${qs({ ym })}`);
+  if (data) LOW_UTIL = data.lowUtilPct;
   const [sort, setSort] = useState<'name' | 'util' | 'paidUtil'>('util');
   const [trend, setTrend] = useState<Row | null>(null);
 
@@ -188,7 +194,8 @@ export default function Utilization() {
 /** 주의가 필요한 인력: 대기 · 저가동 · 과투입 · 다음 달 투입 공백 */
 function Attention({ rows: allRows, lowUtilPct, nextMonth }: { rows: Row[]; lowUtilPct: number; nextMonth: number }) {
   const rows = allRows.filter((r) => !r.inactive); // 삭제·퇴사 인력 제외
-  const bench = rows.filter((r) => r.currentAlloc === 0);
+  const bench = rows.filter((r) => r.workforce === 'BENCH');
+  const planned = rows.filter((r) => r.workforce === 'PLANNED');
   const low = rows.filter((r) => r.util != null && r.availMd > 0 && r.util < lowUtilPct && r.currentAlloc > 0);
   const over = rows.filter((r) => r.currentAlloc > 100);
   const gap = rows.filter((r) => r.currentAlloc > 0 && r.nextUtil != null && r.nextUtil < 50);
@@ -204,7 +211,8 @@ function Attention({ rows: allRows, lowUtilPct, nextMonth }: { rows: Row[]; lowU
   return (
     <Card title="주의 인력" className="attn-card">
       <div className="attn-grid">
-        <Item title="대기 (오늘 배정 없음)" tone="warn" list={bench} render={(r) => r.name} />
+        <Item title="대기 (현재·예정 배정 없음)" tone="warn" list={bench} render={(r) => r.name} />
+        <Item title="투입 예정 (시작 전 배정)" tone="info" list={planned} render={(r) => `${r.name}(${r.plannedStartDt ? r.plannedStartDt.slice(5).replace('-', '/') : ''}~)`} />
         <Item title={`저가동 (${lowUtilPct}% 미만)`} tone="warn" list={low} render={(r) => `${r.name}(${r.util}%)`} />
         <Item title="과투입 (투입률 100% 초과)" tone="bad" list={over} render={(r) => `${r.name}(+${r.currentAlloc - 100}%)`} />
         <Item title={`${nextMonth}월 투입 공백 (예상 50% 미만)`} tone="info" list={gap} render={(r) => `${r.name}(${r.nextUtil}%)`} />

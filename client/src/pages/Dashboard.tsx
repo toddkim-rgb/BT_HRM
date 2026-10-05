@@ -13,6 +13,8 @@ interface Summary {
   assigned: number;
   bench: number;
   overAllocated: number;
+  planned: number;
+  plannedNames: { name: string; startDt: string | null }[];
   releasingIn30: number;
   util: { util: number | null; paidUtil: number | null };
   prevUtil: { util: number | null; paidUtil: number | null };
@@ -48,7 +50,8 @@ function CompanySummary() {
     <div className="kpis">
       <Kpi label="총 인원" value={`${data.totalHeadcount}명`} sub={`자사 ${data.ownHeadcount} · 협력사 ${data.partnerHeadcount}`} />
       <Kpi label="투입 인원" value={`${data.assigned}명`} />
-      <Kpi label="대기 인원" value={`${data.bench}명`} tone={data.bench ? 'warn' : undefined} />
+      <Kpi label="투입 예정" value={`${data.planned}명`} sub={data.planned ? data.plannedNames.map((p) => `${p.name}${p.startDt ? ` ${Number(p.startDt.slice(5, 7))}/${Number(p.startDt.slice(8))}~` : ''}`).join(', ') : '시작 전 배정 없음'} />
+      <Kpi label="대기 인원" value={`${data.bench}명`} sub="현재·예정 배정 없음" tone={data.bench ? 'warn' : undefined} />
       <Kpi label="이번 달 총가동률" value={pct(data.util.util)} sub={diff(data.util.util, data.prevUtil.util)} />
       <Kpi label="이번 달 유상가동률" value={pct(data.util.paidUtil)} sub={diff(data.util.paidUtil, data.prevUtil.paidUtil)} />
       <Kpi label="과투입" value={`${data.overAllocated}명`} tone={data.overAllocated ? 'bad' : undefined} />
