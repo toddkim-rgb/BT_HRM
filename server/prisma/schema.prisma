@@ -331,3 +331,12 @@ model AccountRequest {
   handleNote   String?
   createdAt    DateTime  @default(now())
 }
+
+// 메뉴별 접근 권한 (역할 × 메뉴 → NONE/VIEW/EDIT), 관리자 '메뉴 권한' 화면에서 변경
+model MenuPermission {
+  role  String
+  menu  String
+  level String @default("NONE")
+
+  @@id([role, menu])
+}

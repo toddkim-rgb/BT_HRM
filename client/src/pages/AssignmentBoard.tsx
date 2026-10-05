@@ -57,7 +57,7 @@ const roleOf = (job: string | null) => (!job ? 'DEV' : job.includes('설계') ? 
  * 터치 화면처럼 끌기가 안 되는 환경을 위해 '+ 인력' 선택과 '×' 버튼도 함께 제공한다.
  */
 export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) => void; refreshKey: number }) {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const toast = useToast();
   const t = today();
   const { data: asgs, error, reload: reloadAsg } = useFetch<BoardAsg[]>(`/assignments?status=PLANNED,ACTIVE&_=${refreshKey}`);
@@ -68,8 +68,10 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const [over, setOver] = useState<string | null>(null); // 드롭 대상 강조 (프로젝트 코드 또는 'pool')
   const [busy, setBusy] = useState(false);
 
-  const canManage = (p: { pmEmpId: string | null }) => user?.role === 'ADMIN' || (user?.role === 'PM' && p.pmEmpId === user.empId);
-  const canDragEmp = user?.role === 'ADMIN' || (user?.role === 'PM' && (projects ?? []).some(canManage));
+  // 편집: 투입 배정 '편집' 권한 + PM 역할은 담당 프로젝트만
+  const canEditMenu = can('assignments', 'EDIT');
+  const canManage = (p: { pmEmpId: string | null }) => canEditMenu && (user?.role !== 'PM' || p.pmEmpId === user.empId);
+  const canDragEmp = canEditMenu && (projects ?? []).some(canManage);
   const reload = () => {
     reloadAsg();
     reloadEmp();

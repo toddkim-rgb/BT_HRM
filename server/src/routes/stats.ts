@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { isManager, me, pmProjectCodes } from '../auth.js';
+import { me, pmProjectCodes } from '../auth.js';
+import { requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { plannedMd } from '../lib/alloc.js';
 import { addDays, addMonths, businessDays, isValidWeek, monthRange, shiftWeek, today } from '../lib/dates.js';
@@ -27,7 +28,7 @@ async function submittedTimesheets(start: string, end: string, extra: Record<str
 
 // ---- 가동률 (v1.8 재정의): 주 단위, 그 주 배정 인원 ÷ 등록 인원 (lib/weeklyUtil) ----
 
-statsRouter.get('/utilization', async (req, res) => {
+statsRouter.get('/utilization', requireMenu('utilization'), async (req, res) => {
   const u = me(req);
   const week = String(req.query.week ?? lastWeek());
   if (!isValidWeek(week)) throw new HttpError(400, '주차 형식은 YYYY-Www 입니다.');
@@ -47,7 +48,7 @@ statsRouter.get('/utilization', async (req, res) => {
 });
 
 /** 인력별 최근 12주 투입 여부 */
-statsRouter.get('/utilization/:empId/trend', async (req, res) => {
+statsRouter.get('/utilization/:empId/trend', requireMenu('utilization'), async (req, res) => {
   const u = me(req);
   const empId = String(req.params.empId);
   if (u.role === 'EMP' && u.empId !== empId) throw forbidden();
@@ -98,20 +99,18 @@ async function projectMm(prjCds: string[]) {
   });
 }
 
-statsRouter.get('/projects', async (req, res) => {
+statsRouter.get('/projects', requireMenu(['projectMm', 'dashboard']), async (req, res) => {
   const u = me(req);
-  let codes: string[];
-  if (u.role === 'PM') codes = await pmProjectCodes(u.empId);
-  else if (isManager(u) || u.role === 'SALES') codes = (await prisma.project.findMany({ where: { prjType: { not: 'NP' } }, select: { prjCd: true } })).map((p) => p.prjCd);
-  else throw forbidden();
+  // PM은 담당 프로젝트만, 그 외 권한 보유자는 전체
+  const codes = u.role === 'PM' ? await pmProjectCodes(u.empId) : (await prisma.project.findMany({ where: { prjType: { not: 'NP' } }, select: { prjCd: true } })).map((p) => p.prjCd);
   res.json(await projectMm(codes));
 });
 
-statsRouter.get('/projects/:prjCd/mm', async (req, res) => {
+statsRouter.get('/projects/:prjCd/mm', requireMenu('projectMm'), async (req, res) => {
   const u = me(req);
   const p = await prisma.project.findUnique({ where: { prjCd: String(req.params.prjCd) } });
   if (!p) throw notFound('프로젝트');
-  if (!(isManager(u) || u.role === 'SALES' || (u.role === 'PM' && p.pmEmpId === u.empId))) throw forbidden();
+  if (u.role === 'PM' && p.pmEmpId !== u.empId) throw forbidden();
   const [summary] = await projectMm([p.prjCd]);
   const holidays = await holidaySet();
   const mdmm = await mdPerMm();
@@ -140,9 +139,9 @@ statsRouter.get('/projects/:prjCd/mm', async (req, res) => {
 });
 
 /** 대시보드 요약 (F-020 일부) */
-statsRouter.get('/summary', async (req, res) => {
-  const u = me(req);
-  if (!(isManager(u) || u.role === 'SALES' || u.role === 'PM')) throw forbidden();
+statsRouter.get('/summary', requireMenu('dashboard'), async (req, res) => {
+  // 전사 요약: 대시보드 권한 + 투입인력 역할 제외 (투입인력 대시보드는 본인 정보만)
+  if (me(req).role === 'EMP') throw forbidden();
   const t = today();
   // 인원·투입 구분은 전사 One-Page·투입현황·가동률과 같은 기준 (lib/workforce)
   const wf = await workforce(t);
@@ -172,9 +171,8 @@ statsRouter.get('/summary', async (req, res) => {
  * - people: 인력 → 투입 프로젝트 (다중 투입·과투입·대기)
  * - timeline: 인력 × 월 투입률 (배정 기준)
  */
-statsRouter.get('/staffing', async (req, res) => {
+statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
   const u = me(req);
-  if (u.role === 'EMP') throw forbidden();
   const q = parse(z.object({ ym: ymStr.default(today().slice(0, 7)), months: z.coerce.number().int().min(1).max(12).default(6) }), req.query);
   const { start, end } = monthRange(q.ym);
   const holidays = await holidaySet();

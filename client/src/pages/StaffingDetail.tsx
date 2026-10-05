@@ -5,11 +5,13 @@ import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num, pct } from '../lib/format';
 import { addMonths, isoWeek, today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
+import { useAuth } from '../lib/auth';
 import { MilestoneTrack, type Milestone } from './ProjectWeekly';
 import type { StaffingResp } from './Staffing';
 
 /** 프로젝트 투입 상세: 카드에서 선택한 프로젝트의 투입 인력·기간·MD·마일스톤 */
 export default function StaffingDetail() {
+  const { can } = useAuth();
   const { prjCd = '' } = useParams();
   const [sp, setSp] = useSearchParams();
   const ym = sp.get('ym') ?? today().slice(0, 7);
@@ -66,15 +68,21 @@ export default function StaffingDetail() {
               title="투입 인력"
               actions={
                 <>
-                  <Link className="btn sm" to="/assignments">
-                    배정 관리
-                  </Link>
-                  <Link className="btn sm" to={`/project-weekly/${prjCd}/${isoWeek(t)}`}>
-                    주간보고
-                  </Link>
-                  <Link className="btn sm" to={`/project-mm/${prjCd}`}>
-                    MM 현황
-                  </Link>
+                  {can('assignments') && (
+                    <Link className="btn sm" to="/assignments">
+                      배정 관리
+                    </Link>
+                  )}
+                  {can('projectWeekly') && (
+                    <Link className="btn sm" to={`/project-weekly/${prjCd}/${isoWeek(t)}`}>
+                      주간보고
+                    </Link>
+                  )}
+                  {can('projectMm') && (
+                    <Link className="btn sm" to={`/project-mm/${prjCd}`}>
+                      MM 현황
+                    </Link>
+                  )}
                 </>
               }
             >

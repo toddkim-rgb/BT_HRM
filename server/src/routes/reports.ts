@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { assertProjectManager, isManager, me, requireRole } from '../auth.js';
+import { assertProjectManager, me } from '../auth.js';
+import { assertMenu, requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { addDays, businessDays, isValidWeek, shiftWeek, today, weekDays } from '../lib/dates.js';
 import { workforce } from '../lib/workforce.js';
@@ -137,11 +138,12 @@ async function projectWeeklyView(prjCd: string, week: string) {
 
 export const projectWeeklyRouter = Router();
 
+/** 조회: '프로젝트 주간보고' 조회 권한 + PM 역할은 담당 프로젝트만 */
 async function assertCanViewProject(u: ReturnType<typeof me>, prjCd: string) {
-  if (isManager(u)) return;
+  await assertMenu(u, 'projectWeekly', 'VIEW');
   const p = await prisma.project.findUnique({ where: { prjCd }, select: { pmEmpId: true } });
   if (!p) throw notFound('프로젝트');
-  if (!(u.role === 'PM' && p.pmEmpId === u.empId)) throw forbidden();
+  if (u.role === 'PM' && p.pmEmpId !== u.empId) throw forbidden();
 }
 
 projectWeeklyRouter.get('/:prjCd/weekly/:week', async (req, res) => {
@@ -159,7 +161,7 @@ projectWeeklyRouter.put('/:prjCd/weekly/:week/comment', async (req, res) => {
   const prjCd = String(req.params.prjCd);
   const week = String(req.params.week);
   checkWeek(week);
-  await assertProjectManager(u, prjCd);
+  await assertProjectManager(u, prjCd, 'projectWeekly');
   const body = parse(z.object({ pmOpinion: optStr, confirm: z.boolean().optional() }), req.body);
   const cur = await prisma.weeklyComment.findUnique({ where: { reportWeek_prjCd: { reportWeek: week, prjCd } } });
   if (cur?.confirmedYn && body.confirm !== false) throw new HttpError(409, '확정된 주간보고입니다. 수정하려면 확정을 취소하세요.');
@@ -180,7 +182,7 @@ projectWeeklyRouter.patch('/:prjCd/weekly/:week/issues/:id/onepage', async (req,
   const u = me(req);
   const prjCd = String(req.params.prjCd);
   const week = String(req.params.week);
-  await assertProjectManager(u, prjCd);
+  await assertProjectManager(u, prjCd, 'projectWeekly');
   const body = parse(z.object({ onepageYn: z.boolean() }), req.body);
   const issue = await prisma.weeklyIssue.findUnique({ where: { wisId: Number(req.params.id) }, include: { weeklyWork: { select: { reportWeek: true } } } });
   if (!issue || issue.prjCd !== prjCd || issue.weeklyWork.reportWeek !== week) throw notFound('이슈');
@@ -193,14 +195,14 @@ projectWeeklyRouter.patch('/:prjCd/weekly/:week/issues/:id/onepage', async (req,
 // ---- 주요 마일스톤 (PM 입력) ----
 const msSchema = z.object({ msNm: z.string().trim().min(1, '마일스톤명을 입력하세요'), planDt: dateStr, doneDt: dateStr.nullish().or(z.literal('').transform(() => null)), note: optStr });
 
-projectWeeklyRouter.get('/:prjCd/milestones', async (req, res) => {
+projectWeeklyRouter.get('/:prjCd/milestones', requireMenu(['projectWeekly', 'staffing']), async (req, res) => {
   const list = await prisma.milestone.findMany({ where: { prjCd: String(req.params.prjCd) }, orderBy: [{ planDt: 'asc' }, { seq: 'asc' }] });
   res.json({ milestones: list.map((m) => ({ ...m, status: msStatus(m) })), ...milestoneSummary(list) });
 });
 
 projectWeeklyRouter.post('/:prjCd/milestones', async (req, res) => {
   const prjCd = String(req.params.prjCd);
-  await assertProjectManager(me(req), prjCd);
+  await assertProjectManager(me(req), prjCd, 'projectWeekly');
   const body = parse(msSchema, req.body);
   const seq = (await prisma.milestone.count({ where: { prjCd } })) + 1;
   const m = await prisma.milestone.create({ data: { prjCd, seq, msNm: body.msNm, planDt: body.planDt, doneDt: body.doneDt ?? null, note: body.note } });
@@ -209,7 +211,7 @@ projectWeeklyRouter.post('/:prjCd/milestones', async (req, res) => {
 
 projectWeeklyRouter.put('/:prjCd/milestones/:msId', async (req, res) => {
   const prjCd = String(req.params.prjCd);
-  await assertProjectManager(me(req), prjCd);
+  await assertProjectManager(me(req), prjCd, 'projectWeekly');
   const body = parse(msSchema, req.body);
   const cur = await prisma.milestone.findUnique({ where: { msId: Number(req.params.msId) } });
   if (!cur || cur.prjCd !== prjCd) throw notFound('마일스톤');
@@ -218,7 +220,7 @@ projectWeeklyRouter.put('/:prjCd/milestones/:msId', async (req, res) => {
 
 projectWeeklyRouter.delete('/:prjCd/milestones/:msId', async (req, res) => {
   const prjCd = String(req.params.prjCd);
-  await assertProjectManager(me(req), prjCd);
+  await assertProjectManager(me(req), prjCd, 'projectWeekly');
   const cur = await prisma.milestone.findUnique({ where: { msId: Number(req.params.msId) } });
   if (!cur || cur.prjCd !== prjCd) throw notFound('마일스톤');
   await prisma.workItem.updateMany({ where: { msId: cur.msId }, data: { msId: null } });
@@ -371,9 +373,7 @@ async function companyWeeklyData(week: string) {
 }
 
 export const reportsRouter = Router();
-const VIEWERS = ['PM', 'EXEC', 'ADMIN', 'SALES'] as const;
-
-reportsRouter.get('/weekly/:week', requireRole(...VIEWERS), async (req, res) => {
+reportsRouter.get('/weekly/:week', requireMenu('onepage'), async (req, res) => {
   const week = String(req.params.week);
   checkWeek(week);
   const r = await prisma.weeklyReport.findUnique({ where: { reportWeek: week } });
@@ -393,7 +393,7 @@ reportsRouter.get('/weekly/:week', requireRole(...VIEWERS), async (req, res) => 
 const noteSchema = z.object({ execNote: optStr, nextPlan: optStr });
 
 // 사업부장 입력(이슈 종합·차주 계획) 저장
-reportsRouter.put('/weekly/:week', requireRole('EXEC', 'ADMIN'), async (req, res) => {
+reportsRouter.put('/weekly/:week', requireMenu('onepage', 'EDIT'), async (req, res) => {
   const week = String(req.params.week);
   checkWeek(week);
   const body = parse(noteSchema, req.body);
@@ -404,7 +404,7 @@ reportsRouter.put('/weekly/:week', requireRole('EXEC', 'ADMIN'), async (req, res
 });
 
 // 확정: 그 시점 집계를 snapshot으로 고정
-reportsRouter.post('/weekly/:week/confirm', requireRole('EXEC', 'ADMIN'), async (req, res) => {
+reportsRouter.post('/weekly/:week/confirm', requireMenu('onepage', 'EDIT'), async (req, res) => {
   const u = me(req);
   const week = String(req.params.week);
   checkWeek(week);
@@ -414,7 +414,7 @@ reportsRouter.post('/weekly/:week/confirm', requireRole('EXEC', 'ADMIN'), async 
   res.json({ ok: true });
 });
 
-reportsRouter.post('/weekly/:week/unconfirm', requireRole('EXEC', 'ADMIN'), async (req, res) => {
+reportsRouter.post('/weekly/:week/unconfirm', requireMenu('onepage', 'EDIT'), async (req, res) => {
   const week = String(req.params.week);
   checkWeek(week);
   await prisma.weeklyReport.updateMany({ where: { reportWeek: week }, data: { statusCd: 'DRAFT', snapshot: null, confirmedBy: null, confirmedAt: null } });

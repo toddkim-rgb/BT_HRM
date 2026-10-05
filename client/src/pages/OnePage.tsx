@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Badge, ErrorBox, Loading, useToast } from '../components/ui';
 import { api } from '../lib/api';
-import { hasRole, useAuth } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import { ISSUE_TYPE, SEVERITY } from '../lib/codes';
 import { dateTime, label, num, pct } from '../lib/format';
 import { isoWeek, md, shiftWeek, today } from '../lib/dates';
@@ -59,13 +59,13 @@ const diff = (d: number | null) => (d == null ? null : <span className={d >= 0 ?
 
 /** 전사 주간 One-Page: 제출된 주간 업무보고에서 자동 생성 (A4 가로 1장 인쇄·PDF) */
 export default function OnePage() {
-  const { user } = useAuth();
+  const { can } = useAuth();
   const params = useParams();
   const nav = useNavigate();
   const toast = useToast();
   const week = params.week ?? shiftWeek(isoWeek(today()), -1); // 기본: 지난주 (월요일에 지난주 보고)
   const { data: r, error, loading, reload } = useFetch<Report>(`/reports/weekly/${week}`);
-  const canEdit = hasRole(user, 'EXEC', 'ADMIN');
+  const canEdit = can('onepage', 'EDIT');
   const [execNote, setExecNote] = useState('');
   const [nextPlan, setNextPlan] = useState('');
   const [busy, setBusy] = useState(false);
@@ -225,9 +225,13 @@ export default function OnePage() {
                 {d.projects.map((p) => (
                   <tr key={p.prjCd}>
                     <td>
-                      <Link to={`/project-weekly/${p.prjCd}/${week}`} className="op-link">
+                      {can('projectWeekly') ? (
+                        <Link to={`/project-weekly/${p.prjCd}/${week}`} className="op-link">
+                          <strong>{p.prjNm}</strong>
+                        </Link>
+                      ) : (
                         <strong>{p.prjNm}</strong>
-                      </Link>
+                      )}
                     </td>
                     <td className="nowrap">{p.pmName ?? '-'}</td>
                     <td>

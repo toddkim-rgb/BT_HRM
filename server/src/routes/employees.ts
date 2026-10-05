@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { me, requireRole } from '../auth.js';
+import { type AuthUser, me } from '../auth.js';
+import { assertMenu, requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { assignmentStatus, currentAllocations, plannedAllocations } from '../lib/alloc.js';
 import { notRetired } from '../lib/empFilter.js';
@@ -58,10 +59,11 @@ async function checkPartner(employType: string, partnerId: string | null | undef
 }
 
 // F-030 인력 목록 (R-02 이상)
-employeesRouter.get('/', requireRole('PM', 'EXEC', 'ADMIN', 'SALES'), async (req, res) => {
+// 목록: 인력 메뉴 또는 인력 목록을 쓰는 메뉴(투입 배정·프로젝트 PM 선택·계정 요청) 조회 권한
+employeesRouter.get('/', requireMenu(['employees', 'assignments', 'projects', 'accountRequests']), async (req, res) => {
   const u = me(req);
   const { status, employType, q, includeRetired, deleted } = req.query as Record<string, string | undefined>;
-  if (deleted === 'Y' && u.role !== 'ADMIN') throw forbidden();
+  if (deleted === 'Y') await assertMenu(u, 'employees', 'EDIT');
   const rows = await prisma.employee.findMany({
     where: {
       deletedAt: deleted === 'Y' ? { not: null } : null,
@@ -94,6 +96,18 @@ employeesRouter.get('/', requireRole('PM', 'EXEC', 'ADMIN', 'SALES'), async (req
 });
 
 // F-001 인력 상세 (본인 또는 R-02 이상)
+/** 시스템관리자 계정·권한은 시스템관리자만 다룸 (인력 편집 권한을 받은 다른 역할의 권한 상승 방지) */
+function assertRoleChange(u: AuthUser, curRole: string | null, nextRole?: string) {
+  if (u.role === 'ADMIN') return;
+  if (curRole === 'ADMIN' || nextRole === 'ADMIN') throw new HttpError(403, '시스템관리자 계정·권한은 시스템관리자만 변경할 수 있습니다.');
+  if (curRole != null && nextRole != null && curRole !== nextRole) throw new HttpError(403, '계정 권한(역할)은 시스템관리자만 변경할 수 있습니다.');
+}
+
+async function assertTargetNotAdmin(u: AuthUser, empId: string) {
+  const t = await prisma.employee.findUnique({ where: { empId }, select: { role: true } });
+  if (t) assertRoleChange(u, t.role);
+}
+
 employeesRouter.get('/:empId', async (req, res) => {
   const u = me(req);
   const { empId } = req.params;
@@ -114,8 +128,9 @@ employeesRouter.get('/:empId', async (req, res) => {
   });
 });
 
-employeesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
+employeesRouter.post('/', requireMenu('employees', 'EDIT'), async (req, res) => {
   const body = parse(employeeSchema, req.body);
+  if (me(req).role !== 'ADMIN' && body.role !== 'EMP') throw new HttpError(403, '투입인력 외의 권한(역할)은 시스템관리자만 지정할 수 있습니다.');
   await checkPartner(body.employType, body.partnerId);
   await checkEmail(body.email);
   // 초기 비밀번호 = 본인 이메일 주소, 첫 로그인 시 변경 강제
@@ -125,12 +140,13 @@ employeesRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   res.status(201).json({ empId: created.empId });
 });
 
-employeesRouter.put('/:empId', requireRole('ADMIN'), async (req, res) => {
+employeesRouter.put('/:empId', requireMenu('employees', 'EDIT'), async (req, res) => {
   const body = parse(employeeSchema, req.body);
   await checkPartner(body.employType, body.partnerId);
   const empId = String(req.params.empId);
   const cur = await prisma.employee.findUnique({ where: { empId } });
   if (!cur) throw notFound('인력');
+  assertRoleChange(me(req), cur.role, body.role);
   await checkEmail(body.email, empId);
   // 아직 초기 비밀번호 상태(첫 로그인 전)에서 이메일을 바꾸면 초기 비밀번호도 새 이메일로 맞춘다
   const resetPw = cur.mustChangePw && cur.email !== body.email;
@@ -139,8 +155,9 @@ employeesRouter.put('/:empId', requireRole('ADMIN'), async (req, res) => {
 });
 
 // 관리자 비밀번호 초기화: 비밀번호를 본인 이메일 주소로 되돌림 → 첫 로그인 시 변경 강제
-employeesRouter.post('/:empId/reset-password', requireRole('ADMIN'), async (req, res) => {
+employeesRouter.post('/:empId/reset-password', requireMenu('employees', 'EDIT'), async (req, res) => {
   const empId = String(req.params.empId);
+  await assertTargetNotAdmin(me(req), empId);
   const emp = await prisma.employee.findUnique({ where: { empId } });
   if (!emp) throw notFound('인력');
   await prisma.employee.update({ where: { empId }, data: { passwordHash: await initialPasswordHash(emp.email), mustChangePw: true } });
@@ -148,12 +165,13 @@ employeesRouter.post('/:empId/reset-password', requireRole('ADMIN'), async (req,
 });
 
 // F-030 엑셀(CSV) 일괄 등록: 클라이언트에서 파싱한 행 배열을 받는다
-employeesRouter.post('/import', requireRole('ADMIN'), async (req, res) => {
+employeesRouter.post('/import', requireMenu('employees', 'EDIT'), async (req, res) => {
   const rows = parse(z.array(z.record(z.string(), z.unknown())).max(2000), req.body?.rows);
   const results: { row: number; email?: string; name?: string; error?: string }[] = [];
   for (const [i, raw] of rows.entries()) {
     try {
       const body = parse(employeeSchema, raw);
+      if (me(req).role !== 'ADMIN' && body.role !== 'EMP') throw new HttpError(403, '투입인력 외의 권한(역할)은 시스템관리자만 지정할 수 있습니다.');
       await checkPartner(body.employType, body.partnerId);
       await checkEmail(body.email);
       await prisma.employee.create({ data: { ...body, empId: await nextEmpId(), passwordHash: await initialPasswordHash(body.email), mustChangePw: true } });
@@ -203,14 +221,15 @@ async function deleteImpact(empId: string, actor: string) {
   };
 }
 
-employeesRouter.get('/:empId/delete-impact', requireRole('ADMIN'), async (req, res) => {
+employeesRouter.get('/:empId/delete-impact', requireMenu('employees', 'EDIT'), async (req, res) => {
   const { emp: _e, ...rest } = await deleteImpact(String(req.params.empId), me(req).empId);
   res.json(rest);
 });
 
-employeesRouter.delete('/:empId', requireRole('ADMIN'), async (req, res) => {
+employeesRouter.delete('/:empId', requireMenu('employees', 'EDIT'), async (req, res) => {
   const u = me(req);
   const empId = String(req.params.empId);
+  await assertTargetNotAdmin(u, empId);
   const impact = await deleteImpact(empId, u.empId);
   if (impact.emp.deletedAt) throw new HttpError(409, '이미 삭제 처리된 인력입니다.');
   if (impact.blockers.length) throw new HttpError(409, impact.blockers.join('\n'), { blockers: impact.blockers });
@@ -232,7 +251,7 @@ employeesRouter.delete('/:empId', requireRole('ADMIN'), async (req, res) => {
   res.json({ ok: true, mode: 'ARCHIVE' });
 });
 
-employeesRouter.post('/:empId/restore', requireRole('ADMIN'), async (req, res) => {
+employeesRouter.post('/:empId/restore', requireMenu('employees', 'EDIT'), async (req, res) => {
   const empId = String(req.params.empId);
   const emp = await prisma.employee.findUnique({ where: { empId } });
   if (!emp) throw notFound('인력');

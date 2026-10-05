@@ -68,7 +68,7 @@ const MD_OPTS: [string, string][] = [
 ];
 
 export default function WeeklyWork() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const params = useParams();
   const nav = useNavigate();
   const toast = useToast();
@@ -94,7 +94,7 @@ export default function WeeklyWork() {
   }, [data]);
 
   const prjMap = useMemo(() => new Map((projects ?? []).map((p) => [p.prjCd, p])), [projects]);
-  const editable = isMine && v != null;
+  const editable = isMine && v != null && can('weekly', 'EDIT');
   const submitted = v?.statusCd === 'SUBMITTED';
   const isSm = (prjCd: string) => prjMap.get(prjCd)?.prjType === 'SM';
   const typeOf = (r: TsRow) => r.prjType ?? prjMap.get(r.prjCd)?.prjType ?? (r.prjCd.startsWith('NP-') ? 'NP' : undefined);

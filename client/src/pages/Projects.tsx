@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast, PrjTypeBadge } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { hasRole, useAuth } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import { CONTRACT_TYPE, PRJ_STATUS, PRJ_TYPE, RESIDENT, REVENUE_METHOD } from '../lib/codes';
 import { label, num, won } from '../lib/format';
 import { useFetch } from '../lib/hooks';
@@ -31,13 +31,14 @@ export interface Project {
 const TYPE_OPTS = { SM: 'SM 운영·유지보수', SI: 'SI 구축', IN: '내부 프로젝트', PS: '제안/영업지원', ETC: '기타' };
 
 export default function Projects() {
-  const { user } = useAuth();
-  const canCreate = hasRole(user, 'ADMIN', 'SALES');
+  const { user, can } = useAuth();
+  const canCreate = can('projects', 'EDIT');
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
   const { data, error, loading, reload } = useFetch<Project[]>(`/projects${qs({ type, status })}`);
   const [edit, setEdit] = useState<Partial<Project> | null>(null);
-  const canEdit = (p: Project) => hasRole(user, 'ADMIN') || (hasRole(user, 'SALES') && p.statusCd === 'PROPOSAL');
+  // 편집: 프로젝트 '편집' 권한 (영업담당은 제안 상태만)
+  const canEdit = (p: Project) => can('projects', 'EDIT') && (user?.role !== 'SALES' || p.statusCd === 'PROPOSAL');
 
   return (
     <div>
@@ -111,7 +112,7 @@ export default function Projects() {
                       </Badge>
                     </td>
                     <td data-label="" onClick={(e) => e.stopPropagation()}>
-                      {p.statusCd !== 'PROPOSAL' && hasRole(user, 'PM', 'EXEC', 'ADMIN', 'SALES') && (
+                      {p.statusCd !== 'PROPOSAL' && can('projectMm') && (
                         <Link className="btn sm" to={`/project-mm/${p.prjCd}`}>
                           MM
                         </Link>
@@ -139,7 +140,7 @@ export default function Projects() {
 }
 
 function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>; onClose: () => void; onSaved: () => void }) {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const toast = useToast();
   const isNew = !initial.prjCd;
   const isSales = user?.role === 'SALES';
@@ -175,7 +176,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
       wide
       footer={
         <>
-          {!isNew && user?.role === 'ADMIN' && (
+          {!isNew && can('projects', 'EDIT') && (!isSales || initial.statusCd === 'PROPOSAL') && (
             <button className="btn danger" onClick={() => setRemoving(true)} style={{ marginRight: 'auto' }}>
               삭제
             </button>

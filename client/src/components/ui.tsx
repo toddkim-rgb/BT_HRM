@@ -87,6 +87,7 @@ export function Select({ value, onChange, options, placeholder, ...rest }: {
   disabled?: boolean;
   className?: string;
   required?: boolean;
+  title?: string;
 }) {
   const entries = Array.isArray(options) ? options : Object.entries(options);
   return (

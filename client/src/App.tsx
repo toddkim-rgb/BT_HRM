@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { Layout } from './components/Layout';
+import { Guard, Home, Layout } from './components/Layout';
+import Permissions from './pages/Permissions';
 import { Loading, ToastProvider } from './components/ui';
 import { AuthProvider, useAuth } from './lib/auth';
 import AccountRequests from './pages/AccountRequests';
@@ -29,26 +30,27 @@ function Routed() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="weekly" element={<WeeklyWork />} />
+        <Route index element={<Home><Dashboard /></Home>} />
+        <Route path="weekly" element={<Guard menu="weekly"><WeeklyWork /></Guard>} />
         <Route path="weekly/:empId/:week" element={<WeeklyWork />} />
-        <Route path="submissions" element={<Submissions />} />
-        <Route path="project-weekly" element={<ProjectWeekly />} />
-        <Route path="project-weekly/:prjCd/:week" element={<ProjectWeekly />} />
-        <Route path="onepage" element={<OnePage />} />
-        <Route path="onepage/:week" element={<OnePage />} />
-        <Route path="assignments" element={<Assignments />} />
-        <Route path="staffing" element={<Staffing />} />
-        <Route path="staffing/:prjCd" element={<StaffingDetail />} />
-        <Route path="utilization" element={<Utilization />} />
-        <Route path="project-mm" element={<ProjectMm />} />
-        <Route path="project-mm/:prjCd" element={<ProjectMm />} />
-        <Route path="employees" element={<Employees />} />
-        <Route path="projects" element={<Projects />} />
-        <Route path="partners" element={<Partners />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="account-requests" element={<AccountRequests />} />
+        <Route path="submissions" element={<Guard menu="submissions"><Submissions /></Guard>} />
+        <Route path="project-weekly" element={<Guard menu="projectWeekly"><ProjectWeekly /></Guard>} />
+        <Route path="project-weekly/:prjCd/:week" element={<Guard menu="projectWeekly"><ProjectWeekly /></Guard>} />
+        <Route path="onepage" element={<Guard menu="onepage"><OnePage /></Guard>} />
+        <Route path="onepage/:week" element={<Guard menu="onepage"><OnePage /></Guard>} />
+        <Route path="assignments" element={<Guard menu="assignments"><Assignments /></Guard>} />
+        <Route path="staffing" element={<Guard menu="staffing"><Staffing /></Guard>} />
+        <Route path="staffing/:prjCd" element={<Guard menu="staffing"><StaffingDetail /></Guard>} />
+        <Route path="utilization" element={<Guard menu="utilization"><Utilization /></Guard>} />
+        <Route path="project-mm" element={<Guard menu="projectMm"><ProjectMm /></Guard>} />
+        <Route path="project-mm/:prjCd" element={<Guard menu="projectMm"><ProjectMm /></Guard>} />
+        <Route path="employees" element={<Guard menu="employees"><Employees /></Guard>} />
+        <Route path="projects" element={<Guard menu="projects"><Projects /></Guard>} />
+        <Route path="partners" element={<Guard menu="partners"><Partners /></Guard>} />
+        <Route path="settings" element={<Guard menu="settings"><Settings /></Guard>} />
+        <Route path="account-requests" element={<Guard menu="accountRequests"><AccountRequests /></Guard>} />
         <Route path="me" element={<MyInfo />} />
+        <Route path="permissions" element={<Guard menu="permissions"><Permissions /></Guard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

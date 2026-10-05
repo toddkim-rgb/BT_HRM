@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Badge, Card, Empty, Kpi, Loading, PageHeader, ProgressBar } from '../components/ui';
-import { hasRole, useAuth } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, WW_STATUS } from '../lib/codes';
 import { label, num, pct } from '../lib/format';
 import { isoWeek, shiftWeek, today, weekLabel } from '../lib/dates';
@@ -27,8 +27,8 @@ const diff = (a: number | null, b: number | null) => {
 };
 
 export default function Dashboard() {
-  const { user } = useAuth();
-  const isMgr = hasRole(user, 'PM', 'EXEC', 'ADMIN', 'SALES');
+  const { user, can } = useAuth();
+  const isMgr = user?.role !== 'EMP'; // 전사 요약은 투입인력 역할 제외
   return (
     <div>
       <PageHeader title={`안녕하세요, ${user?.name}님`} desc={`${today()} · ${weekLabel(isoWeek(today()))}`} />
@@ -36,8 +36,8 @@ export default function Dashboard() {
       <div className="grid cols-2">
         <MyWeekly />
         <MyAssignments />
-        {hasRole(user, 'PM', 'EXEC', 'ADMIN') && <SubmissionSummary />}
-        {isMgr && <ProjectBurn />}
+        {isMgr && can('submissions') && <SubmissionSummary />}
+        {isMgr && can('projectMm') && <ProjectBurn />}
       </div>
     </div>
   );

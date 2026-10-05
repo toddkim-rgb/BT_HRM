@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
-import { type AuthUser, isManager, me, pmProjectCodes } from '../auth.js';
+import { type AuthUser, me, pmProjectCodes } from '../auth.js';
+import { assertMenu, requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { businessDays, isValidWeek, isoWeek, shiftWeek, today, weekDays } from '../lib/dates.js';
 import { holidaySet } from '../lib/settings.js';
@@ -57,10 +58,11 @@ function judgeStatus(it: ItemInput, isSm: boolean): string | null {
   return 'NORMAL';
 }
 
-/** 조회 권한: 본인 / 경영진·관리자 / 해당 주 담당 프로젝트에 배정·입력된 인력의 PM */
+/** 조회 권한: 본인 / '제출 현황' 조회 권한자 (PM은 해당 주 담당 프로젝트에 배정·입력된 인력만) */
 async function assertCanView(u: AuthUser, empId: string, week: string) {
-  if (u.empId === empId || isManager(u)) return;
-  if (u.role !== 'PM') throw forbidden();
+  if (u.empId === empId) return;
+  await assertMenu(u, 'submissions', 'VIEW');
+  if (u.role !== 'PM') return;
   const mine = await pmProjectCodes(u.empId);
   const days = weekDays(week);
   const hit =
@@ -300,6 +302,7 @@ weeklyWorksRouter.put('/:empId/:week', async (req, res) => {
   const { empId, week } = req.params;
   checkWeek(week);
   if (u.empId !== empId) throw forbidden();
+  await assertMenu(u, 'weekly', 'EDIT');
   const body = parse(reportSchema, req.body);
   const cur = await prisma.weeklyWork.findUnique({ where: { empId_reportWeek: { empId, reportWeek: week } } });
   if (cur?.statusCd === 'SUBMITTED') throw new HttpError(409, '제출된 보고서는 임시저장할 수 없습니다. 수정 후 바로 제출하세요.');
@@ -319,6 +322,7 @@ weeklyWorksRouter.post('/:empId/:week/submit', async (req, res) => {
   const { empId, week } = req.params;
   checkWeek(week);
   if (u.empId !== empId) throw forbidden();
+  await assertMenu(u, 'weekly', 'EDIT');
   const body = parse(reportSchema.extend({ confirmWarnings: z.boolean().default(false) }), req.body);
   try {
     // 저장·검증을 한 트랜잭션으로: 검증에 걸리면 기존(제출된) 내용이 그대로 유지됨
@@ -337,9 +341,8 @@ weeklyWorksRouter.post('/:empId/:week/submit', async (req, res) => {
 });
 
 // 제출된 보고서 목록 (PM: 담당 프로젝트가 포함된 보고서)
-weeklyWorksRouter.get('/', async (req, res) => {
+weeklyWorksRouter.get('/', requireMenu('submissions'), async (req, res) => {
   const u = me(req);
-  if (!(u.role === 'PM' || isManager(u))) throw forbidden();
   const { status, week, prjCd } = req.query as Record<string, string | undefined>;
   const where: Prisma.WeeklyWorkWhereInput = { statusCd: { in: (status ?? 'SUBMITTED').split(',') }, ...(week ? { reportWeek: week } : {}) };
   let scope: string[] | null = null;
@@ -384,9 +387,9 @@ weeklyWorksRouter.get('/', async (req, res) => {
 });
 
 /** 프로젝트별 주간 제출 현황 요약 (PM 담당 / 경영진·관리자 전체) */
-weeklyWorksRouter.get('/project-summary', async (req, res) => {
+weeklyWorksRouter.get('/project-summary', requireMenu(['submissions', 'dashboard']), async (req, res) => {
   const u = me(req);
-  if (!(u.role === 'PM' || isManager(u))) throw forbidden();
+  if (u.role === 'EMP') throw forbidden();
   const week = String(req.query.week ?? isoWeek(today()));
   checkWeek(week);
   const days = weekDays(week);
@@ -423,7 +426,8 @@ weeklyWorksRouter.get('/project/:prjCd/:week/status', async (req, res) => {
   checkWeek(week);
   const prj = await prisma.project.findUnique({ where: { prjCd } });
   if (!prj) throw notFound('프로젝트');
-  if (!isManager(u) && !(u.role === 'PM' && prj.pmEmpId === u.empId)) throw forbidden();
+  await assertMenu(u, 'submissions', 'VIEW');
+  if (u.role === 'PM' && prj.pmEmpId !== u.empId) throw forbidden();
   const days = weekDays(week);
   const holidays = await holidaySet();
   const asg = await prisma.assignment.findMany({

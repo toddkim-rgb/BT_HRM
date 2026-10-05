@@ -9,9 +9,18 @@ export interface User {
   mustChangePw?: boolean; // 초기 비밀번호(이메일 주소) → 변경 전까지 다른 화면 이용 불가
 }
 
+/** 메뉴 키 → 권한 단계 (서버 '메뉴 권한' 설정, DB) */
+export type Level = 'NONE' | 'VIEW' | 'EDIT';
+export type Perms = Record<string, Level>;
+const RANK: Record<Level, number> = { NONE: 0, VIEW: 1, EDIT: 2 };
+
 interface AuthCtx {
   user: User | null;
   ready: boolean;
+  perms: Perms;
+  /** 메뉴 권한 확인: can('employees') = 조회 이상, can('employees', 'EDIT') = 편집 */
+  can: (menu: string, level?: Level) => boolean;
+  reloadPerms: () => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   /** 비밀번호 변경 후 새 토큰 반영 */
@@ -23,11 +32,27 @@ const Ctx = createContext<AuthCtx>(null as never);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
+  const [perms, setPerms] = useState<Perms | null>(null);
 
   const logout = useCallback(() => {
     tokenStore.clear();
     setUser(null);
+    setPerms(null);
   }, []);
+
+  const reloadPerms = useCallback(() => {
+    api
+      .get<Perms>('/auth/me/permissions')
+      .then(setPerms)
+      .catch(() => setPerms({}));
+  }, []);
+
+  // 로그인·역할 변경 시 메뉴 권한 다시 불러오기 (초기 비밀번호 변경 전에는 불필요)
+  useEffect(() => {
+    if (user && !user.mustChangePw) reloadPerms();
+  }, [user?.empId, user?.role, user?.mustChangePw, reloadPerms]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const can = useCallback((menu: string, level: Level = 'VIEW') => RANK[perms?.[menu] ?? 'NONE'] >= RANK[level], [perms]);
 
   useEffect(() => {
     setUnauthorizedHandler(logout);
@@ -52,7 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     applySession(r.token, r.user);
   };
 
-  return <Ctx.Provider value={{ user, ready, login, logout, applySession }}>{children}</Ctx.Provider>;
+  // 권한을 불러오기 전에는 화면을 그리지 않음 (메뉴가 깜빡이거나 권한 없음이 잠깐 보이지 않도록)
+  const allReady = ready && (!user || !!user.mustChangePw || perms != null);
+  return <Ctx.Provider value={{ user, ready: allReady, perms: perms ?? {}, can, reloadPerms, login, logout, applySession }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);

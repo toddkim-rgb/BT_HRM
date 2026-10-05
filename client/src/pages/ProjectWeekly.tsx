@@ -70,7 +70,7 @@ export const MS_STATUS: Record<string, string> = { DONE: '완료', DELAY: '지�
 
 /** 프로젝트 주간보고: 인력별 주간 업무보고를 자동 취합 + PM 종합 의견 */
 export default function ProjectWeekly() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const params = useParams();
   const nav = useNavigate();
   const toast = useToast();
@@ -85,7 +85,8 @@ export default function ProjectWeekly() {
   useEffect(() => setOpinion(data?.pmOpinion ?? ''), [data]);
 
   const go = (p: string, w: string) => nav(`/project-weekly/${p}/${w}`);
-  const canManage = !!data && (user?.role === 'ADMIN' || (user?.role === 'PM' && data.project.pmEmpId === user.empId));
+  // 편집: 프로젝트 주간보고 '편집' 권한 + PM 역할은 담당 프로젝트만
+  const canManage = !!data && can('projectWeekly', 'EDIT') && (user?.role !== 'PM' || data.project.pmEmpId === user.empId);
   const editable = canManage && !data?.confirmedYn;
 
   const saveComment = async (confirm?: boolean) => {

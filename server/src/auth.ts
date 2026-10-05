@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { HttpError, forbidden, prisma } from './db.js';
+import { assertMenu } from './lib/permissions.js';
 
 export type Role = 'EMP' | 'PM' | 'EXEC' | 'ADMIN' | 'SALES';
 
@@ -69,10 +70,13 @@ export async function pmProjectCodes(empId: string): Promise<string[]> {
   return rows.map((r) => r.prjCd);
 }
 
-/** 프로젝트 관리 권한: 관리자 또는 해당 프로젝트 PM */
-export async function assertProjectManager(u: AuthUser, prjCd: string) {
-  if (u.role === 'ADMIN') return;
+/**
+ * 프로젝트 단위 편집 권한: 해당 메뉴 '편집' 권한(메뉴 권한 설정) + PM 역할은 담당 프로젝트만
+ * (투입 배정·프로젝트 주간보고·마일스톤)
+ */
+export async function assertProjectManager(u: AuthUser, prjCd: string, menu: 'assignments' | 'projectWeekly') {
+  await assertMenu(u, menu, 'EDIT');
   const p = await prisma.project.findUnique({ where: { prjCd }, select: { pmEmpId: true } });
   if (!p) throw new HttpError(404, '프로젝트를 찾을 수 없습니다.');
-  if (u.role !== 'PM' || p.pmEmpId !== u.empId) throw forbidden();
+  if (u.role === 'PM' && p.pmEmpId !== u.empId) throw forbidden();
 }

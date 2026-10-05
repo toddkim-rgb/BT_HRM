@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { isManager, me, requireRole } from '../auth.js';
+import { isManager, me } from '../auth.js';
+import { requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { today } from '../lib/dates.js';
 import { optDate, optStr, parse } from '../lib/validate.js';
@@ -72,7 +73,7 @@ projectsRouter.get('/:prjCd', async (req, res) => {
   res.json({ ...rest, pmName: pm?.name ?? null, ...(canSeeAmount(u, p) ? {} : { contractAmt: null }), amountVisible: canSeeAmount(u, p) });
 });
 
-projectsRouter.post('/', requireRole('ADMIN', 'SALES'), async (req, res) => {
+projectsRouter.post('/', requireMenu('projects', 'EDIT'), async (req, res) => {
   const u = me(req);
   const body = parse(projectSchema, req.body);
   if (u.role === 'SALES' && body.statusCd !== 'PROPOSAL') throw new HttpError(403, '영업담당은 제안 상태 프로젝트만 등록할 수 있습니다.');
@@ -85,7 +86,7 @@ projectsRouter.post('/', requireRole('ADMIN', 'SALES'), async (req, res) => {
   res.status(201).json({ prjCd });
 });
 
-projectsRouter.put('/:prjCd', requireRole('ADMIN', 'SALES'), async (req, res) => {
+projectsRouter.put('/:prjCd', requireMenu('projects', 'EDIT'), async (req, res) => {
   const u = me(req);
   const cur = await prisma.project.findUnique({ where: { prjCd: String(req.params.prjCd) } });
   if (!cur || cur.prjType === 'NP') throw notFound('프로젝트');
@@ -124,14 +125,15 @@ async function projectDeleteImpact(prjCd: string) {
   return { prj, counts, hasHistory: assignments + timesheets + workItems + issues + milestones + weeklyComments + demandPlans + billRates + expenses > 0 };
 }
 
-projectsRouter.get('/:prjCd/delete-impact', requireRole('ADMIN'), async (req, res) => {
+projectsRouter.get('/:prjCd/delete-impact', requireMenu('projects', 'EDIT'), async (req, res) => {
   const { prj, ...rest } = await projectDeleteImpact(String(req.params.prjCd));
   res.json({ prjCd: prj.prjCd, prjNm: prj.prjNm, statusCd: prj.statusCd, ...rest });
 });
 
-projectsRouter.delete('/:prjCd', requireRole('ADMIN'), async (req, res) => {
+projectsRouter.delete('/:prjCd', requireMenu('projects', 'EDIT'), async (req, res) => {
   const prjCd = String(req.params.prjCd);
   const impact = await projectDeleteImpact(prjCd);
+  if (me(req).role === 'SALES' && impact.prj.statusCd !== 'PROPOSAL') throw new HttpError(403, '영업담당은 제안 상태 프로젝트만 삭제할 수 있습니다.');
   // 이력이 있으면 프로젝트명(또는 코드)을 다시 입력해 확인해야 삭제 (투입 MD가 지워지면 과거 가동률·MM이 바뀜)
   const typed = String(req.body?.confirm ?? '').trim();
   if (impact.hasHistory && typed !== prjCd && typed !== impact.prj.prjNm.trim()) {

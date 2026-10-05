@@ -4,6 +4,7 @@ import { api, qs } from '../lib/api';
 import { SETTING_LABEL } from '../lib/codes';
 import { dow } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
+import { useAuth } from '../lib/auth';
 
 export default function Settings() {
   return (
@@ -19,6 +20,7 @@ export default function Settings() {
 
 function SettingsCard() {
   const toast = useToast();
+  const editable = useAuth().can('settings', 'EDIT');
   const { data, error, setData } = useFetch<Record<string, string>>('/admin/settings');
   const [f, setF] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -36,9 +38,11 @@ function SettingsCard() {
     <Card
       title="기준값"
       actions={
-        <button className="btn sm primary" onClick={save} disabled={!data}>
-          저장
-        </button>
+        editable && (
+          <button className="btn sm primary" onClick={save} disabled={!data}>
+            저장
+          </button>
+        )
       }
     >
       <ErrorBox error={error} />
@@ -48,7 +52,7 @@ function SettingsCard() {
         <div className="form-grid">
           {Object.keys(data).map((k) => (
             <Field key={k} label={SETTING_LABEL[k] ?? k}>
-              <input value={f[k] ?? ''} onChange={(e) => setF((s) => ({ ...s, [k]: e.target.value }))} />
+              <input value={f[k] ?? ''} disabled={!editable} onChange={(e) => setF((s) => ({ ...s, [k]: e.target.value }))} />
             </Field>
           ))}
         </div>
@@ -58,6 +62,7 @@ function SettingsCard() {
 }
 
 function HolidaysCard() {
+  const editable = useAuth().can('settings', 'EDIT');
   const toast = useToast();
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const { data, error, reload } = useFetch<{ dt: string; name: string }[]>(`/admin/holidays${qs({ year })}`);
@@ -98,7 +103,7 @@ function HolidaysCard() {
       <div className="row" style={{ marginBottom: 12, flexWrap: 'nowrap' }}>
         <input type="date" value={dt} onChange={(e) => setDt(e.target.value)} style={{ maxWidth: 170 }} />
         <input placeholder="명칭 (예: 대체공휴일)" value={name} onChange={(e) => setName(e.target.value)} />
-        <button className="btn" disabled={!dt || !name.trim()} onClick={add}>
+        <button className="btn" disabled={!editable || !dt || !name.trim()} onClick={add}>
           추가
         </button>
       </div>
@@ -118,7 +123,7 @@ function HolidaysCard() {
                   </td>
                   <td>{h.name}</td>
                   <td style={{ textAlign: 'right' }}>
-                    <button className="btn sm danger" onClick={() => remove(h.dt)}>
+                    <button className="btn sm danger" onClick={() => remove(h.dt)} disabled={!editable}>
                       삭제
                     </button>
                   </td>

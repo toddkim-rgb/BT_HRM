@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { me, requireRole } from '../auth.js';
+import { me } from '../auth.js';
+import { requireMenu } from '../lib/permissions.js';
 import { HttpError, notFound, prisma } from '../db.js';
 import { initialPasswordHash } from '../lib/password.js';
 import { optStr, parse } from '../lib/validate.js';
 
 // 로그인 화면에서 들어온 비밀번호 재설정 요청·ID 문의 처리 (시스템관리자)
 export const accountRequestsRouter = Router();
-accountRequestsRouter.use(requireRole('ADMIN'));
+// 조회는 '계정 요청' 조회 권한, 처리(POST)는 편집 권한
+accountRequestsRouter.use((req, _res, next) => requireMenu('accountRequests', req.method === 'GET' ? 'VIEW' : 'EDIT')(req, _res, next));
 
 accountRequestsRouter.get('/', async (req, res) => {
   const status = String(req.query.status ?? 'OPEN');

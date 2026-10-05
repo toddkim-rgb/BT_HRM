@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
 import { api } from '../lib/api';
-import { hasRole, useAuth } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import { PARTNER_STATUS } from '../lib/codes';
 import { label } from '../lib/format';
 import { useFetch } from '../lib/hooks';
@@ -19,8 +19,8 @@ interface Partner {
 }
 
 export default function Partners() {
-  const { user } = useAuth();
-  const isAdmin = hasRole(user, 'ADMIN');
+  const { can } = useAuth();
+  const isAdmin = can('partners', 'EDIT');
   const { data, error, loading, reload } = useFetch<Partner[]>('/admin/partners');
   const [edit, setEdit] = useState<Partial<Partner> | null>(null);
 

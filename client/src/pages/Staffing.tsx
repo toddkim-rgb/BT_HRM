@@ -6,6 +6,7 @@ import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num } from '../lib/format';
 import { addMonths, today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
+import { useAuth } from '../lib/auth';
 
 export interface Member {
   asgId: number;
@@ -68,6 +69,7 @@ type Tab = 'project' | 'person' | 'timeline';
 
 /** 프로젝트별 투입인력 현황판: 프로젝트 기준 / 인력 기준 / 월 타임라인 */
 export default function Staffing() {
+  const { can } = useAuth();
   const [ym, setYm] = useState(today().slice(0, 7));
   const [tab, setTab] = useState<Tab>('project');
   const [q, setQ] = useState('');
@@ -97,9 +99,11 @@ export default function Staffing() {
                 ▶
               </button>
             </div>
-            <Link className="btn" to="/assignments">
-              배정 관리
-            </Link>
+            {can('assignments') && (
+              <Link className="btn" to="/assignments">
+                배정 관리
+              </Link>
+            )}
           </>
         }
       />

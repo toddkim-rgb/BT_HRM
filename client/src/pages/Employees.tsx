@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { hasRole, useAuth } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, EMP_STATUS, EMPLOY_TYPE, ROLE_LABEL, SKILL_LEVELS } from '../lib/codes';
 import { label } from '../lib/format';
 import { useFetch } from '../lib/hooks';
@@ -46,8 +46,8 @@ const blank: Partial<Employee> = {
 };
 
 export default function Employees() {
-  const { user } = useAuth();
-  const isAdmin = hasRole(user, 'ADMIN');
+  const { can } = useAuth();
+  const isAdmin = can('employees', 'EDIT'); // 인력 '편집' 권한 (관리자 계정·역할 변경은 시스템관리자만)
   const [q, setQ] = useState('');
   const [employType, setEmployType] = useState('');
   const [status, setStatus] = useState('');
@@ -435,6 +435,7 @@ function DeleteDialog({ emp, onClose, onDone }: { emp: Employee; onClose: () => 
 }
 
 function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee>; onClose: () => void; onSaved: () => void }) {
+  const { user } = useAuth(); // 권한(역할) 변경은 시스템관리자만
   const toast = useToast();
   const isNew = !('careerYears' in initial); // 조회해 온 인력에는 careerYears가 있음
   const [f, setF] = useState({ ...initial });
@@ -541,7 +542,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
           <Select value={f.statusCd} onChange={(statusCd) => set({ statusCd: statusCd || null })} options={EMP_STATUS} placeholder="미지정" />
         </Field>
         <Field label="시스템 권한" required>
-          <Select value={f.role} onChange={(role) => set({ role })} options={ROLE_LABEL} />
+          <Select value={f.role} onChange={(role) => set({ role })} options={ROLE_LABEL} disabled={user?.role !== 'ADMIN'} title={user?.role !== 'ADMIN' ? '권한(역할)은 시스템관리자만 변경할 수 있습니다' : undefined} />
         </Field>
         <Field label="투입 대상" hint="관리·영업·경영진 등은 해제 (가동률·대기 인원 집계 제외)">
           <label className="check" style={{ minHeight: 38 }}>

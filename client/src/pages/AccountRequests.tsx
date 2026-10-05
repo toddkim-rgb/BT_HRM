@@ -3,6 +3,7 @@ import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select
 import { api, qs } from '../lib/api';
 import { dateTime } from '../lib/format';
 import { useFetch } from '../lib/hooks';
+import { useAuth } from '../lib/auth';
 
 interface Req {
   reqId: number;
@@ -25,6 +26,7 @@ const STATUS: Record<string, string> = { OPEN: '대기', DONE: '처리 완료', 
 
 /** 로그인 화면에서 들어온 비밀번호 재설정 요청·ID 문의 처리 (시스템관리자) */
 export default function AccountRequests() {
+  const { can } = useAuth();
   const [status, setStatus] = useState('OPEN');
   const { data, error, loading, reload } = useFetch<Req[]>(`/admin/account-requests${qs({ status })}`);
   const [handle, setHandle] = useState<Req | null>(null);
@@ -85,7 +87,7 @@ export default function AccountRequests() {
                       {r.handleNote && <div className="small muted">{r.handleNote}</div>}
                     </td>
                     <td data-label="">
-                      {r.statusCd === 'OPEN' && (
+                      {r.statusCd === 'OPEN' && can('accountRequests', 'EDIT') && (
                         <button className="btn sm primary" onClick={() => setHandle(r)}>
                           처리
                         </button>

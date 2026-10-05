@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { hasRole, useAuth } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, EMPLOY_TYPE } from '../lib/codes';
 import { label } from '../lib/format';
 import { today } from '../lib/dates';
@@ -24,7 +24,7 @@ interface Asg {
 }
 
 export default function Assignments() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [prjCd, setPrjCd] = useState('');
   const [status, setStatus] = useState('PLANNED,ACTIVE');
   const { data, error, loading, reload } = useFetch<Asg[]>(`/assignments${qs({ prjCd, status })}`);
@@ -34,8 +34,8 @@ export default function Assignments() {
   const [refreshKey, setRefreshKey] = useState(0); // 저장 후 보드 새로고침
   const toast = useToast();
 
-  const myProjects = (projects ?? []).filter((p) => !['DONE', 'STOP'].includes(p.statusCd) && (user?.role === 'ADMIN' || p.pmEmpId === user?.empId));
-  const canManage = (a: Asg) => user?.role === 'ADMIN' || (user?.role === 'PM' && a.project.pmEmpId === user.empId);
+  const myProjects = (projects ?? []).filter((p) => !['DONE', 'STOP'].includes(p.statusCd) && (user?.role !== 'PM' || p.pmEmpId === user?.empId));
+  const canManage = (a: Asg) => can('assignments', 'EDIT') && (user?.role !== 'PM' || a.project.pmEmpId === user.empId);
   const t = today();
   const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
@@ -57,7 +57,7 @@ export default function Assignments() {
         title="투입 배정"
         desc="배정 보드에서 인력을 프로젝트로 끌어다 놓으면 바로 배정되고, 프로젝트의 인력을 인력 목록으로 끌어내면 빠집니다. 한 프로젝트에 여러 명, 한 사람을 여러 프로젝트에 배정할 수 있습니다."
         actions={
-          hasRole(user, 'PM', 'ADMIN') && (
+          can('assignments', 'EDIT') && (
             <button className="btn primary" disabled={!myProjects.length} onClick={() => setEdit({ prjCd: prjCd || myProjects[0]?.prjCd, allocRate: 100, residentType: 'ONSITE', roleCd: 'DEV', startDt: t })}>
               + 배정 등록
             </button>

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireRole } from '../auth.js';
+import { requireMenu } from '../lib/permissions.js';
 import { HttpError, notFound, prisma } from '../db.js';
 import { usableEmp } from '../lib/empFilter.js';
 import { optDate, optStr, parse } from '../lib/validate.js';
@@ -19,7 +19,7 @@ const partnerSchema = z.object({
 });
 
 // 목록은 인력 등록 화면에서도 쓰므로 PM 이상 조회 허용 (단가 정보 없음)
-partnersRouter.get('/', requireRole('PM', 'EXEC', 'ADMIN', 'SALES'), async (_req, res) => {
+partnersRouter.get('/', requireMenu(['partners', 'employees']), async (_req, res) => {
   const rows = await prisma.partner.findMany({
     include: { _count: { select: { employees: { where: usableEmp } } } },
     orderBy: { partnerNm: 'asc' },
@@ -27,7 +27,7 @@ partnersRouter.get('/', requireRole('PM', 'EXEC', 'ADMIN', 'SALES'), async (_req
   res.json(rows.map(({ _count, ...p }) => ({ ...p, headcount: _count.employees })));
 });
 
-partnersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
+partnersRouter.post('/', requireMenu('partners', 'EDIT'), async (req, res) => {
   const body = parse(partnerSchema, req.body);
   const rows = await prisma.partner.findMany({ select: { partnerId: true } });
   const max = rows.reduce((m, r) => Math.max(m, Number(r.partnerId.replace(/\D/g, '')) || 0), 0);
@@ -36,14 +36,14 @@ partnersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   res.status(201).json({ partnerId });
 });
 
-partnersRouter.put('/:id', requireRole('ADMIN'), async (req, res) => {
+partnersRouter.put('/:id', requireMenu('partners', 'EDIT'), async (req, res) => {
   const body = parse(partnerSchema, req.body);
   if (!(await prisma.partner.findUnique({ where: { partnerId: String(req.params.id) } }))) throw notFound('협력사');
   await prisma.partner.update({ where: { partnerId: String(req.params.id) }, data: body });
   res.json({ ok: true });
 });
 
-partnersRouter.delete('/:id', requireRole('ADMIN'), async (req, res) => {
+partnersRouter.delete('/:id', requireMenu('partners', 'EDIT'), async (req, res) => {
   const used = await prisma.employee.count({ where: { partnerId: String(req.params.id) } });
   if (used) throw new HttpError(409, '소속 인력이 있는 협력사는 삭제할 수 없습니다. 거래중지로 변경하세요.');
   await prisma.partner.delete({ where: { partnerId: String(req.params.id) } });

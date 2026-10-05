@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { assertProjectManager, isManager, me, pmProjectCodes } from '../auth.js';
+import { assertProjectManager, me, pmProjectCodes } from '../auth.js';
+import { assertMenu } from '../lib/permissions.js';
 import { HttpError, notFound, prisma } from '../db.js';
 import { assignmentStatus, maxAllocation } from '../lib/alloc.js';
 import { dateStr, parse } from '../lib/validate.js';
@@ -62,7 +63,7 @@ async function validateTarget(empId: string, prjCd: string) {
 assignmentsRouter.post('/', async (req, res) => {
   const u = me(req);
   const body = parse(asgSchema, req.body);
-  await assertProjectManager(u, body.prjCd);
+  await assertProjectManager(u, body.prjCd, 'assignments');
   await validateTarget(body.empId, body.prjCd);
   const created = await prisma.assignment.create({ data: { ...body, createdBy: u.empId } });
   const max = await maxAllocation(body.empId, body.startDt, body.endDt);
@@ -73,7 +74,7 @@ assignmentsRouter.put('/:id', async (req, res) => {
   const u = me(req);
   const cur = await prisma.assignment.findUnique({ where: { asgId: Number(req.params.id) } });
   if (!cur) throw notFound('배정');
-  await assertProjectManager(u, cur.prjCd);
+  await assertProjectManager(u, cur.prjCd, 'assignments');
   const body = parse(asgSchema, req.body);
   if (body.prjCd !== cur.prjCd) throw new HttpError(400, '프로젝트는 변경할 수 없습니다. 새로 배정하세요.');
   await validateTarget(body.empId, body.prjCd);
@@ -86,7 +87,7 @@ assignmentsRouter.post('/:id/cancel', async (req, res) => {
   const u = me(req);
   const cur = await prisma.assignment.findUnique({ where: { asgId: Number(req.params.id) } });
   if (!cur) throw notFound('배정');
-  await assertProjectManager(u, cur.prjCd);
+  await assertProjectManager(u, cur.prjCd, 'assignments');
   await prisma.assignment.update({ where: { asgId: cur.asgId }, data: { canceled: true } });
   res.json({ ok: true });
 });
@@ -94,7 +95,7 @@ assignmentsRouter.post('/:id/cancel', async (req, res) => {
 /** 등록 전 과투입 미리보기 + 같은 기간 다른 투입 현황 (다중 프로젝트 투입) */
 assignmentsRouter.get('/preview/overalloc', async (req, res) => {
   const u = me(req);
-  if (!(u.role === 'PM' || isManager(u))) throw new HttpError(403, '권한이 없습니다.');
+  await assertMenu(u, 'assignments', 'EDIT');
   const q = parse(
     z.object({ empId: z.string(), startDt: dateStr, endDt: dateStr, allocRate: z.coerce.number(), excludeAsgId: z.coerce.number().optional() }),
     req.query,
