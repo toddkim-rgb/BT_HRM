@@ -48,6 +48,11 @@ export function Badge({ code, children, tone }: { code?: string; children: React
   return <span className={`badge ${tone ?? BADGE_TONE[code ?? ''] ?? 'neutral'}`}>{children}</span>;
 }
 
+/** 사업구분 배지: SM·SI 등 구분별 고유 색 (상태 배지 색과 겹치지 않게 별도 팔레트) */
+export function PrjTypeBadge({ type, children }: { type: string; children: ReactNode }) {
+  return <span className={`badge prj-type ${type}`}>{children}</span>;
+}
+
 export function Loading() {
   return <div className="loading">불러오는 중…</div>;
 }

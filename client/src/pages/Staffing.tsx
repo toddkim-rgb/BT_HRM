@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, ProgressBar } from '../components/ui';
+import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, ProgressBar, PrjTypeBadge } from '../components/ui';
 import { qs } from '../lib/api';
 import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num } from '../lib/format';
@@ -156,7 +156,7 @@ function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
           <button type="button" className="prj-card" key={p.prjCd} onClick={() => nav(`/staffing/${p.prjCd}?ym=${ym}`)} aria-label={`${p.prjNm} 상세 보기`}>
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <span className="row" style={{ gap: 6 }}>
-                <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge>
+                <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
               </span>
               <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
             </div>

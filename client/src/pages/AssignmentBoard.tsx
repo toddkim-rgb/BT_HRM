@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from 'react';
-import { Badge, Empty, ErrorBox, Loading, useToast } from '../components/ui';
+import { Badge, Empty, ErrorBox, Loading, useToast, PrjTypeBadge } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
@@ -223,7 +223,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
             >
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <span className="row" style={{ gap: 6 }}>
-                  <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge>
+                  <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
                   <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
                 </span>
                 <span className="small muted">

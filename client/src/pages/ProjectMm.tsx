@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, ProgressBar, Select } from '../components/ui';
+import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, ProgressBar, Select, PrjTypeBadge } from '../components/ui';
 import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num, pct } from '../lib/format';
 import { useFetch } from '../lib/hooks';
@@ -76,7 +76,7 @@ function ProjectList() {
                 {rows.map((p) => (
                   <tr key={p.prjCd} className="clickable" onClick={() => nav(`/project-mm/${p.prjCd}`)}>
                     <td data-label="프로젝트">
-                      <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge> <strong title={p.prjCd}>{p.prjNm}</strong>
+                      <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge> <strong title={p.prjCd}>{p.prjNm}</strong>
                     </td>
                     <td data-label="PM">{p.pmName ?? '-'}</td>
                     <td data-label="투입인원" className="num">

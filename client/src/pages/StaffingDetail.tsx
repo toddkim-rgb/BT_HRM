@@ -1,5 +1,5 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader } from '../components/ui';
+import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, PrjTypeBadge } from '../components/ui';
 import { qs } from '../lib/api';
 import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num, pct } from '../lib/format';
@@ -28,7 +28,7 @@ export default function StaffingDetail() {
         desc={
           prj && (
             <>
-              <Badge tone="info">{label(PRJ_TYPE, prj.prjType)}</Badge> <Badge code={prj.statusCd}>{label(PRJ_STATUS, prj.statusCd)}</Badge> {prj.customerNm ? `${prj.customerNm} · ` : ''}PM {prj.pmName ?? '-'} · {prj.startDt ?? '-'} ~ {prj.endDt ?? '-'}
+              <PrjTypeBadge type={prj.prjType}>{label(PRJ_TYPE, prj.prjType)}</PrjTypeBadge> <Badge code={prj.statusCd}>{label(PRJ_STATUS, prj.statusCd)}</Badge> {prj.customerNm ? `${prj.customerNm} · ` : ''}PM {prj.pmName ?? '-'} · {prj.startDt ?? '-'} ~ {prj.endDt ?? '-'}
             </>
           )
         }

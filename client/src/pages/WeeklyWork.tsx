@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Badge, Card, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
+import { Badge, Card, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast, PrjTypeBadge } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ISSUE_TYPE, ITEM_STATUS, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
@@ -711,7 +711,7 @@ function AddRowModal({ projects, onAdd, onClose }: { projects: Project[]; onAdd:
                   <strong>{p.prjNm}</strong>
                 </td>
                 <td className="nowrap" style={{ textAlign: 'right' }}>
-                  <Badge tone={p.prjType === 'NP' ? 'neutral' : 'info'}>{p.prjType === 'NP' ? '공통' : p.prjType}</Badge>
+                  <PrjTypeBadge type={p.prjType}>{p.prjType === 'NP' ? '공통' : p.prjType}</PrjTypeBadge>
                 </td>
               </tr>
             ))}

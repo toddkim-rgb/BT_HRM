@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
+import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast, PrjTypeBadge } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { hasRole, useAuth } from '../lib/auth';
 import { CONTRACT_TYPE, PRJ_STATUS, PRJ_TYPE, RESIDENT, REVENUE_METHOD } from '../lib/codes';
@@ -86,7 +86,7 @@ export default function Projects() {
                       <strong title={p.prjCd}>{p.prjNm}</strong>
                     </td>
                     <td data-label="사업구분" className="nowrap">
-                      <Badge tone="info">{label(PRJ_TYPE, p.prjType)}</Badge>
+                      <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
                     </td>
                     <td data-label="고객사">
                       {p.customerNm ?? '-'}

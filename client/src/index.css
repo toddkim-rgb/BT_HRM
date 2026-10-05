@@ -140,6 +140,12 @@ input[type='checkbox'] { width: 18px; height: 18px; min-height: 0; padding: 0; a
 .badge.bad { background: var(--bad-soft); color: var(--bad); }
 .badge.info { background: var(--info-soft); color: var(--info); }
 .badge.neutral { background: #edf0f4; color: var(--muted); }
+/* 사업구분 배지 (SM·SI 구분) */
+.badge.prj-type { background: #edf0f4; color: var(--muted); }
+.badge.prj-type.SM { background: #e3edfb; color: #1f5fbf; }
+.badge.prj-type.SI { background: #efe8fc; color: #6b3fc4; }
+.badge.prj-type.IN { background: #e8ecf1; color: #475569; }
+.badge.prj-type.PS { background: #fdeee2; color: #c05621; }
 
 .alert { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; white-space: pre-line; }
 .alert.bad { background: var(--bad-soft); color: var(--bad); }
