@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { useAuth } from '../lib/auth';
+import { pmScoped, useAuth } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, EMPLOY_TYPE } from '../lib/codes';
 import { label } from '../lib/format';
 import { today } from '../lib/dates';
@@ -34,8 +34,8 @@ export default function Assignments() {
   const [refreshKey, setRefreshKey] = useState(0); // 저장 후 보드 새로고침
   const toast = useToast();
 
-  const myProjects = (projects ?? []).filter((p) => (user?.role !== 'PM' || p.pmEmpId === user?.empId));
-  const canManage = (a: Asg) => can('assignments', 'EDIT') && (user?.role !== 'PM' || a.project.pmEmpId === user.empId);
+  const myProjects = (projects ?? []).filter((p) => !pmScoped(user) || p.pmEmpId === user?.empId);
+  const canManage = (a: Asg) => can('assignments', 'EDIT') && (!pmScoped(user) || a.project.pmEmpId === user?.empId);
   const t = today();
   const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
@@ -239,6 +239,7 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
         </Field>
         <Field label="투입 역할" required>
           <Select value={f.roleCd} onChange={(roleCd) => set({ roleCd })} options={ASG_ROLE} />
+          {f.roleCd === 'PM' && <span className="field-hint">PM으로 지정하면 이 프로젝트의 PM이 됩니다 (프로젝트당 1명, 기존 PM은 일반 역할로 바뀜)</span>}
         </Field>
         <Field label="투입률 (%)" required hint="100 = 전일, 50 = 겸임">
           <input type="number" min={1} max={100} value={f.allocRate ?? ''} onChange={(e) => set({ allocRate: Number(e.target.value) })} />

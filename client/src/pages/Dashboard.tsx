@@ -28,7 +28,7 @@ const diff = (a: number | null, b: number | null) => {
 
 export default function Dashboard() {
   const { user, can } = useAuth();
-  const isMgr = user?.role !== 'EMP'; // 전사 요약은 수행인력 역할 제외
+  const isMgr = user?.role !== 'EMP' || !!user?.isPm; // 전사 요약은 일반 수행인력 제외 (프로젝트 PM은 표시)
   return (
     <div>
       <PageHeader title={`안녕하세요, ${user?.name}님`} desc={`${today()} · ${weekLabel(isoWeek(today()))}`} />

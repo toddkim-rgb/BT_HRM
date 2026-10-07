@@ -203,13 +203,8 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
         <Field label="고객사">
           <input value={f.customerNm ?? ''} onChange={(e) => set({ customerNm: e.target.value })} placeholder="○○병원" />
         </Field>
-        <Field label="PM">
-          <Select
-            value={f.pmEmpId}
-            onChange={(pmEmpId) => set({ pmEmpId: pmEmpId || null })}
-            placeholder="미지정"
-            options={(emps ?? []).filter((e) => e.role === 'PM' || e.empId === f.pmEmpId).map((e) => [e.empId, `${e.name} (${e.deptCd})`] as [string, string])}
-          />
+        <Field label="PM" hint="투입 배정에서 수행인력의 역할을 PM으로 지정">
+          <input value={(emps ?? []).find((e) => e.empId === f.pmEmpId)?.name ?? '미지정'} disabled />
         </Field>
         <Field label="계약형태">
           <Select value={f.contractType} onChange={(contractType) => set({ contractType: contractType || null })} options={CONTRACT_TYPE} placeholder="-" />

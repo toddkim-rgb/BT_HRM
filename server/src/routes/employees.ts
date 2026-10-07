@@ -12,7 +12,7 @@ import { optDate, optStr, parse } from '../lib/validate.js';
 export const employeesRouter = Router();
 
 const EMPLOY_TYPES = ['REG', 'CONT', 'FREE', 'PARTNER'] as const;
-const ROLES = ['EMP', 'PM', 'EXEC', 'ADMIN'] as const;
+const ROLES = ['EMP', 'EXEC', 'ADMIN'] as const; // PM은 투입 배정에서 프로젝트별 지정
 
 const employeeSchema = z.object({
   name: z.string({ error: '성명을 입력하세요' }).trim().min(1, '성명을 입력하세요'),

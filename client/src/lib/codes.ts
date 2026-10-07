@@ -1,8 +1,7 @@
-export type Role = 'EMP' | 'PM' | 'EXEC' | 'ADMIN';
+export type Role = 'EMP' | 'EXEC' | 'ADMIN'; // PM은 역할이 아니라 투입 배정에서 프로젝트별 지정
 
 export const ROLE_LABEL: Record<Role, string> = {
   EMP: '수행인력',
-  PM: 'PM/PL',
   EXEC: '사업관리자',
   ADMIN: '시스템관리자',
 };
@@ -38,3 +37,6 @@ export const SETTING_LABEL: Record<string, string> = {
   ALERT_BENCH_WEEKS: '장기 대기 알림 (주)',
   ALERT_PROGRESS_DELAY_PP: '진도 지연 기준 (%p)',
 };
+
+/** 메뉴 권한 표의 열 (역할 + 투입 배정에서 PM으로 지정된 사람) */
+export const PERM_ROLE_LABEL: Record<string, string> = { ...ROLE_LABEL, PM: '프로젝트 PM (배정 지정)' };

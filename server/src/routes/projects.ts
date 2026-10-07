@@ -25,14 +25,14 @@ const projectSchema = z.object({
   contractAmt: z.number().int().nonnegative().nullish(),
   revenueMethod: z.enum(['MONTHLY', 'MM']).nullish(),
   plOpenYn: z.boolean().default(false),
-  pmEmpId: optStr,
+  // PM은 투입 배정에서 지정 (프로젝트 화면에서는 변경하지 않음)
   residentType: z.enum(['ONSITE', 'OFFSITE', 'MIXED']).nullish(),
   statusCd: z.enum(['PROPOSAL', 'ACTIVE', 'DONE', 'STOP']).default('ACTIVE'), // 제안/진행중/완료/중단
 });
 
 /** 금액 정보 노출 여부: 사업관리자·시스템관리자, 또는 손익 공개된 프로젝트의 PM */
 function canSeeAmount(u: { role: string; empId: string }, p: { pmEmpId: string | null; plOpenYn: boolean }) {
-  return isManager(u as never) || (u.role === 'PM' && p.pmEmpId === u.empId && p.plOpenYn);
+  return isManager(u as never) || (p.pmEmpId === u.empId && p.plOpenYn);
 }
 
 async function nextPrjCd(type: string, year: string): Promise<string> {

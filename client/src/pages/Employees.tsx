@@ -559,7 +559,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
 }
 
 const CSV_HEADERS = ['name', 'deptCd', 'gradeCd', 'jobCd', 'skillLevel', 'skillStack', 'employType', 'partnerId', 'careerStartDt', 'email', 'phone', 'role'];
-const CSV_HEADER_KO = ['성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일(로그인ID·필수)', '연락처(필수)', '권한(EMP 수행인력/PM/EXEC 사업관리자/ADMIN)'];
+const CSV_HEADER_KO = ['성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일(로그인ID·필수)', '연락처(필수)', '권한(EMP 수행인력/EXEC 사업관리자/ADMIN)'];
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];

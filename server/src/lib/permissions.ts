@@ -9,7 +9,9 @@ import { HttpError, forbidden, prisma } from '../db.js';
  * - '메뉴 권한' 화면 자체는 시스템관리자 전용(고정) — 관리자가 스스로 잠기지 않도록
  */
 export type Level = 'NONE' | 'VIEW' | 'EDIT';
-export const ROLES: Role[] = ['EMP', 'PM', 'EXEC', 'ADMIN'];
+/** 메뉴 권한 표의 열: 역할 3개 + '프로젝트 PM'(투입 배정에서 PM으로 지정된 사람에게 추가로 적용) */
+export type PermRole = Role | 'PM';
+export const ROLES: PermRole[] = ['EMP', 'PM', 'EXEC', 'ADMIN'];
 const RANK: Record<Level, number> = { NONE: 0, VIEW: 1, EDIT: 2 };
 
 export interface MenuDef {
@@ -41,14 +43,14 @@ export type MenuKey = (typeof MENUS)[number]['key'];
 const V: Level = 'VIEW';
 const E: Level = 'EDIT';
 // 기본값 = v1.8까지 코드에 고정돼 있던 권한 (없는 값은 NONE)
-export const DEFAULT_PERMISSIONS: Record<Role, Partial<Record<string, Level>>> = {
+export const DEFAULT_PERMISSIONS: Record<PermRole, Partial<Record<string, Level>>> = {
   EMP: { dashboard: V, weekly: E, utilization: V },
   PM: { dashboard: V, weekly: E, assignments: E, submissions: V, projectWeekly: E, onepage: V, staffing: V, utilization: V, projectMm: V, employees: V, projects: V },
   EXEC: { dashboard: V, weekly: E, assignments: V, submissions: V, projectWeekly: V, onepage: E, staffing: V, utilization: V, projectMm: V, employees: V, projects: V, partners: V },
   ADMIN: Object.fromEntries(MENUS.map((m) => [m.key, m.editable ? E : V])),
 };
 
-export type PermissionMap = Record<Role, Record<string, Level>>;
+export type PermissionMap = Record<PermRole, Record<string, Level>>;
 let cache: PermissionMap | null = null;
 
 /** DB에 없는 (역할, 메뉴) 조합만 기본값으로 저장, 없어진 메뉴는 정리 */
@@ -62,11 +64,28 @@ export async function ensureDefaultPermissions() {
   cache = null;
 }
 
+/**
+ * v1.11 PM 역할 폐지에 따른 데이터 정리 (멱등, 서버 시작 시 실행)
+ * - 역할 PM(PM/PL) → 수행인력(EMP). 담당 프로젝트의 PM 지정(프로젝트 PM)은 그대로 유지
+ * - 프로젝트 PM이 그 프로젝트에 배정돼 있는데 PM 역할 배정이 없으면 그 배정을 PM으로 표시
+ */
+export async function migratePmRole() {
+  const n = await prisma.employee.updateMany({ where: { role: 'PM' }, data: { role: 'EMP' } });
+  if (n.count) console.log(`PM 역할 계정 ${n.count}명을 수행인력으로 변경했습니다.`);
+  const prjs = await prisma.project.findMany({ where: { pmEmpId: { not: null } }, select: { prjCd: true, pmEmpId: true } });
+  for (const p of prjs) {
+    const hasPm = await prisma.assignment.count({ where: { prjCd: p.prjCd, roleCd: 'PM', empId: p.pmEmpId!, canceled: false } });
+    if (hasPm) continue;
+    const a = await prisma.assignment.findFirst({ where: { prjCd: p.prjCd, empId: p.pmEmpId!, canceled: false }, orderBy: { endDt: 'desc' } });
+    if (a) await prisma.assignment.update({ where: { asgId: a.asgId }, data: { roleCd: 'PM' } });
+  }
+}
+
 export async function getPermissions(): Promise<PermissionMap> {
   if (cache) return cache;
   const rows = await prisma.menuPermission.findMany();
   const map = Object.fromEntries(ROLES.map((r) => [r, Object.fromEntries(MENUS.map((m) => [m.key, 'NONE' as Level]))])) as PermissionMap;
-  for (const r of rows) if (map[r.role as Role] && r.menu in map[r.role as Role]) map[r.role as Role][r.menu] = r.level as Level;
+  for (const r of rows) if (map[r.role as PermRole] && r.menu in map[r.role as PermRole]) map[r.role as PermRole][r.menu] = r.level as Level;
   cache = map;
   return map;
 }
@@ -74,7 +93,7 @@ export async function getPermissions(): Promise<PermissionMap> {
 export async function savePermissions(input: Record<string, Record<string, string>>) {
   const ops = [];
   for (const [role, menus] of Object.entries(input)) {
-    if (!ROLES.includes(role as Role)) throw new HttpError(400, `알 수 없는 역할: ${role}`);
+    if (!ROLES.includes(role as PermRole)) throw new HttpError(400, `알 수 없는 역할: ${role}`);
     for (const [menu, level] of Object.entries(menus)) {
       const def = MENUS.find((m) => m.key === menu);
       if (!def) throw new HttpError(400, `알 수 없는 메뉴: ${menu}`);
@@ -88,7 +107,17 @@ export async function savePermissions(input: Record<string, Record<string, strin
 }
 
 export async function levelOf(u: AuthUser, menu: string): Promise<Level> {
-  return (await getPermissions())[u.role]?.[menu] ?? 'NONE';
+  const p = await getPermissions();
+  const own = p[u.role]?.[menu] ?? 'NONE';
+  const asPm = u.pm ? (p.PM?.[menu] ?? 'NONE') : 'NONE'; // 프로젝트 PM으로 지정되면 PM 권한을 더함
+  return RANK[asPm] > RANK[own] ? asPm : own;
+}
+
+/** 사용자의 실제 메뉴 권한 (역할 + 프로젝트 PM 지정) */
+export async function effectivePermissions(u: AuthUser): Promise<Record<string, Level>> {
+  const out: Record<string, Level> = {};
+  for (const m of MENUS) out[m.key] = await levelOf(u, m.key);
+  return out;
 }
 
 /** 메뉴 중 하나라도 해당 단계 이상이면 통과 */

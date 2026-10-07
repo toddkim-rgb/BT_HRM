@@ -4,7 +4,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { blockUntilPasswordChanged, requireAuth } from './auth.js';
 import { HttpError } from './db.js';
 import { ensureDefaultSettings } from './lib/settings.js';
-import { ensureDefaultPermissions } from './lib/permissions.js';
+import { ensureDefaultPermissions, migratePmRole } from './lib/permissions.js';
 import { accountRequestsRouter } from './routes/accountRequests.js';
 import { adminRouter } from './routes/admin.js';
 import { assignmentsRouter } from './routes/assignments.js';
@@ -25,6 +25,7 @@ export function init() {
     const n = await ensureDefaultSettings();
     if (n) console.log(`기준값 기본값 ${n}건을 DB에 저장했습니다.`);
     await ensureDefaultPermissions();
+    await migratePmRole();
   })().catch((e) => {
     initPromise = null;
     console.error('기본값 초기화 실패', e);

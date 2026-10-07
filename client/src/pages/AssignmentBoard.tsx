@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from 'react';
 import { Badge, Empty, ErrorBox, Loading, useToast, PrjTypeBadge } from '../components/ui';
 import { api } from '../lib/api';
-import { useAuth } from '../lib/auth';
+import { pmScoped, useAuth } from '../lib/auth';
 import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label } from '../lib/format';
 import { today } from '../lib/dates';
@@ -70,7 +70,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
 
   // 편집: 투입 배정 '편집' 권한 + PM 역할은 담당 프로젝트만
   const canEditMenu = can('assignments', 'EDIT');
-  const canManage = (p: { pmEmpId: string | null }) => canEditMenu && (user?.role !== 'PM' || p.pmEmpId === user.empId);
+  const canManage = (p: { pmEmpId: string | null }) => canEditMenu && (!pmScoped(user) || p.pmEmpId === user?.empId);
   const canDragEmp = canEditMenu && (projects ?? []).some(canManage);
   const reload = () => {
     reloadAsg();
@@ -255,7 +255,10 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                     title={`${label(ASG_ROLE, a.roleCd)} · ${a.startDt} ~ ${a.endDt}${a.overAlloc > 0 ? ` · 과투입 +${a.overAlloc}%` : ''}`}
                   >
                     <button type="button" className="board-chip-main" disabled={!mine} onClick={() => onEdit(a)}>
-                      <strong>{a.employee.name}</strong>
+                      <strong>
+                        {a.employee.name}
+                        {a.roleCd === 'PM' && <span className="board-pm">PM</span>}
+                      </strong>
                       <span>
                         {a.allocRate}% · {label(ASG_ROLE, a.roleCd)}
                         {a.status === 'PLANNED' && ' · 예정'}

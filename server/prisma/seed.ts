@@ -61,8 +61,8 @@ async function demo() {
 
   const emps = [
     { empId: 'E1001', phone: '010-1000-1001', email: 'ceo.kim@example.com', name: '김대표', deptCd: '경영진', gradeCd: '이사', skillLevel: '특급', employType: 'REG', role: 'EXEC', careerStartDt: '2002-03-01', utilTarget: false },
-    { empId: 'E2001', phone: '010-2000-2001', email: 'sujin.lee@example.com', name: '이수진', deptCd: 'SI사업팀', gradeCd: '부장', skillLevel: '특급', employType: 'REG', role: 'PM', careerStartDt: '2008-03-01' },
-    { empId: 'E2002', phone: '010-2000-2002', email: 'junho.park@example.com', name: '박준호', deptCd: 'SM사업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'PM', careerStartDt: '2011-07-01' },
+    { empId: 'E2001', phone: '010-2000-2001', email: 'sujin.lee@example.com', name: '이수진', deptCd: 'SI사업팀', gradeCd: '부장', skillLevel: '특급', employType: 'REG', role: 'EMP', careerStartDt: '2008-03-01' },
+    { empId: 'E2002', phone: '010-2000-2002', email: 'junho.park@example.com', name: '박준호', deptCd: 'SM사업팀', gradeCd: '차장', skillLevel: '고급', employType: 'REG', role: 'EMP', careerStartDt: '2011-07-01' },
     { empId: 'E3001', phone: '010-3000-3001', email: 'gildong.hong@example.com', name: '홍길동', deptCd: 'SI사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '개발', skillStack: 'React, Java, Oracle', careerStartDt: '2019-01-02' },
     { empId: 'E3002', phone: '010-3000-3002', email: 'chulsoo.kim@example.com', name: '김철수', deptCd: 'SI사업팀', gradeCd: '과장', skillLevel: '고급', employType: 'REG', role: 'EMP', jobCd: '설계', skillStack: 'Spring, PostgreSQL', careerStartDt: '2014-02-01' },
     { empId: 'E3003', phone: '010-3000-3003', email: 'younghee.lee@example.com', name: '이영희', deptCd: 'SM사업팀', gradeCd: '대리', skillLevel: '중급', employType: 'REG', role: 'EMP', jobCd: '운영', skillStack: 'Oracle, Linux', careerStartDt: '2018-05-01' },

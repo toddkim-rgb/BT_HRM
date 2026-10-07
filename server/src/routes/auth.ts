@@ -5,7 +5,7 @@ import { me, requireAuth, signToken, type Role } from '../auth.js';
 import { HttpError, prisma } from '../db.js';
 import { isUsable, usableEmp } from '../lib/empFilter.js';
 import { assertPasswordPolicy, maskEmail, rateLimit } from '../lib/password.js';
-import { getPermissions } from '../lib/permissions.js';
+import { effectivePermissions } from '../lib/permissions.js';
 import { optStr, parse } from '../lib/validate.js';
 
 export const authRouter = Router();
@@ -34,13 +34,13 @@ authRouter.get('/me', requireAuth, async (req, res) => {
   });
   if (!emp) throw new HttpError(401, '사용자를 찾을 수 없습니다.');
   const { passwordHash: _, ...rest } = emp;
-  res.json(rest);
+  res.json({ ...rest, isPm: !!u.pm });
 });
 
 // 내 메뉴 권한 (메뉴 표시·화면 접근용)
 authRouter.get('/me/permissions', requireAuth, async (req, res) => {
   const u = me(req);
-  res.json({ ...(await getPermissions())[u.role], permissions: u.role === 'ADMIN' ? 'EDIT' : 'NONE' });
+  res.json({ ...(await effectivePermissions(u)), permissions: u.role === 'ADMIN' ? 'EDIT' : 'NONE' });
 });
 
 // 비밀번호 변경 (초기·임시 비밀번호 변경 강제 포함) → 변경 강제 해제된 새 토큰 발급

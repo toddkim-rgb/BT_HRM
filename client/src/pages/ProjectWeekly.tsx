@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Badge, Card, Empty, ErrorBox, Field, Kpi, Loading, Modal, PageHeader, ProgressBar, Select, useToast } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { useAuth } from '../lib/auth';
+import { pmScoped, useAuth } from '../lib/auth';
 import { ISSUE_TYPE, ITEM_STATUS, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
 import { dateTime, label, num, pct } from '../lib/format';
 import { isoWeek, shiftWeek, today, weekLabel } from '../lib/dates';
@@ -75,7 +75,7 @@ export default function ProjectWeekly() {
   const nav = useNavigate();
   const toast = useToast();
   const week = params.week ?? isoWeek(today());
-  const { data: projects } = useFetch<{ prjCd: string; prjNm: string; pmEmpId: string | null }[]>(`/projects${qs({ status: 'ACTIVE', mine: user?.role === 'PM' ? 'Y' : undefined })}`);
+  const { data: projects } = useFetch<{ prjCd: string; prjNm: string; pmEmpId: string | null }[]>(`/projects${qs({ status: 'ACTIVE', mine: pmScoped(user) ? 'Y' : undefined })}`);
   const prjCd = params.prjCd ?? projects?.[0]?.prjCd ?? '';
   const { data, error, loading, reload, setData } = useFetch<View>(prjCd ? `/projects/${prjCd}/weekly/${week}` : null);
   const [opinion, setOpinion] = useState('');
@@ -86,7 +86,7 @@ export default function ProjectWeekly() {
 
   const go = (p: string, w: string) => nav(`/project-weekly/${p}/${w}`);
   // 편집: 프로젝트 주간보고 '편집' 권한 + PM 역할은 담당 프로젝트만
-  const canManage = !!data && can('projectWeekly', 'EDIT') && (user?.role !== 'PM' || data.project.pmEmpId === user.empId);
+  const canManage = !!data && can('projectWeekly', 'EDIT') && (!pmScoped(user) || data.project.pmEmpId === user?.empId);
   const editable = canManage && !data?.confirmedYn;
 
   const saveComment = async (confirm?: boolean) => {

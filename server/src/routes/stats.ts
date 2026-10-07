@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { me, pmProjectCodes } from '../auth.js';
+import { me, pmProjectCodes, pmScoped, staffOnly } from '../auth.js';
 import { requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { plannedMd } from '../lib/alloc.js';
@@ -42,7 +42,7 @@ statsRouter.get('/utilization', requireMenu('utilization'), async (req, res) => 
     prevRate: prev.rate,
     diff: cur.rate != null && prev.rate != null ? Math.round((cur.rate - prev.rate) * 10) / 10 : null,
     // 수행인력은 본인 행만, 그 외(PM·사업관리자·시스템관리자)는 전체
-    rows: u.role === 'EMP' ? rows.filter((r) => r.empId === u.empId) : rows,
+    rows: staffOnly(u) ? rows.filter((r) => r.empId === u.empId) : rows,
     trend: await weeklyTrend(week, 12, 4),
   });
 });
@@ -51,7 +51,7 @@ statsRouter.get('/utilization', requireMenu('utilization'), async (req, res) => 
 statsRouter.get('/utilization/:empId/trend', requireMenu('utilization'), async (req, res) => {
   const u = me(req);
   const empId = String(req.params.empId);
-  if (u.role === 'EMP' && u.empId !== empId) throw forbidden();
+  if (staffOnly(u) && u.empId !== empId) throw forbidden();
   const end = String(req.query.week ?? lastWeek());
   const out = [];
   for (let i = 11; i >= 0; i--) {
@@ -102,7 +102,7 @@ async function projectMm(prjCds: string[]) {
 statsRouter.get('/projects', requireMenu(['projectMm', 'dashboard']), async (req, res) => {
   const u = me(req);
   // PM은 담당 프로젝트만, 그 외 권한 보유자는 전체
-  const codes = u.role === 'PM' ? await pmProjectCodes(u.empId) : (await prisma.project.findMany({ where: { prjType: { not: 'NP' } }, select: { prjCd: true } })).map((p) => p.prjCd);
+  const codes = pmScoped(u) ? await pmProjectCodes(u.empId) : (await prisma.project.findMany({ where: { prjType: { not: 'NP' } }, select: { prjCd: true } })).map((p) => p.prjCd);
   res.json(await projectMm(codes));
 });
 
@@ -110,7 +110,7 @@ statsRouter.get('/projects/:prjCd/mm', requireMenu('projectMm'), async (req, res
   const u = me(req);
   const p = await prisma.project.findUnique({ where: { prjCd: String(req.params.prjCd) } });
   if (!p) throw notFound('프로젝트');
-  if (u.role === 'PM' && p.pmEmpId !== u.empId) throw forbidden();
+  if (pmScoped(u) && p.pmEmpId !== u.empId) throw forbidden();
   const [summary] = await projectMm([p.prjCd]);
   const holidays = await holidaySet();
   const mdmm = await mdPerMm();
@@ -141,7 +141,7 @@ statsRouter.get('/projects/:prjCd/mm', requireMenu('projectMm'), async (req, res
 /** 대시보드 요약 (F-020 일부) */
 statsRouter.get('/summary', requireMenu('dashboard'), async (req, res) => {
   // 전사 요약: 대시보드 권한 + 수행인력 역할 제외 (수행인력 대시보드는 본인 정보만)
-  if (me(req).role === 'EMP') throw forbidden();
+  if (staffOnly(me(req))) throw forbidden();
   const t = today();
   // 인원·투입 구분은 전사 One-Page·투입현황·가동률과 같은 기준 (lib/workforce)
   const wf = await workforce(t);
@@ -182,7 +182,7 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
   const last = monthRange(months[months.length - 1]);
 
   // PM은 담당 프로젝트만
-  const scope = u.role === 'PM' ? await pmProjectCodes(u.empId) : null;
+  const scope = pmScoped(u) ? await pmProjectCodes(u.empId) : null;
   const asg = await prisma.assignment.findMany({
     where: { canceled: false, startDt: { lte: last.end }, endDt: { gte: start }, ...(scope ? { prjCd: { in: scope } } : {}) },
     include: {

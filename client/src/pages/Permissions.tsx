@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, ErrorBox, Loading, PageHeader, useToast } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth, type Level } from '../lib/auth';
-import { ROLE_LABEL, type Role } from '../lib/codes';
+import { PERM_ROLE_LABEL as ROLE_LABEL } from '../lib/codes';
 import { useFetch } from '../lib/hooks';
 
 interface MenuDef {
@@ -13,9 +13,9 @@ interface MenuDef {
   editDesc?: string;
 }
 interface Resp {
-  roles: Role[];
+  roles: string[];
   menus: MenuDef[];
-  permissions: Record<Role, Record<string, Level>>;
+  permissions: Record<string, Record<string, Level>>;
 }
 
 const LEVEL_LABEL: Record<Level, string> = { NONE: '없음', VIEW: '조회', EDIT: '편집' };
@@ -36,7 +36,7 @@ export default function Permissions() {
     return data.roles.reduce((n, r) => n + data.menus.filter((m) => f[r][m.key] !== data.permissions[r][m.key]).length, 0);
   }, [data, f]);
 
-  const set = (role: Role, menu: string, level: Level) => setF((s) => (s ? { ...s, [role]: { ...s[role], [menu]: level } } : s));
+  const set = (role: string, menu: string, level: Level) => setF((s) => (s ? { ...s, [role]: { ...s[role], [menu]: level } } : s));
 
   const save = async () => {
     if (!f) return;
@@ -60,7 +60,7 @@ export default function Permissions() {
         title="메뉴 권한"
         desc={
           <>
-            역할별로 메뉴마다 <b>없음 · 조회 · 편집</b>을 정합니다. 메뉴 표시, 화면 접근, 서버 API가 모두 이 설정을 따릅니다. 데이터 범위는 그대로 유지됩니다: 수행인력은 본인 데이터, PM은 담당 프로젝트만 봅니다. 시스템관리자 계정·역할 변경과 이 화면은 시스템관리자 전용입니다.
+            역할별로 메뉴마다 <b>없음 · 조회 · 편집</b>을 정합니다. 메뉴 표시, 화면 접근, 서버 API가 모두 이 설정을 따릅니다. '프로젝트 PM' 열은 투입 배정에서 PM으로 지정된 수행인력에게 추가로 적용되며, 담당 프로젝트 범위만 봅니다. 일반 수행인력은 본인 데이터만 봅니다. 시스템관리자 계정·역할 변경과 이 화면은 시스템관리자 전용입니다.
           </>
         }
         actions={

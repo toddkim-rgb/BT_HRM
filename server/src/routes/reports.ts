@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { assertProjectManager, me } from '../auth.js';
+import { assertProjectManager, me, pmScoped } from '../auth.js';
 import { assertMenu, requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { addDays, businessDays, isValidWeek, shiftWeek, today, weekDays } from '../lib/dates.js';
@@ -143,7 +143,7 @@ async function assertCanViewProject(u: ReturnType<typeof me>, prjCd: string) {
   await assertMenu(u, 'projectWeekly', 'VIEW');
   const p = await prisma.project.findUnique({ where: { prjCd }, select: { pmEmpId: true } });
   if (!p) throw notFound('프로젝트');
-  if (u.role === 'PM' && p.pmEmpId !== u.empId) throw forbidden();
+  if (pmScoped(u) && p.pmEmpId !== u.empId) throw forbidden();
 }
 
 projectWeeklyRouter.get('/:prjCd/weekly/:week', async (req, res) => {

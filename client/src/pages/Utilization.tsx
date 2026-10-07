@@ -58,7 +58,7 @@ const diffText = (d: number | null) => (d == null ? undefined : `전주 대비 $
 
 export default function Utilization() {
   const { user } = useAuth();
-  const isEmp = user?.role === 'EMP';
+  const isEmp = user?.role === 'EMP' && !user?.isPm; // 일반 수행인력은 본인만
   const [week, setWeek] = useState(lastWeek());
   const { data, error, loading } = useFetch<Resp>(`/stats/utilization${qs({ week })}`);
   const [sort, setSort] = useState<'assigned' | 'name' | 'dept'>('assigned');

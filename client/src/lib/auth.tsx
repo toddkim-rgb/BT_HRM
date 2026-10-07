@@ -7,6 +7,7 @@ export interface User {
   name: string;
   role: Role;
   mustChangePw?: boolean; // 초기 비밀번호(이메일 주소) → 변경 전까지 다른 화면 이용 불가
+  isPm?: boolean; // 투입 배정에서 PM으로 지정된 프로젝트가 있음
 }
 
 /** 메뉴 키 → 권한 단계 (서버 '메뉴 권한' 설정, DB) */
@@ -45,6 +46,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .get<Perms>('/auth/me/permissions')
       .then(setPerms)
       .catch(() => setPerms({}));
+    // 프로젝트 PM 지정 여부 (로그인 후·배정 변경 후 갱신)
+    api
+      .get<User>('/auth/me')
+      .then((u) => setUser((prev) => (prev ? { ...prev, isPm: u.isPm } : prev)))
+      .catch(() => undefined);
   }, []);
 
   // 로그인·역할 변경 시 메뉴 권한 다시 불러오기 (초기 비밀번호 변경 전에는 불필요)
@@ -62,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api
       .get<User>('/auth/me')
-      .then((u) => setUser({ empId: u.empId, name: u.name, role: u.role, mustChangePw: u.mustChangePw }))
+      .then((u) => setUser({ empId: u.empId, name: u.name, role: u.role, mustChangePw: u.mustChangePw, isPm: u.isPm }))
       .catch(() => tokenStore.clear())
       .finally(() => setReady(true));
   }, [logout]);
@@ -85,3 +91,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export const useAuth = () => useContext(Ctx);
 
 export const hasRole = (u: User | null, ...roles: Role[]) => !!u && roles.includes(u.role);
+
+/** 프로젝트 PM(수행인력): 담당 프로젝트로 범위 제한 */
+export const pmScoped = (u: User | null) => !!u && u.role === 'EMP' && !!u.isPm;

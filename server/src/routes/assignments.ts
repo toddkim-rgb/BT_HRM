@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { assertProjectManager, me, pmProjectCodes } from '../auth.js';
+import { assertProjectManager, me, pmProjectCodes, pmScoped, staffOnly } from '../auth.js';
 import { assertMenu } from '../lib/permissions.js';
 import { HttpError, notFound, prisma } from '../db.js';
 import { assignmentStatus, maxAllocation } from '../lib/alloc.js';
@@ -25,10 +25,10 @@ assignmentsRouter.get('/', async (req, res) => {
   const u = me(req);
   const { prjCd, empId, status } = req.query as Record<string, string | undefined>;
   let scope = {};
-  if (u.role === 'EMP') scope = { empId: u.empId };
-  else if (u.role === 'PM') {
-    // 담당 프로젝트 배정 + 특정 인력 조회 시 그 인력의 전체 배정(과투입 판단용)
-    scope = empId ? {} : { prjCd: { in: await pmProjectCodes(u.empId) } };
+  if (staffOnly(u)) scope = { empId: u.empId };
+  else if (pmScoped(u)) {
+    // 프로젝트 PM: 담당 프로젝트 배정 + 본인 배정, 특정 인력 조회 시 그 인력의 전체 배정(과투입 판단용)
+    scope = empId ? {} : { OR: [{ prjCd: { in: await pmProjectCodes(u.empId) } }, { empId: u.empId }] };
   }
   const rows = await prisma.assignment.findMany({
     where: { ...scope, ...(prjCd ? { prjCd } : {}), ...(empId ? { empId } : {}) },
@@ -52,6 +52,24 @@ assignmentsRouter.get('/', async (req, res) => {
   res.json(status ? out.filter((a) => status.split(',').includes(a.status)) : out);
 });
 
+/**
+ * PM 지정 = 배정 역할 'PM' (프로젝트당 1명). 프로젝트의 PM(pmEmpId)을 배정에 맞춘다.
+ * - 새로 PM으로 지정하면 그 프로젝트의 기존 PM 배정은 일반 역할(SM: 운영, 그 외: 개발)로 바뀜
+ * - PM 배정을 다른 역할로 바꾸면 프로젝트 PM은 비게 됨 (취소는 cancel 라우트에서 처리)
+ */
+async function syncProjectPm(prjCd: string, asgId: number, empId: string, roleCd: string, prev?: { empId: string; roleCd: string }) {
+  if (roleCd === 'PM') {
+    const prj = await prisma.project.findUnique({ where: { prjCd }, select: { prjType: true } });
+    await prisma.assignment.updateMany({
+      where: { prjCd, roleCd: 'PM', asgId: { not: asgId }, empId: { not: empId } },
+      data: { roleCd: prj?.prjType === 'SM' ? 'OPS' : 'DEV' },
+    });
+    await prisma.project.update({ where: { prjCd }, data: { pmEmpId: empId } });
+  } else if (prev?.roleCd === 'PM') {
+    await prisma.project.updateMany({ where: { prjCd, pmEmpId: prev.empId }, data: { pmEmpId: null } });
+  }
+}
+
 async function validateTarget(empId: string, prjCd: string) {
   const emp = await prisma.employee.findUnique({ where: { empId } });
   if (!emp || emp.deletedAt || emp.statusCd === 'RETIRED') throw new HttpError(400, '배정할 수 없는 인력입니다. (퇴사 또는 삭제된 인력)');
@@ -66,6 +84,7 @@ assignmentsRouter.post('/', async (req, res) => {
   await assertProjectManager(u, body.prjCd, 'assignments');
   await validateTarget(body.empId, body.prjCd);
   const created = await prisma.assignment.create({ data: { ...body, createdBy: u.empId } });
+  await syncProjectPm(body.prjCd, created.asgId, body.empId, body.roleCd);
   const max = await maxAllocation(body.empId, body.startDt, body.endDt);
   res.status(201).json({ asgId: created.asgId, maxAlloc: max, overAlloc: Math.max(0, max - 100) });
 });
@@ -79,6 +98,7 @@ assignmentsRouter.put('/:id', async (req, res) => {
   if (body.prjCd !== cur.prjCd) throw new HttpError(400, '프로젝트는 변경할 수 없습니다. 새로 배정하세요.');
   await validateTarget(body.empId, body.prjCd);
   await prisma.assignment.update({ where: { asgId: cur.asgId }, data: body });
+  await syncProjectPm(cur.prjCd, cur.asgId, body.empId, body.roleCd, cur);
   const max = await maxAllocation(body.empId, body.startDt, body.endDt);
   res.json({ ok: true, maxAlloc: max, overAlloc: Math.max(0, max - 100) });
 });
@@ -89,6 +109,7 @@ assignmentsRouter.post('/:id/cancel', async (req, res) => {
   if (!cur) throw notFound('배정');
   await assertProjectManager(u, cur.prjCd, 'assignments');
   await prisma.assignment.update({ where: { asgId: cur.asgId }, data: { canceled: true } });
+  if (cur.roleCd === 'PM') await prisma.project.updateMany({ where: { prjCd: cur.prjCd, pmEmpId: cur.empId }, data: { pmEmpId: null } });
   res.json({ ok: true });
 });
 
