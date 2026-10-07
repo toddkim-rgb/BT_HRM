@@ -3,7 +3,7 @@ import { Badge, Empty, ErrorBox, Loading, useToast, PrjTypeBadge } from '../comp
 import { api } from '../lib/api';
 import { pmScoped, useAuth } from '../lib/auth';
 import { ASG_ROLE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
-import { label } from '../lib/format';
+import { label, num } from '../lib/format';
 import { today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
 
@@ -47,6 +47,14 @@ interface Prj {
   endDt: string | null;
 }
 
+interface ProjectMd {
+  planMd: number;
+  actualMd: number;
+  planMm: number;
+  actualMm: number;
+  byEmp: Record<string, { planMd: number; actualMd: number }>;
+}
+
 type Drag = { kind: 'emp'; empId: string } | { kind: 'asg'; asgId: number } | { kind: 'partner'; partnerId: string };
 interface PartnerOpt {
   partnerId: string;
@@ -76,6 +84,8 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const { data: emps, reload: reloadEmp } = useFetch<Emp[]>(`/employees?_=${refreshKey}`);
   const { data: projects } = useFetch<Prj[]>('/projects?status=ACTIVE,PROPOSAL,DONE,STOP');
   const { data: partners, reload: reloadPartners } = useFetch<PartnerOpt[]>(`/assignments/partners?_=${refreshKey}`);
+  const { data: md, reload: reloadMd } = useFetch<Record<string, ProjectMd>>(`/assignments/project-md?_=${refreshKey}`);
+  const [prjStatus, setPrjStatus] = useState<Record<string, string>>({}); // 보드에서 바꾼 상태 (프로젝트 목록 재조회 전 반영)
   const [q, setQ] = useState('');
   const [benchOnly, setBenchOnly] = useState(false);
   const [over, setOver] = useState<string | null>(null); // 드롭 대상 강조 (프로젝트 코드 또는 'pool')
@@ -85,10 +95,13 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const canEditMenu = can('assignments', 'EDIT');
   const canManage = (p: { pmEmpId: string | null }) => canEditMenu && (!pmScoped(user) || p.pmEmpId === user?.empId);
   const canDragEmp = canEditMenu && (projects ?? []).some(canManage);
+  // 상태 변경: 프로젝트 편집 권한 또는 이 프로젝트의 배정 관리 권한
+  const canStatus = (p: { pmEmpId: string | null }) => can('projects', 'EDIT') || canManage(p);
   const reload = () => {
     reloadAsg();
     reloadEmp();
     reloadPartners();
+    reloadMd();
   };
 
   const run = async (fn: () => Promise<string>) => {
@@ -126,6 +139,23 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
     if (endDt < s) s = p.startDt && p.startDt <= endDt ? p.startDt : endDt;
     const o = await api.post<{ overAlloc: number }>('/assignments', { empId: r.empId, prjCd: p.prjCd, roleCd: 'DEV', startDt: s, endDt, allocRate: 100, residentType: 'ONSITE' });
     return `${r.name}님(협력사)을 ${p.prjNm}에 배정했습니다 (100%, ${s} ~ ${endDt})${o.overAlloc > 0 ? ` · 과투입 +${o.overAlloc}%` : ''}.${r.created ? ' 인력 화면에서 이메일·연락처를 보완하세요.' : ''}`;
+  };
+
+  /** 프로젝트 상태 변경: 기간과 무관하게 완료 처리 / 다시 진행으로 */
+  const changeStatus = (p: Prj, statusCd: 'ACTIVE' | 'DONE') => {
+    let closeAssignments = false;
+    if (statusCd === 'DONE') {
+      const live = (asgs ?? []).filter((a) => a.prjCd === p.prjCd && a.status !== 'ENDED').length;
+      if (!window.confirm(`${p.prjNm}을(를) 완료로 처리할까요?`)) return;
+      if (live > 0) closeAssignments = window.confirm(`진행 중·예정 배정 ${live}건이 있습니다. 오늘 날짜로 종료할까요?\n(취소를 누르면 배정은 그대로 두고 프로젝트만 완료 처리)`);
+    } else if (!window.confirm(`${p.prjNm}을(를) 다시 진행중으로 표시할까요?`)) return;
+    run(async () => {
+      const r = await api.patch<{ closed: number; canceled: number }>(`/assignments/projects/${p.prjCd}/status`, { statusCd, closeAssignments });
+      setPrjStatus((s) => ({ ...s, [p.prjCd]: statusCd }));
+      return statusCd === 'DONE'
+        ? `${p.prjNm}을(를) 완료 처리했습니다.${r.closed || r.canceled ? ` 배정 ${r.closed}건 종료, ${r.canceled}건 취소.` : ''}`
+        : `${p.prjNm}을(를) 진행중으로 변경했습니다.`;
+    });
   };
 
   /** 프로젝트에서 빼기: 시작 전·이미 끝난 배정은 취소, 진행 중 배정은 오늘 날짜로 종료 */
@@ -189,7 +219,10 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const newPartners = (partners ?? []).filter((x) => x.staffCount === 0);
 
   // 종료된 프로젝트(완료·중단 또는 종료일이 지난 프로젝트)는 하단에 배치
-  const isEnded = (p: Prj) => ['DONE', 'STOP'].includes(p.statusCd) || (!!p.endDt && p.endDt < t);
+  // 진행/종료는 프로젝트 상태 기준 (완료·중단 = 종료, 하단 배치). 기간이 지나도 진행중이면 진행으로 표시
+  const statusOf = (p: Prj) => prjStatus[p.prjCd] ?? p.statusCd;
+  const isEnded = (p: Prj) => ['DONE', 'STOP'].includes(statusOf(p));
+  const isOverdue = (p: Prj) => !isEnded(p) && !!p.endDt && p.endDt < t;
   const sorted = [...projects].sort((a, b) => Number(isEnded(a)) - Number(isEnded(b)));
 
   const kw = q.trim().toLowerCase();
@@ -263,8 +296,10 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
         {!projects.length && <Empty>프로젝트가 없습니다.</Empty>}
         {sorted.map((p) => {
           const ended = isEnded(p);
-          // 진행 중 프로젝트는 진행·예정 배정만, 종료된 프로젝트는 지난 배정까지 표시
-          const members = asgs.filter((a) => a.prjCd === p.prjCd && (ended || a.status !== 'ENDED'));
+          const overdue = isOverdue(p);
+          const pmd = md?.[p.prjCd];
+          // 진행 중 프로젝트는 진행·예정 배정만, 종료(또는 기간 경과) 프로젝트는 지난 배정까지 표시
+          const members = asgs.filter((a) => a.prjCd === p.prjCd && (ended || overdue || a.status !== 'ENDED'));
           const mine = canManage(p);
           const addable = emps.filter((e) => e.utilTarget && !members.some((m) => m.empId === e.empId));
           return (
@@ -278,8 +313,8 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <span className="row" style={{ gap: 6 }}>
                   <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
-                  <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
-                  {ended && p.statusCd === 'ACTIVE' && <Badge tone="neutral">기간 종료</Badge>}
+                  <Badge code={statusOf(p)}>{label(PRJ_STATUS, statusOf(p))}</Badge>
+                  {overdue && <Badge tone="warn">기간 경과</Badge>}
                 </span>
                 <span className="small muted">
                   {members.length}명 · {members.reduce((s, m) => s + m.allocRate, 0)}%
@@ -291,6 +326,24 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
               <div className="small muted">
                 PM {p.pmName ?? '-'} · {p.startDt ?? '-'} ~ {p.endDt ?? '-'}
               </div>
+              {ended && (
+                <div className="board-final-md" title="계획 MD = Σ(배정 기간 영업일 × 투입률) · 실적 MD = 제출된 주간 업무보고 기준">
+                  <strong>최종 MD</strong> 실적 {num(pmd?.actualMd ?? 0)} MD ({num(pmd?.actualMm ?? 0, 2)} MM) · 계획 {num(pmd?.planMd ?? 0)} MD ({num(pmd?.planMm ?? 0, 2)} MM)
+                </div>
+              )}
+              {canStatus(p) && (
+                <div className="board-status-actions">
+                  {ended ? (
+                    <button type="button" className="btn sm" disabled={busy} onClick={() => changeStatus(p, 'ACTIVE')}>
+                      진행으로 변경
+                    </button>
+                  ) : (
+                    <button type="button" className="btn sm" disabled={busy} onClick={() => changeStatus(p, 'DONE')}>
+                      완료 처리
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="board-members">
                 {members.map((a) => (
                   <div
@@ -306,7 +359,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                         {a.roleCd === 'PM' && <span className="board-pm">PM</span>}
                       </strong>
                       <span>
-                        {a.allocRate}% · {label(ASG_ROLE, a.roleCd)}
+                        {ended ? `실적 ${num(pmd?.byEmp[a.empId]?.actualMd ?? 0)}MD` : `${a.allocRate}%`} · {label(ASG_ROLE, a.roleCd)}
                         {a.status === 'PLANNED' && ' · 예정'}
                         {a.status === 'ENDED' && ' · 종료'}
                       </span>

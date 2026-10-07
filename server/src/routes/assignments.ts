@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { assertProjectManager, me, pmProjectCodes, pmScoped, staffOnly } from '../auth.js';
-import { assertMenu } from '../lib/permissions.js';
+import { assertMenu, can } from '../lib/permissions.js';
 import { HttpError, notFound, prisma } from '../db.js';
-import { assignmentStatus, maxAllocation } from '../lib/alloc.js';
+import { assignmentStatus, maxAllocation, plannedMd } from '../lib/alloc.js';
+import { today } from '../lib/dates.js';
+import { holidaySet, mdPerMm } from '../lib/settings.js';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { requireMenu } from '../lib/permissions.js';
@@ -74,6 +76,75 @@ async function syncProjectPm(prjCd: string, asgId: number, empId: string, roleCd
     await prisma.project.updateMany({ where: { prjCd, pmEmpId: prev.empId }, data: { pmEmpId: null } });
   }
 }
+
+// ---- 프로젝트 상태(진행/완료) 변경 · 최종 MD ----
+
+/**
+ * 배정 보드에서 프로젝트 상태 변경: 기간과 무관하게 완료 처리하거나 다시 진행으로 표기
+ * 권한: 프로젝트 '편집' 권한, 또는 투입 배정 '편집' 권한(프로젝트 PM은 담당 프로젝트만)
+ * 완료 처리 시 closeAssignments=true면 진행 중 배정은 오늘 종료, 시작 전 배정은 취소
+ */
+assignmentsRouter.patch('/projects/:prjCd/status', async (req, res) => {
+  const u = me(req);
+  const prjCd = String(req.params.prjCd);
+  if (!(await can(u, 'projects', 'EDIT'))) await assertProjectManager(u, prjCd, 'assignments');
+  const body = parse(z.object({ statusCd: z.enum(['ACTIVE', 'DONE']), closeAssignments: z.boolean().default(false) }), req.body);
+  const prj = await prisma.project.findUnique({ where: { prjCd } });
+  if (!prj || prj.prjType === 'NP') throw notFound('프로젝트');
+  const t = today();
+  let closed = 0;
+  let canceled = 0;
+  if (body.statusCd === 'DONE' && body.closeAssignments) {
+    canceled = (await prisma.assignment.updateMany({ where: { prjCd, canceled: false, startDt: { gt: t } }, data: { canceled: true } })).count;
+    closed = (await prisma.assignment.updateMany({ where: { prjCd, canceled: false, startDt: { lte: t }, endDt: { gt: t } }, data: { endDt: t } })).count;
+  }
+  await prisma.project.update({ where: { prjCd }, data: { statusCd: body.statusCd } });
+  res.json({ ok: true, closed, canceled });
+});
+
+/**
+ * 프로젝트별 MD 산정 (배정 보드의 종료 프로젝트 최종 MD)
+ * - 계획 MD = Σ(배정 기간 영업일 × 투입률), 실적 MD = 제출된 주간 업무보고의 투입 MD
+ * - 인력별 계획/실적 MD 포함, MM = MD ÷ 1MM 환산 MD(기준값)
+ */
+assignmentsRouter.get('/project-md', requireMenu('assignments'), async (req, res) => {
+  const u = me(req);
+  const scope = pmScoped(u) ? await pmProjectCodes(u.empId) : null;
+  const holidays = await holidaySet();
+  const mdmm = await mdPerMm();
+  const asg = await prisma.assignment.findMany({ where: { canceled: false, ...(scope ? { prjCd: { in: scope } } : {}) }, select: { prjCd: true, empId: true, startDt: true, endDt: true, allocRate: true } });
+  const ts = await prisma.timesheet.groupBy({
+    by: ['prjCd', 'empId'],
+    where: { weeklyWork: { statusCd: 'SUBMITTED' }, ...(scope ? { prjCd: { in: scope } } : {}) },
+    _sum: { md: true },
+  });
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const out: Record<string, { planMd: number; actualMd: number; planMm: number; actualMm: number; byEmp: Record<string, { planMd: number; actualMd: number }> }> = {};
+  const get = (prjCd: string) => (out[prjCd] ??= { planMd: 0, actualMd: 0, planMm: 0, actualMm: 0, byEmp: {} });
+  for (const a of asg) {
+    const md = plannedMd(a, a.startDt, a.endDt, holidays);
+    const p = get(a.prjCd);
+    p.planMd += md;
+    (p.byEmp[a.empId] ??= { planMd: 0, actualMd: 0 }).planMd += md;
+  }
+  for (const x of ts) {
+    const md = x._sum.md ?? 0;
+    const p = get(x.prjCd);
+    p.actualMd += md;
+    (p.byEmp[x.empId] ??= { planMd: 0, actualMd: 0 }).actualMd += md;
+  }
+  for (const p of Object.values(out)) {
+    p.planMd = r2(p.planMd);
+    p.actualMd = r2(p.actualMd);
+    p.planMm = r2(p.planMd / mdmm);
+    p.actualMm = r2(p.actualMd / mdmm);
+    for (const e of Object.values(p.byEmp)) {
+      e.planMd = r2(e.planMd);
+      e.actualMd = r2(e.actualMd);
+    }
+  }
+  res.json(out);
+});
 
 // ---- 협력사를 바로 수행인력으로 배정 ----
 
