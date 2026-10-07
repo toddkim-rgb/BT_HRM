@@ -544,7 +544,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
         <Field label="시스템 권한" required>
           <Select value={f.role} onChange={(role) => set({ role })} options={ROLE_LABEL} disabled={user?.role !== 'ADMIN'} title={user?.role !== 'ADMIN' ? '권한(역할)은 시스템관리자만 변경할 수 있습니다' : undefined} />
         </Field>
-        <Field label="투입 대상" hint="관리·영업·경영진 등은 해제 (가동률·대기 인원 집계 제외)">
+        <Field label="투입 대상" hint="관리자·사업관리자 등은 해제 (가동률·대기 인원 집계 제외)">
           <label className="check" style={{ minHeight: 38 }}>
             <input type="checkbox" checked={f.utilTarget ?? true} onChange={(e) => set({ utilTarget: e.target.checked })} /> 가동률 집계 대상
           </label>
@@ -559,7 +559,7 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
 }
 
 const CSV_HEADERS = ['name', 'deptCd', 'gradeCd', 'jobCd', 'skillLevel', 'skillStack', 'employType', 'partnerId', 'careerStartDt', 'email', 'phone', 'role'];
-const CSV_HEADER_KO = ['성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일(로그인ID·필수)', '연락처(필수)', '권한(EMP/PM/EXEC/ADMIN/SALES)'];
+const CSV_HEADER_KO = ['성명', '소속', '직급', '직무', '기술등급', '기술스택', '고용형태(REG/CONT/FREE/PARTNER)', '협력사ID', 'IT경력시작일', '이메일(로그인ID·필수)', '연락처(필수)', '권한(EMP 수행인력/PM/EXEC 사업관리자/ADMIN)'];
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];

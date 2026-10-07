@@ -1,11 +1,10 @@
-export type Role = 'EMP' | 'PM' | 'EXEC' | 'ADMIN' | 'SALES';
+export type Role = 'EMP' | 'PM' | 'EXEC' | 'ADMIN';
 
 export const ROLE_LABEL: Record<Role, string> = {
-  EMP: '투입인력',
+  EMP: '수행인력',
   PM: 'PM/PL',
-  EXEC: '사업부장/경영진',
+  EXEC: '사업관리자',
   ADMIN: '시스템관리자',
-  SALES: '영업담당',
 };
 
 export const EMPLOY_TYPE: Record<string, string> = { REG: '정규직', CONT: '계약직', FREE: '프리랜서', PARTNER: '협력사' };

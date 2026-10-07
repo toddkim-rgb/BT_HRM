@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { HttpError, forbidden, prisma } from './db.js';
 import { assertMenu } from './lib/permissions.js';
 
-export type Role = 'EMP' | 'PM' | 'EXEC' | 'ADMIN' | 'SALES';
+export type Role = 'EMP' | 'PM' | 'EXEC' | 'ADMIN'; // 수행인력 / PM·PL / 사업관리자 / 시스템관리자
 
 export interface AuthUser {
   empId: string;
@@ -64,7 +64,7 @@ export function me(req: Request): AuthUser {
   return req.user;
 }
 
-/** 전사 조회 권한 (경영진·관리자) */
+/** 전사 조회 권한 (사업관리자·시스템관리자) */
 export const isManager = (u: AuthUser) => u.role === 'EXEC' || u.role === 'ADMIN';
 
 /** PM이 담당하는 프로젝트 코드 목록 */

@@ -5,11 +5,11 @@ import { HttpError, forbidden, prisma } from '../db.js';
 /**
  * 메뉴별 접근 권한 (역할 × 메뉴 → 없음/조회/편집, DB 저장)
  * - 관리자 화면 '메뉴 권한'에서 변경. 메뉴 표시·화면 접근·API가 모두 이 설정을 따름
- * - 데이터 범위 규칙은 별도로 유지: 투입인력은 본인 데이터, PM은 담당 프로젝트만
+ * - 데이터 범위 규칙은 별도로 유지: 수행인력은 본인 데이터, PM은 담당 프로젝트만
  * - '메뉴 권한' 화면 자체는 시스템관리자 전용(고정) — 관리자가 스스로 잠기지 않도록
  */
 export type Level = 'NONE' | 'VIEW' | 'EDIT';
-export const ROLES: Role[] = ['EMP', 'PM', 'EXEC', 'ADMIN', 'SALES'];
+export const ROLES: Role[] = ['EMP', 'PM', 'EXEC', 'ADMIN'];
 const RANK: Record<Level, number> = { NONE: 0, VIEW: 1, EDIT: 2 };
 
 export interface MenuDef {
@@ -31,7 +31,7 @@ export const MENUS: MenuDef[] = [
   { key: 'utilization', label: '가동률', group: '현황', editable: false },
   { key: 'projectMm', label: '프로젝트 MM', group: '현황', editable: false },
   { key: 'employees', label: '인력', group: '기준정보', editable: true, editDesc: '등록·수정·삭제·일괄 등록·비밀번호 초기화 (관리자 계정·권한은 시스템관리자만)' },
-  { key: 'projects', label: '프로젝트', group: '기준정보', editable: true, editDesc: '등록·수정·삭제 (영업담당은 제안 상태만)' },
+  { key: 'projects', label: '프로젝트', group: '기준정보', editable: true, editDesc: '등록·수정·삭제' },
   { key: 'partners', label: '협력사', group: '기준정보', editable: true, editDesc: '등록·수정·삭제' },
   { key: 'settings', label: '기준값 설정', group: '기준정보', editable: true, editDesc: '기준값·공휴일 변경' },
   { key: 'accountRequests', label: '계정 요청', group: '기준정보', editable: true, editDesc: '비밀번호 초기화·요청 처리' },
@@ -46,7 +46,6 @@ export const DEFAULT_PERMISSIONS: Record<Role, Partial<Record<string, Level>>> =
   PM: { dashboard: V, weekly: E, assignments: E, submissions: V, projectWeekly: E, onepage: V, staffing: V, utilization: V, projectMm: V, employees: V, projects: V },
   EXEC: { dashboard: V, weekly: E, assignments: V, submissions: V, projectWeekly: V, onepage: E, staffing: V, utilization: V, projectMm: V, employees: V, projects: V, partners: V },
   ADMIN: Object.fromEntries(MENUS.map((m) => [m.key, m.editable ? E : V])),
-  SALES: { dashboard: V, weekly: E, assignments: V, onepage: V, staffing: V, utilization: V, projectMm: V, employees: V, projects: E },
 };
 
 export type PermissionMap = Record<Role, Record<string, Level>>;
@@ -59,7 +58,7 @@ export async function ensureDefaultPermissions() {
   for (const role of ROLES)
     for (const m of MENUS)
       if (!have.has(`${role}:${m.key}`)) await prisma.menuPermission.create({ data: { role, menu: m.key, level: DEFAULT_PERMISSIONS[role][m.key] ?? 'NONE' } });
-  await prisma.menuPermission.deleteMany({ where: { menu: { notIn: MENUS.map((m) => m.key) } } });
+  await prisma.menuPermission.deleteMany({ where: { OR: [{ menu: { notIn: MENUS.map((m) => m.key) } }, { role: { notIn: ROLES } }] } }); // 없어진 메뉴·역할(영업담당 등) 정리
   cache = null;
 }
 

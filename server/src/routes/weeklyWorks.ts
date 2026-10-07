@@ -386,7 +386,7 @@ weeklyWorksRouter.get('/', requireMenu('submissions'), async (req, res) => {
   );
 });
 
-/** 프로젝트별 주간 제출 현황 요약 (PM 담당 / 경영진·관리자 전체) */
+/** 프로젝트별 주간 제출 현황 요약 (PM 담당 / 사업관리자·시스템관리자 전체) */
 weeklyWorksRouter.get('/project-summary', requireMenu(['submissions', 'dashboard']), async (req, res) => {
   const u = me(req);
   if (u.role === 'EMP') throw forbidden();

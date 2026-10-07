@@ -12,7 +12,7 @@ import { optDate, optStr, parse } from '../lib/validate.js';
 export const employeesRouter = Router();
 
 const EMPLOY_TYPES = ['REG', 'CONT', 'FREE', 'PARTNER'] as const;
-const ROLES = ['EMP', 'PM', 'EXEC', 'ADMIN', 'SALES'] as const;
+const ROLES = ['EMP', 'PM', 'EXEC', 'ADMIN'] as const;
 
 const employeeSchema = z.object({
   name: z.string({ error: '성명을 입력하세요' }).trim().min(1, '성명을 입력하세요'),
@@ -130,7 +130,7 @@ employeesRouter.get('/:empId', async (req, res) => {
 
 employeesRouter.post('/', requireMenu('employees', 'EDIT'), async (req, res) => {
   const body = parse(employeeSchema, req.body);
-  if (me(req).role !== 'ADMIN' && body.role !== 'EMP') throw new HttpError(403, '투입인력 외의 권한(역할)은 시스템관리자만 지정할 수 있습니다.');
+  if (me(req).role !== 'ADMIN' && body.role !== 'EMP') throw new HttpError(403, '수행인력 외의 권한(역할)은 시스템관리자만 지정할 수 있습니다.');
   await checkPartner(body.employType, body.partnerId);
   await checkEmail(body.email);
   // 초기 비밀번호 = 본인 이메일 주소, 첫 로그인 시 변경 강제
@@ -171,7 +171,7 @@ employeesRouter.post('/import', requireMenu('employees', 'EDIT'), async (req, re
   for (const [i, raw] of rows.entries()) {
     try {
       const body = parse(employeeSchema, raw);
-      if (me(req).role !== 'ADMIN' && body.role !== 'EMP') throw new HttpError(403, '투입인력 외의 권한(역할)은 시스템관리자만 지정할 수 있습니다.');
+      if (me(req).role !== 'ADMIN' && body.role !== 'EMP') throw new HttpError(403, '수행인력 외의 권한(역할)은 시스템관리자만 지정할 수 있습니다.');
       await checkPartner(body.employType, body.partnerId);
       await checkEmail(body.email);
       await prisma.employee.create({ data: { ...body, empId: await nextEmpId(), passwordHash: await initialPasswordHash(body.email), mustChangePw: true } });

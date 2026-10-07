@@ -31,14 +31,13 @@ export interface Project {
 const TYPE_OPTS = { SM: 'SM 운영·유지보수', SI: 'SI 구축', IN: '내부 프로젝트', PS: '제안/영업지원', ETC: '기타' };
 
 export default function Projects() {
-  const { user, can } = useAuth();
+  const { can } = useAuth();
   const canCreate = can('projects', 'EDIT');
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
   const { data, error, loading, reload } = useFetch<Project[]>(`/projects${qs({ type, status })}`);
   const [edit, setEdit] = useState<Partial<Project> | null>(null);
-  // 편집: 프로젝트 '편집' 권한 (영업담당은 제안 상태만)
-  const canEdit = (p: Project) => can('projects', 'EDIT') && (user?.role !== 'SALES' || p.statusCd === 'PROPOSAL');
+  const canEdit = (_p: Project) => can('projects', 'EDIT');
 
   return (
     <div>
@@ -47,7 +46,7 @@ export default function Projects() {
         desc="코드는 {사업구분}-{연도}-{일련번호}로 자동 채번됩니다."
         actions={
           canCreate && (
-            <button className="btn primary" onClick={() => setEdit({ prjType: 'SI', statusCd: user?.role === 'SALES' ? 'PROPOSAL' : 'ACTIVE', plOpenYn: false })}>
+            <button className="btn primary" onClick={() => setEdit({ prjType: 'SI', statusCd: 'ACTIVE', plOpenYn: false })}>
               + 프로젝트 등록
             </button>
           )
@@ -140,10 +139,9 @@ export default function Projects() {
 }
 
 function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>; onClose: () => void; onSaved: () => void }) {
-  const { user, can } = useAuth();
+  const { can } = useAuth();
   const toast = useToast();
   const isNew = !initial.prjCd;
-  const isSales = user?.role === 'SALES';
   const [f, setF] = useState(initial);
   const [err, setErr] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
@@ -176,7 +174,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
       wide
       footer={
         <>
-          {!isNew && can('projects', 'EDIT') && (!isSales || initial.statusCd === 'PROPOSAL') && (
+          {!isNew && can('projects', 'EDIT') && (
             <button className="btn danger" onClick={() => setRemoving(true)} style={{ marginRight: 'auto' }}>
               삭제
             </button>
@@ -197,7 +195,7 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
           <Select value={f.prjType} onChange={(prjType) => set({ prjType })} options={TYPE_OPTS} />
         </Field>
         <Field label="상태" required>
-          <Select value={f.statusCd} onChange={(statusCd) => set({ statusCd })} options={isSales ? { PROPOSAL: '제안' } : PRJ_STATUS} />
+          <Select value={f.statusCd} onChange={(statusCd) => set({ statusCd })} options={PRJ_STATUS} />
         </Field>
         <Field label="프로젝트명" required full>
           <input value={f.prjNm ?? ''} onChange={(e) => set({ prjNm: e.target.value })} />
@@ -237,13 +235,11 @@ function ProjectForm({ initial, onClose, onSaved }: { initial: Partial<Project>;
         <Field label="상주 여부">
           <Select value={f.residentType} onChange={(residentType) => set({ residentType: residentType || null })} options={RESIDENT} placeholder="-" />
         </Field>
-        {!isSales && (
-          <Field label="PM 손익 공개">
-            <label className="check" style={{ minHeight: 38 }}>
-              <input type="checkbox" checked={!!f.plOpenYn} onChange={(e) => set({ plOpenYn: e.target.checked })} /> 담당 PM에게 손익 공개
-            </label>
-          </Field>
-        )}
+        <Field label="PM 손익 공개">
+          <label className="check" style={{ minHeight: 38 }}>
+            <input type="checkbox" checked={!!f.plOpenYn} onChange={(e) => set({ plOpenYn: e.target.checked })} /> 담당 PM에게 손익 공개
+          </label>
+        </Field>
       </div>
     </Modal>
   );

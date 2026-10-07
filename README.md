@@ -1,6 +1,6 @@
 # BT-HRM · SM·SI 사업부문 인력관리 시스템
 
-[SM_SI_인력관리시스템_명세서.md](SM_SI_인력관리시스템_명세서.md)(v1.9)를 기준으로 개발하는 인력관리 시스템입니다.
+[SM_SI_인력관리시스템_명세서.md](SM_SI_인력관리시스템_명세서.md)(v1.10)를 기준으로 개발하는 인력관리 시스템입니다.
 
 | 구분 | 기술 |
 |---|---|
@@ -96,10 +96,11 @@ client/
 
 ## 운영 배포 (Vercel + Turso)
 
-- 화면: `client/dist` 정적 배포, API: `api/index.js` 서버리스 함수(빌드된 `server/dist/app.js`), DB: Turso(SQLite 호환)
+- 운영 주소: https://bthrm.vercel.app (Vercel 프로젝트 `bt_hrm`, GitHub `main` 브랜치에 push하면 자동 배포)
+- 화면: `client/dist` 정적 배포, API: `api/index.js` 서버리스 함수(빌드된 `server/dist/app.js`), DB: Turso(SQLite 호환, 도쿄)
 - 로컬 개발은 그대로 SQLite 파일(`server/prisma/dev.db`)을 씁니다. `TURSO_DATABASE_URL`이 있으면 Turso에 연결합니다 (`server/src/db.ts`).
-- Vercel 환경변수: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `JWT_SECRET`
-- Turso 스키마·데이터: `server/.env.turso`(git·Vercel 업로드 제외)에 URL·토큰을 넣고
-  - `cd server && npx tsx --env-file=.env.turso scripts/turso.ts migrate` (새 마이그레이션 적용, 배포 전 실행)
-  - `npx tsx --env-file=.env.turso scripts/turso.ts import` (로컬 데이터 1회 이관, 빈 DB에서만)
+- Vercel 환경변수 `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`은 프로젝트 Storage의 Turso 연결로 자동 등록됩니다. 로그인 서명 키는 DB 토큰에서 파생합니다(`JWT_SECRET`을 넣으면 그 값을 우선 사용).
+- DB 구조를 바꾸는 배포는 push 전에 Turso에 마이그레이션을 먼저 적용합니다.
+  - `vercel env pull server/.env.turso --environment production` (git·Vercel 업로드 제외 파일)
+  - `cd server && npx tsx --env-file=.env.turso scripts/turso.ts migrate`
 - 로컬 DB 파일과 `.env`는 `.vercelignore`로 업로드하지 않습니다.

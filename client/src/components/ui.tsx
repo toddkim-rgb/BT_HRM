@@ -39,7 +39,7 @@ export function Kpi({ label, value, sub, tone }: { label: string; value: ReactNo
 const BADGE_TONE: Record<string, string> = {
   ACTIVE: 'good', DONE: 'good', NORMAL: 'good',
   SUBMITTED: 'info', PLANNED: 'info', PROPOSAL: 'warn',
-  DRAFT: 'neutral', NEW: 'neutral', NONE: 'warn', ENDED: 'neutral', CANCELED: 'neutral', SALES: 'warn',
+  DRAFT: 'neutral', NEW: 'neutral', NONE: 'warn', ENDED: 'neutral', CANCELED: 'neutral',
   DELAY: 'bad', STOP: 'bad', RETIRED: 'neutral', LEAVE: 'warn', STOPPED: 'neutral',
   H: 'bad', M: 'warn', L: 'neutral',
 };

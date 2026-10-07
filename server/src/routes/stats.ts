@@ -41,7 +41,7 @@ statsRouter.get('/utilization', requireMenu('utilization'), async (req, res) => 
     ...summary,
     prevRate: prev.rate,
     diff: cur.rate != null && prev.rate != null ? Math.round((cur.rate - prev.rate) * 10) / 10 : null,
-    // 투입인력은 본인 행만, 그 외(PM·경영진·관리자·영업)는 전체
+    // 수행인력은 본인 행만, 그 외(PM·사업관리자·시스템관리자)는 전체
     rows: u.role === 'EMP' ? rows.filter((r) => r.empId === u.empId) : rows,
     trend: await weeklyTrend(week, 12, 4),
   });
@@ -140,7 +140,7 @@ statsRouter.get('/projects/:prjCd/mm', requireMenu('projectMm'), async (req, res
 
 /** 대시보드 요약 (F-020 일부) */
 statsRouter.get('/summary', requireMenu('dashboard'), async (req, res) => {
-  // 전사 요약: 대시보드 권한 + 투입인력 역할 제외 (투입인력 대시보드는 본인 정보만)
+  // 전사 요약: 대시보드 권한 + 수행인력 역할 제외 (수행인력 대시보드는 본인 정보만)
   if (me(req).role === 'EMP') throw forbidden();
   const t = today();
   // 인원·투입 구분은 전사 One-Page·투입현황·가동률과 같은 기준 (lib/workforce)

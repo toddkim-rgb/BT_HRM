@@ -30,9 +30,9 @@ const projectSchema = z.object({
   statusCd: z.enum(['PROPOSAL', 'ACTIVE', 'DONE', 'STOP']).default('ACTIVE'), // 제안/진행중/완료/중단
 });
 
-/** 금액 정보 노출 여부: 경영진·관리자·영업, 또는 손익 공개된 프로젝트의 PM */
+/** 금액 정보 노출 여부: 사업관리자·시스템관리자, 또는 손익 공개된 프로젝트의 PM */
 function canSeeAmount(u: { role: string; empId: string }, p: { pmEmpId: string | null; plOpenYn: boolean }) {
-  return isManager(u as never) || u.role === 'SALES' || (u.role === 'PM' && p.pmEmpId === u.empId && p.plOpenYn);
+  return isManager(u as never) || (u.role === 'PM' && p.pmEmpId === u.empId && p.plOpenYn);
 }
 
 async function nextPrjCd(type: string, year: string): Promise<string> {
@@ -76,7 +76,6 @@ projectsRouter.get('/:prjCd', async (req, res) => {
 projectsRouter.post('/', requireMenu('projects', 'EDIT'), async (req, res) => {
   const u = me(req);
   const body = parse(projectSchema, req.body);
-  if (u.role === 'SALES' && body.statusCd !== 'PROPOSAL') throw new HttpError(403, '영업담당은 제안 상태 프로젝트만 등록할 수 있습니다.');
   if (body.startDt && body.endDt && body.startDt > body.endDt) throw new HttpError(400, '종료일이 시작일보다 빠릅니다.');
   const year = (body.startDt ?? today()).slice(0, 4);
   const prjCd = await nextPrjCd(body.prjType, year);
@@ -91,7 +90,6 @@ projectsRouter.put('/:prjCd', requireMenu('projects', 'EDIT'), async (req, res) 
   const cur = await prisma.project.findUnique({ where: { prjCd: String(req.params.prjCd) } });
   if (!cur || cur.prjType === 'NP') throw notFound('프로젝트');
   const body = parse(projectSchema, req.body);
-  if (u.role === 'SALES' && (cur.statusCd !== 'PROPOSAL' || body.statusCd !== 'PROPOSAL')) throw forbidden();
   if (body.startDt && body.endDt && body.startDt > body.endDt) throw new HttpError(400, '종료일이 시작일보다 빠릅니다.');
   // 사업구분을 바꾸면 코드({사업구분}-{연도}-{일련번호})를 새 구분으로 다시 부여한다.
   // 배정·주간보고·마일스톤 등 연결 데이터는 FK(ON UPDATE CASCADE)로 새 코드를 따라간다.
@@ -133,7 +131,6 @@ projectsRouter.get('/:prjCd/delete-impact', requireMenu('projects', 'EDIT'), asy
 projectsRouter.delete('/:prjCd', requireMenu('projects', 'EDIT'), async (req, res) => {
   const prjCd = String(req.params.prjCd);
   const impact = await projectDeleteImpact(prjCd);
-  if (me(req).role === 'SALES' && impact.prj.statusCd !== 'PROPOSAL') throw new HttpError(403, '영업담당은 제안 상태 프로젝트만 삭제할 수 있습니다.');
   // 이력이 있으면 프로젝트명(또는 코드)을 다시 입력해 확인해야 삭제 (투입 MD가 지워지면 과거 가동률·MM이 바뀜)
   const typed = String(req.body?.confirm ?? '').trim();
   if (impact.hasHistory && typed !== prjCd && typed !== impact.prj.prjNm.trim()) {
