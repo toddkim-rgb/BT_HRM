@@ -380,10 +380,10 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
         </div>
       </div>
       <div className="table-wrap" onScroll={() => setTip(null)}>
-        <table className="tbl tl-table tl-heat">
+        <table className="tl-heat">
           <thead>
             <tr>
-              <th rowSpan={2}>인력</th>
+              <th rowSpan={2} className="tl-name">인력</th>
               {months.map((m) => {
                 const f = folded.has(m);
                 return (
@@ -396,15 +396,13 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
             <tr>
               {cols.map((c) => (
                 <th key={c.key} className="tl-week" title={c.range}>
-                  {c.label}
-                  {c.sub && <div className="small muted">{c.sub}</div>}
+                  {c.sub ? c.label.replace('주', '') : '월'}
                 </th>
               ))}
             </tr>
             <tr className="tl-chart-row">
-              <th>
-                투입 인원
-                <div className="small muted">FTE · 대상 {head}명</div>
+              <th className="tl-name" title="투입 인원(FTE) = 투입률 합 ÷ 100, 점선 = 대상 인원">
+                투입 인원 <span className="muted">/ {head}명</span>
               </th>
               {cols.map((c, i) => (
                 <td key={c.key} onMouseEnter={(e) => show(e, c.range, [`투입 인원 ${fte[i]}명 (FTE)`, `대상 인원 ${head}명`, `가동 ${head ? Math.round((fte[i] / head) * 100) : 0}%`])} onMouseLeave={() => setTip(null)}>
@@ -412,7 +410,6 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
                     <div className="tl-ref" style={{ bottom: `${(head / maxV) * 100}%` }} />
                     <div className="tl-bar" style={{ height: `${(fte[i] / maxV) * 100}%` }} />
                   </div>
-                  <div className="tl-bar-val">{fte[i].toFixed(1)}</div>
                 </td>
               ))}
             </tr>
@@ -420,24 +417,24 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
           <tbody>
             {list.map((p) => (
               <tr key={p.empId}>
-                <td>
-                  <strong>{p.name}</strong>
-                  <div className="small muted">{p.deptCd}</div>
+                <td className="tl-name" title={p.deptCd}>
+                  {p.name} <span className="muted">{p.deptCd}</span>
                 </td>
                 {cols.map((c) => {
                   const v = c.of(p);
                   const total = v?.total ?? 0;
                   const h = heatOf(total);
-                  const dark = h === 'over' || HEAT.indexOf(h ?? '') >= 2;
                   return (
                     <td
                       key={c.key}
-                      className={`tl-hcell ${h === 'over' ? 'over' : h ? '' : 'zero'}`}
-                      style={h && h !== 'over' ? { background: h, color: dark ? '#fff' : 'var(--text)' } : undefined}
+                      className="tl-hcell"
+                      aria-label={`${p.name} ${c.range} ${total}%`}
                       onMouseEnter={(e) => show(e, `${p.name} · ${c.range}`, total ? v!.items.map((i) => `${i.prjNm ?? i.prjCd} ${i.pct}%`).concat(`합계 ${total}%`) : ['대기 (배정 없음)'])}
                       onMouseLeave={() => setTip(null)}
                     >
-                      {h === 'over' ? `!${total}` : total ? total : '–'}
+                      <i className={h === 'over' ? 'over' : h ? '' : 'zero'} style={h && h !== 'over' ? { background: h } : undefined}>
+                        {h === 'over' ? '!' : null}
+                      </i>
                     </td>
                   );
                 })}
@@ -455,7 +452,7 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
         </div>
       )}
       <p className="muted small" style={{ marginBottom: 0 }}>
-        칸 숫자 = 투입률(%) = Σ(배정 영업일 × 투입률) ÷ 그 주(접힌 달은 그 달) 영업일. 위 막대는 주별 투입 인원(FTE = 투입률 합 ÷ 100), 점선은 대상 인원입니다. 주(월~일)는 목요일이 속한 달로 묶고, 월 머리글을 누르면 그 달을 월별로 접거나 펼칩니다. 칸에 마우스를 올리면 프로젝트별 내역이 보입니다.
+        칸 색 = 투입률(%) = Σ(배정 영업일 × 투입률) ÷ 그 주(접힌 달은 그 달) 영업일. 위 막대는 주별 투입 인원(FTE = 투입률 합 ÷ 100), 점선은 대상 인원입니다. 주 머리글 숫자는 그 달의 몇 번째 주입니다. 주(월~일)는 목요일이 속한 달로 묶고, 월 머리글을 누르면 그 달을 월별로 접거나 펼칩니다. 칸에 마우스를 올리면 프로젝트별 내역이 보입니다.
       </p>
     </>
   );

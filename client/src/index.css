@@ -481,16 +481,23 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tl-table th.tl-month { cursor: pointer; background: var(--surface-2); border-left: 2px solid #fff; white-space: nowrap; }
 .tl-table th.tl-week { font-weight: 600; font-size: 12px; min-width: 72px; }
 
-/* 주별 투입현황: 히트맵 + 투입 인원 막대 */
-.tl-heat td.tl-hcell { min-width: 52px; height: 34px; text-align: center; font-size: 12px; font-weight: 600; border: 2px solid var(--surface); border-radius: 6px; font-variant-numeric: tabular-nums; cursor: default; }
-.tl-heat td.tl-hcell.zero { background: #f0efec; color: var(--muted); font-weight: 400; }
-.tl-heat td.tl-hcell.over { background: #d03b3b; color: #fff; }
-.tl-heat .tl-chart-row td { vertical-align: bottom; padding: 6px 4px 2px; border-bottom: 1px solid var(--border); }
-.tl-heat .tl-chart-row th { vertical-align: bottom; text-align: left; font-weight: 600; }
-.tl-bar-wrap { position: relative; height: 72px; display: flex; align-items: flex-end; justify-content: center; }
-.tl-bar { width: 60%; max-width: 28px; min-height: 0; background: #2a78d6; border-radius: 4px 4px 0 0; }
-.tl-ref { position: absolute; left: 0; right: 0; border-top: 2px dashed #9b9a96; }
-.tl-bar-val { font-size: 11px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+/* 주별 투입현황: 작은 히트맵 + 투입 인원 막대 */
+.tl-heat { border-collapse: separate; border-spacing: 2px; font-size: 12px; }
+.tl-heat th, .tl-heat td { padding: 0; text-align: center; font-weight: 400; }
+.tl-heat .tl-name { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; white-space: nowrap; padding-right: 8px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.tl-heat .tl-name .muted { font-size: 11px; }
+.tl-heat th.tl-month { cursor: pointer; font-weight: 600; font-size: 11px; white-space: nowrap; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+.tl-heat th.tl-week { font-size: 10px; color: var(--muted); width: 18px; }
+.tl-heat .tl-chart-row td { vertical-align: bottom; padding-top: 4px; }
+.tl-heat .tl-chart-row th { vertical-align: bottom; font-weight: 600; }
+.tl-heat td.tl-hcell { width: 18px; height: 18px; cursor: default; }
+.tl-heat td.tl-hcell i { display: block; width: 18px; height: 18px; border-radius: 3px; font-style: normal; font-size: 11px; font-weight: 700; line-height: 18px; color: #fff; }
+.tl-heat td.tl-hcell i.zero { background: #f0efec; }
+.tl-heat td.tl-hcell i.over { background: #d03b3b; }
+.tl-heat td.tl-hcell:hover i { outline: 2px solid var(--text); outline-offset: 1px; }
+.tl-bar-wrap { position: relative; height: 36px; display: flex; align-items: flex-end; justify-content: center; }
+.tl-bar { width: 12px; background: #2a78d6; border-radius: 3px 3px 0 0; }
+.tl-ref { position: absolute; left: -1px; right: -1px; border-top: 1px dashed #9b9a96; }
 .tl-legend { align-items: center; }
 .tl-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
 .tl-legend i.tl-over-sw { background: #d03b3b; color: #fff; font-style: normal; font-size: 10px; font-weight: 700; text-align: center; line-height: 14px; }
