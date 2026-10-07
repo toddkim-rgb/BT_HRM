@@ -67,9 +67,9 @@ export default function Projects() {
             <table className="tbl responsive">
               <thead>
                 <tr>
-                  <th>프로젝트명</th>
                   <th>사업구분</th>
                   <th>고객사</th>
+                  <th>프로젝트명</th>
                   <th>사업기간</th>
                   <th>PM</th>
                   <th className="num">투입</th>
@@ -82,15 +82,15 @@ export default function Projects() {
               <tbody>
                 {data.map((p) => (
                   <tr key={p.prjCd} className={canEdit(p) ? 'clickable' : ''} onClick={() => canEdit(p) && setEdit(p)}>
-                    <td data-label="프로젝트명">
-                      <strong title={p.prjCd}>{p.prjNm}</strong>
-                    </td>
                     <td data-label="사업구분" className="nowrap">
                       <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
                     </td>
                     <td data-label="고객사">
                       {p.customerNm ?? '-'}
                       {p.contractType === 'SUB' && <div className="small muted">하도급 · {p.primeContractor}</div>}
+                    </td>
+                    <td data-label="프로젝트명">
+                      <strong title={p.prjCd}>{p.prjNm}</strong>
                     </td>
                     <td data-label="사업기간" className="nowrap small">
                       {p.startDt ?? ''} ~ {p.endDt ?? ''}
