@@ -470,3 +470,5 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .perm-sel.VIEW { color: var(--info); background: var(--info-soft); }
 .perm-sel.EDIT { color: var(--good); background: var(--good-soft); }
 .perm-sel.dirty { outline: 2px solid var(--warn); }
+.board-prj.ended { opacity: 0.85; border-style: dashed; }
+.board-chip.ended { background: var(--surface-2); color: var(--muted); }

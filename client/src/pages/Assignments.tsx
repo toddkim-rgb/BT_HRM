@@ -34,7 +34,7 @@ export default function Assignments() {
   const [refreshKey, setRefreshKey] = useState(0); // 저장 후 보드 새로고침
   const toast = useToast();
 
-  const myProjects = (projects ?? []).filter((p) => !['DONE', 'STOP'].includes(p.statusCd) && (user?.role !== 'PM' || p.pmEmpId === user?.empId));
+  const myProjects = (projects ?? []).filter((p) => (user?.role !== 'PM' || p.pmEmpId === user?.empId));
   const canManage = (a: Asg) => can('assignments', 'EDIT') && (user?.role !== 'PM' || a.project.pmEmpId === user.empId);
   const t = today();
   const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);

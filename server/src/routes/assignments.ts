@@ -57,7 +57,7 @@ async function validateTarget(empId: string, prjCd: string) {
   if (!emp || emp.deletedAt || emp.statusCd === 'RETIRED') throw new HttpError(400, '배정할 수 없는 인력입니다. (퇴사 또는 삭제된 인력)');
   const prj = await prisma.project.findUnique({ where: { prjCd } });
   if (!prj || prj.prjType === 'NP') throw new HttpError(400, '배정할 수 없는 프로젝트입니다.');
-  if (['DONE', 'STOP'].includes(prj.statusCd)) throw new HttpError(400, '완료·중단된 프로젝트에는 배정할 수 없습니다.');
+  // 완료·중단·기간이 지난 프로젝트도 배정 등록·수정 가능 (지난 투입 이력 정정)
 }
 
 assignmentsRouter.post('/', async (req, res) => {

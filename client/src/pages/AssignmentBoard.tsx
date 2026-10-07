@@ -60,9 +60,9 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const { user, can } = useAuth();
   const toast = useToast();
   const t = today();
-  const { data: asgs, error, reload: reloadAsg } = useFetch<BoardAsg[]>(`/assignments?status=PLANNED,ACTIVE&_=${refreshKey}`);
+  const { data: asgs, error, reload: reloadAsg } = useFetch<BoardAsg[]>(`/assignments?status=PLANNED,ACTIVE,ENDED&_=${refreshKey}`);
   const { data: emps, reload: reloadEmp } = useFetch<Emp[]>(`/employees?_=${refreshKey}`);
-  const { data: projects } = useFetch<Prj[]>('/projects?status=ACTIVE,PROPOSAL');
+  const { data: projects } = useFetch<Prj[]>('/projects?status=ACTIVE,PROPOSAL,DONE,STOP');
   const [q, setQ] = useState('');
   const [benchOnly, setBenchOnly] = useState(false);
   const [over, setOver] = useState<string | null>(null); // 드롭 대상 강조 (프로젝트 코드 또는 'pool')
@@ -89,23 +89,23 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
     }
   };
 
-  /** 인력을 프로젝트에 배정 (기본값: 오늘~프로젝트 종료일, 남은 투입률) */
+  /** 인력을 프로젝트에 배정 (기본값: 오늘~프로젝트 종료일, 남은 투입률 / 기간이 지난 프로젝트는 프로젝트 기간 전체) */
   const assign = async (empId: string, p: Prj) => {
     const e = emps?.find((x) => x.empId === empId);
     if (!e) throw new Error('인력을 찾을 수 없습니다.');
     if ((asgs ?? []).some((a) => a.empId === empId && a.prjCd === p.prjCd)) throw new Error(`${e.name}님은 이미 이 프로젝트에 배정되어 있습니다. 칩을 눌러 기간·투입률을 수정하세요.`);
-    const startDt = p.startDt && p.startDt > t ? p.startDt : t;
+    let startDt = p.startDt && p.startDt > t ? p.startDt : t;
     const endDt = p.endDt ?? `${t.slice(0, 4)}-12-31`;
-    if (endDt < startDt) throw new Error('프로젝트 종료일이 지났습니다. 프로젝트 기간을 먼저 수정하세요.');
+    if (endDt < startDt) startDt = p.startDt && p.startDt <= endDt ? p.startDt : endDt; // 기간이 지난 프로젝트: 과거 기간으로 배정
     const remain = 100 - e.allocTotal;
     const allocRate = remain > 0 ? remain : 100;
     const r = await api.post<{ overAlloc: number }>('/assignments', { empId, prjCd: p.prjCd, roleCd: roleOf(e.jobCd), startDt, endDt, allocRate, residentType: 'ONSITE' });
     return `${e.name}님을 ${p.prjNm}에 배정했습니다 (${allocRate}%, ${startDt} ~ ${endDt})${r.overAlloc > 0 ? ` · 과투입 +${r.overAlloc}%` : ''}. 칩을 누르면 역할·기간·투입률을 수정할 수 있습니다.`;
   };
 
-  /** 프로젝트에서 빼기: 시작 전 배정은 취소, 진행 중 배정은 오늘 날짜로 종료 */
+  /** 프로젝트에서 빼기: 시작 전·이미 끝난 배정은 취소, 진행 중 배정은 오늘 날짜로 종료 */
   const unassign = async (a: BoardAsg) => {
-    if (a.startDt >= t) {
+    if (a.startDt >= t || a.endDt < t) {
       await api.post(`/assignments/${a.asgId}/cancel`);
       return `${a.employee.name}님의 ${a.project.prjNm} 배정을 취소했습니다.`;
     }
@@ -140,7 +140,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
     if (!canManage(p)) return toast('담당 프로젝트에만 배정할 수 있습니다.', 'bad');
     if (d.kind === 'emp') return run(() => assign(d.empId, p));
     const a = asgs?.find((x) => x.asgId === d.asgId);
-    if (!a || a.prjCd === p.prjCd) return;
+    if (!a || a.prjCd === p.prjCd || a.status === 'ENDED') return;
     // 다른 프로젝트에서 옮기기 = 새 프로젝트에 배정 + 기존 프로젝트에서 빼기
     run(async () => {
       const msg = await assign(a.empId, p);
@@ -159,6 +159,10 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
 
   if (error) return <ErrorBox error={error} />;
   if (!asgs || !emps || !projects) return <Loading />;
+
+  // 종료된 프로젝트(완료·중단 또는 종료일이 지난 프로젝트)는 하단에 배치
+  const isEnded = (p: Prj) => ['DONE', 'STOP'].includes(p.statusCd) || (!!p.endDt && p.endDt < t);
+  const sorted = [...projects].sort((a, b) => Number(isEnded(a)) - Number(isEnded(b)));
 
   const kw = q.trim().toLowerCase();
   const pool = emps
@@ -210,15 +214,17 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
       </aside>
 
       <div className="board-projects">
-        {!projects.length && <Empty>진행중·제안 상태의 프로젝트가 없습니다.</Empty>}
-        {projects.map((p) => {
-          const members = asgs.filter((a) => a.prjCd === p.prjCd);
+        {!projects.length && <Empty>프로젝트가 없습니다.</Empty>}
+        {sorted.map((p) => {
+          const ended = isEnded(p);
+          // 진행 중 프로젝트는 진행·예정 배정만, 종료된 프로젝트는 지난 배정까지 표시
+          const members = asgs.filter((a) => a.prjCd === p.prjCd && (ended || a.status !== 'ENDED'));
           const mine = canManage(p);
           const addable = emps.filter((e) => e.utilTarget && !members.some((m) => m.empId === e.empId));
           return (
             <section
               key={p.prjCd}
-              className={`board-prj ${over === p.prjCd ? 'drop-over' : ''} ${mine ? '' : 'readonly'}`}
+              className={`board-prj ${over === p.prjCd ? 'drop-over' : ''} ${mine ? '' : 'readonly'} ${ended ? 'ended' : ''}`}
               onDragOver={(e) => mine && allowDrop(e, p.prjCd)}
               onDragLeave={() => setOver(null)}
               onDrop={(e) => dropOnProject(e, p)}
@@ -227,6 +233,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                 <span className="row" style={{ gap: 6 }}>
                   <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
                   <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
+                  {ended && p.statusCd === 'ACTIVE' && <Badge tone="neutral">기간 종료</Badge>}
                 </span>
                 <span className="small muted">
                   {members.length}명 · {members.reduce((s, m) => s + m.allocRate, 0)}%
@@ -242,8 +249,8 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                 {members.map((a) => (
                   <div
                     key={a.asgId}
-                    className={`board-chip ${a.overAlloc > 0 ? 'over' : ''} ${a.status === 'PLANNED' ? 'planned' : ''}`}
-                    draggable={mine}
+                    className={`board-chip ${a.overAlloc > 0 ? 'over' : ''} ${a.status === 'PLANNED' ? 'planned' : ''} ${a.status === 'ENDED' ? 'ended' : ''}`}
+                    draggable={mine && a.status !== 'ENDED'}
                     onDragStart={(ev) => startDrag(ev, { kind: 'asg', asgId: a.asgId })}
                     title={`${label(ASG_ROLE, a.roleCd)} · ${a.startDt} ~ ${a.endDt}${a.overAlloc > 0 ? ` · 과투입 +${a.overAlloc}%` : ''}`}
                   >
@@ -252,13 +259,14 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                       <span>
                         {a.allocRate}% · {label(ASG_ROLE, a.roleCd)}
                         {a.status === 'PLANNED' && ' · 예정'}
+                        {a.status === 'ENDED' && ' · 종료'}
                       </span>
                       <small>
                         ~ {a.endDt.slice(5)} · {label(EMPLOY_TYPE, a.employee.employType)}
                       </small>
                     </button>
                     {mine && (
-                      <button type="button" className="board-chip-x" aria-label={`${a.employee.name} 빼기`} disabled={busy} onClick={() => window.confirm(`${a.employee.name}님을 ${p.prjNm}에서 뺄까요?`) && run(() => unassign(a))}>
+                      <button type="button" className="board-chip-x" aria-label={`${a.employee.name} 빼기`} disabled={busy} onClick={() => window.confirm(a.status === 'ENDED' ? `${a.employee.name}님의 ${p.prjNm} 지난 배정을 취소할까요? 가동률 등 지난 집계에서도 빠집니다.` : `${a.employee.name}님을 ${p.prjNm}에서 뺄까요?`) && run(() => unassign(a))}>
                         ×
                       </button>
                     )}
