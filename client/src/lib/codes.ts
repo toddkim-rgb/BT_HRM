@@ -40,3 +40,9 @@ export const SETTING_LABEL: Record<string, string> = {
 
 /** 메뉴 권한 표의 열 (역할 + 투입 배정에서 PM으로 지정된 사람) */
 export const PERM_ROLE_LABEL: Record<string, string> = { ...ROLE_LABEL, PM: '프로젝트 PM (배정 지정)' };
+
+/** 자사/협력사 구분 (협력사·프리랜서 = 외부) */
+export const isPartnerType = (employType: string) => employType === 'PARTNER' || employType === 'FREE';
+/** 인력 소속 표기: 자사는 부서, 협력사는 '협력사 · 업체명' */
+export const orgLabel = (e: { employType: string; deptCd: string; partner?: { partnerNm: string } | null }) =>
+  isPartnerType(e.employType) ? `${EMPLOY_TYPE[e.employType] ?? '협력사'} · ${e.partner?.partnerNm ?? '업체 미지정'}` : `자사 · ${e.deptCd}`;

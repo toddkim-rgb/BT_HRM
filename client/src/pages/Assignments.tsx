@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { pmScoped, useAuth } from '../lib/auth';
-import { ASG_ROLE, ASG_STATUS, EMPLOY_TYPE } from '../lib/codes';
+import { ASG_ROLE, ASG_STATUS, EMPLOY_TYPE, orgLabel } from '../lib/codes';
 import { label } from '../lib/format';
 import { today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
@@ -183,7 +183,7 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
     overAlloc: number;
     overlapping: { asgId: number; prjCd: string; roleCd: string; startDt: string; endDt: string; allocRate: number; project: { prjNm: string } }[];
   } | null>(null);
-  const { data: emps } = useFetch<{ empId: string; name: string; deptCd: string; skillLevel: string; employType: string; allocTotal: number }[]>('/employees');
+  const { data: emps } = useFetch<{ empId: string; name: string; deptCd: string; skillLevel: string; employType: string; role: string; utilTarget: boolean; partner?: { partnerNm: string } | null; allocTotal: number }[]>('/employees');
   const set = (p: Partial<Asg>) => setF((s) => ({ ...s, ...p }));
 
   useEffect(() => {
@@ -234,7 +234,7 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
             value={f.empId}
             onChange={(empId) => set({ empId })}
             placeholder="선택"
-            options={(emps ?? []).map((e) => [e.empId, `${e.name} · ${e.deptCd} · ${e.skillLevel} · ${label(EMPLOY_TYPE, e.employType)} (현재 ${e.allocTotal}%)`] as [string, string])}
+            options={(emps ?? []).filter((e) => (e.role === 'EMP' && e.utilTarget) || e.empId === f.empId).map((e) => [e.empId, `${e.name} · ${orgLabel(e)} · ${e.skillLevel} (현재 ${e.allocTotal}%)`] as [string, string])}
           />
         </Field>
         <Field label="투입 역할" required>

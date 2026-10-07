@@ -33,7 +33,7 @@ assignmentsRouter.get('/', async (req, res) => {
   const rows = await prisma.assignment.findMany({
     where: { ...scope, ...(prjCd ? { prjCd } : {}), ...(empId ? { empId } : {}) },
     include: {
-      employee: { select: { name: true, gradeCd: true, skillLevel: true, employType: true, deptCd: true } },
+      employee: { select: { name: true, gradeCd: true, skillLevel: true, employType: true, deptCd: true, partner: { select: { partnerNm: true } } } },
       project: { select: { prjNm: true, prjType: true, pmEmpId: true } },
     },
     orderBy: [{ startDt: 'desc' }],

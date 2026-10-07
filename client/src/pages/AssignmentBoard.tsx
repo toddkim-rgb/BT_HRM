@@ -2,7 +2,7 @@ import { useState, type DragEvent } from 'react';
 import { Badge, Empty, ErrorBox, Loading, useToast, PrjTypeBadge } from '../components/ui';
 import { api } from '../lib/api';
 import { pmScoped, useAuth } from '../lib/auth';
-import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
+import { ASG_ROLE, isPartnerType, orgLabel, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label } from '../lib/format';
 import { today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
@@ -18,7 +18,7 @@ export interface BoardAsg {
   residentType: string;
   status: string;
   overAlloc: number;
-  employee: { name: string; gradeCd: string; skillLevel: string; employType: string; deptCd: string };
+  employee: { name: string; gradeCd: string; skillLevel: string; employType: string; deptCd: string; partner?: { partnerNm: string } | null };
   project: { prjNm: string; prjType: string; pmEmpId: string | null };
 }
 interface Emp {
@@ -29,6 +29,8 @@ interface Emp {
   jobCd: string | null;
   skillLevel: string;
   employType: string;
+  role: string;
+  partner?: { partnerNm: string } | null;
   utilTarget: boolean;
   allocTotal: number;
   overAlloc: number;
@@ -62,9 +64,10 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const t = today();
   const { data: asgs, error, reload: reloadAsg } = useFetch<BoardAsg[]>(`/assignments?status=PLANNED,ACTIVE,ENDED&_=${refreshKey}`);
   const { data: emps, reload: reloadEmp } = useFetch<Emp[]>(`/employees?_=${refreshKey}`);
-  const { data: projects } = useFetch<Prj[]>('/projects?status=ACTIVE,PROPOSAL,DONE,STOP');
+  const { data: projects, reload: reloadProjects } = useFetch<Prj[]>('/projects?status=ACTIVE,PROPOSAL,DONE,STOP');
   const [q, setQ] = useState('');
   const [benchOnly, setBenchOnly] = useState(false);
+  const [org, setOrg] = useState<'ALL' | 'OWN' | 'PARTNER'>('ALL'); // 자사/협력사 필터
   const [over, setOver] = useState<string | null>(null); // 드롭 대상 강조 (프로젝트 코드 또는 'pool')
   const [busy, setBusy] = useState(false);
 
@@ -111,6 +114,23 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
     }
     await api.put(`/assignments/${a.asgId}`, { empId: a.empId, prjCd: a.prjCd, roleCd: a.roleCd, startDt: a.startDt, endDt: t, allocRate: a.allocRate, residentType: a.residentType });
     return `${a.employee.name}님의 ${a.project.prjNm} 투입을 오늘(${t})로 종료했습니다. 지난 실적은 유지됩니다.`;
+  };
+
+  /** PM 지정: 프로젝트에 추가된 인력 중 1명의 투입 역할을 PM으로 (기존 PM은 서버에서 일반 역할로 변경) */
+  const setPm = async (p: Prj, members: BoardAsg[], asgId: number | null) => {
+    const body = (a: BoardAsg, roleCd: string) => ({ empId: a.empId, prjCd: a.prjCd, roleCd, startDt: a.startDt, endDt: a.endDt, allocRate: a.allocRate, residentType: a.residentType });
+    if (asgId == null) {
+      const cur = members.find((m) => m.roleCd === 'PM');
+      if (!cur) return 'PM이 지정되어 있지 않습니다.';
+      await api.put(`/assignments/${cur.asgId}`, body(cur, p.prjType === 'SM' ? 'OPS' : 'DEV'));
+      reloadProjects();
+      return `${p.prjNm}의 PM 지정을 해제했습니다.`;
+    }
+    const a = members.find((m) => m.asgId === asgId);
+    if (!a) throw new Error('인력을 찾을 수 없습니다.');
+    await api.put(`/assignments/${a.asgId}`, body(a, 'PM'));
+    reloadProjects();
+    return `${a.employee.name}님을 ${p.prjNm}의 PM으로 지정했습니다.`;
   };
 
   const startDrag = (e: DragEvent, d: Drag) => {
@@ -165,29 +185,44 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const sorted = [...projects].sort((a, b) => Number(isEnded(a)) - Number(isEnded(b)));
 
   const kw = q.trim().toLowerCase();
-  const pool = emps
-    .filter((e) => e.utilTarget)
+  // 선택 대상 = 수행인력 (투입 대상, 관리자·사업관리자 제외)
+  const staff = emps.filter((e) => e.utilTarget && e.role === 'EMP');
+  const pool = staff
+    .filter((e) => org === 'ALL' || (org === 'PARTNER') === isPartnerType(e.employType))
     .filter((e) => !benchOnly || (e.allocTotal === 0 && e.plannedAlloc === 0))
-    .filter((e) => !kw || e.name.toLowerCase().includes(kw) || e.deptCd.toLowerCase().includes(kw))
+    .filter((e) => !kw || e.name.toLowerCase().includes(kw) || e.deptCd.toLowerCase().includes(kw) || (e.partner?.partnerNm ?? '').toLowerCase().includes(kw))
     .sort((a, b) => a.allocTotal - b.allocTotal || a.plannedAlloc - b.plannedAlloc || a.name.localeCompare(b.name));
 
   return (
     <div className="board">
       <aside className={`board-pool ${over === 'pool' ? 'drop-over' : ''}`} onDragOver={(e) => allowDrop(e, 'pool')} onDragLeave={() => setOver(null)} onDrop={dropOnPool}>
         <div className="board-pool-head">
-          <strong>인력 {pool.length}명</strong>
+          <strong>수행인력 {pool.length}명</strong>
           <label className="check small">
             <input type="checkbox" checked={benchOnly} onChange={(e) => setBenchOnly(e.target.checked)} /> 미배정만
           </label>
         </div>
-        <input type="search" placeholder="이름·소속 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="tabs board-org" role="tablist">
+          {(
+            [
+              ['ALL', '전체'],
+              ['OWN', '자사'],
+              ['PARTNER', '협력사'],
+            ] as const
+          ).map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={org === k} className={org === k ? 'active' : ''} onClick={() => setOrg(k)}>
+              {l} {staff.filter((e) => k === 'ALL' || (k === 'PARTNER') === isPartnerType(e.employType)).length}
+            </button>
+          ))}
+        </div>
+        <input type="search" placeholder="이름·소속·업체 검색" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="board-pool-list">
           {pool.map((e) => (
             <div key={e.empId} className="board-emp" draggable={canDragEmp} onDragStart={(ev) => startDrag(ev, { kind: 'emp', empId: e.empId })} title={canDragEmp ? '프로젝트 카드로 끌어다 놓으세요' : undefined}>
               <span className="board-emp-name">
                 <strong>{e.name}</strong>
                 <small>
-                  {e.deptCd} · {e.gradeCd} · {e.skillLevel}
+                  {orgLabel(e)} · {e.gradeCd} · {e.skillLevel}
                 </small>
               </span>
               <span className="board-emp-badges">
@@ -220,7 +255,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
           // 진행 중 프로젝트는 진행·예정 배정만, 종료된 프로젝트는 지난 배정까지 표시
           const members = asgs.filter((a) => a.prjCd === p.prjCd && (ended || a.status !== 'ENDED'));
           const mine = canManage(p);
-          const addable = emps.filter((e) => e.utilTarget && !members.some((m) => m.empId === e.empId));
+          const addable = staff.filter((e) => !members.some((m) => m.empId === e.empId));
           return (
             <section
               key={p.prjCd}
@@ -242,8 +277,30 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
               <div className="board-prj-title" title={p.prjCd}>
                 {p.prjNm}
               </div>
-              <div className="small muted">
-                PM {p.pmName ?? '-'} · {p.startDt ?? '-'} ~ {p.endDt ?? '-'}
+              <div className="row small" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                <span className="muted">PM</span>
+                {mine && members.length ? (
+                  <select
+                    className="board-pm-select"
+                    value={members.find((m) => m.roleCd === 'PM')?.asgId ?? ''}
+                    disabled={busy}
+                    aria-label={`${p.prjNm} PM 선택`}
+                    onChange={(e) => run(() => setPm(p, members, e.target.value ? Number(e.target.value) : null))}
+                  >
+                    <option value="">미지정</option>
+                    {members.map((m) => (
+                      <option key={m.asgId} value={m.asgId}>
+                        {m.employee.name}
+                        {m.status === 'ENDED' ? ' (종료)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span>{p.pmName ?? '미지정'}</span>
+                )}
+                <span className="muted">
+                  · {p.startDt ?? '-'} ~ {p.endDt ?? '-'}
+                </span>
               </div>
               <div className="board-members">
                 {members.map((a) => (
@@ -255,17 +312,14 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                     title={`${label(ASG_ROLE, a.roleCd)} · ${a.startDt} ~ ${a.endDt}${a.overAlloc > 0 ? ` · 과투입 +${a.overAlloc}%` : ''}`}
                   >
                     <button type="button" className="board-chip-main" disabled={!mine} onClick={() => onEdit(a)}>
-                      <strong>
-                        {a.employee.name}
-                        {a.roleCd === 'PM' && <span className="board-pm">PM</span>}
-                      </strong>
+                      <strong>{a.employee.name}</strong>
                       <span>
                         {a.allocRate}% · {label(ASG_ROLE, a.roleCd)}
                         {a.status === 'PLANNED' && ' · 예정'}
                         {a.status === 'ENDED' && ' · 종료'}
                       </span>
                       <small>
-                        ~ {a.endDt.slice(5)} · {label(EMPLOY_TYPE, a.employee.employType)}
+                        ~ {a.endDt.slice(5)} · {isPartnerType(a.employee.employType) ? a.employee.partner?.partnerNm ?? '협력사' : '자사'}
                       </small>
                     </button>
                     {mine && (
@@ -291,7 +345,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                   <option value="">+ 인력 추가 (목록에서 선택)</option>
                   {addable.map((e) => (
                     <option key={e.empId} value={e.empId}>
-                      {e.name} · {e.deptCd} · 현재 {e.allocTotal}%
+                      {e.name} · {orgLabel(e)} · 현재 {e.allocTotal}%
                     </option>
                   ))}
                 </select>
