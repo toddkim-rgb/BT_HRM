@@ -4,6 +4,11 @@ import { assertProjectManager, me, pmProjectCodes, pmScoped, staffOnly } from '.
 import { assertMenu } from '../lib/permissions.js';
 import { HttpError, notFound, prisma } from '../db.js';
 import { assignmentStatus, maxAllocation } from '../lib/alloc.js';
+import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
+import { requireMenu } from '../lib/permissions.js';
+import { nextEmpId } from './employees.js';
+import { usableEmp } from '../lib/empFilter.js';
 import { dateStr, parse } from '../lib/validate.js';
 
 // 5.2 투입 배정 (F-010) — 승인 절차 없음, 등록 즉시 확정
@@ -33,7 +38,7 @@ assignmentsRouter.get('/', async (req, res) => {
   const rows = await prisma.assignment.findMany({
     where: { ...scope, ...(prjCd ? { prjCd } : {}), ...(empId ? { empId } : {}) },
     include: {
-      employee: { select: { name: true, gradeCd: true, skillLevel: true, employType: true, deptCd: true, partner: { select: { partnerNm: true } } } },
+      employee: { select: { name: true, gradeCd: true, skillLevel: true, employType: true, deptCd: true } },
       project: { select: { prjNm: true, prjType: true, pmEmpId: true } },
     },
     orderBy: [{ startDt: 'desc' }],
@@ -69,6 +74,55 @@ async function syncProjectPm(prjCd: string, asgId: number, empId: string, roleCd
     await prisma.project.updateMany({ where: { prjCd, pmEmpId: prev.empId }, data: { pmEmpId: null } });
   }
 }
+
+// ---- 협력사를 바로 수행인력으로 배정 ----
+
+/** 협력사로 만들 수행인력 이름: 개인 협력사는 '(개인)'을 뺀 이름, 업체는 '업체명 인력' */
+const staffNameOf = (p: { partnerNm: string }) => (p.partnerNm.startsWith('(개인)') ? p.partnerNm.replace(/^\(개인\)\s*/, '').trim() || p.partnerNm : `${p.partnerNm} 인력`);
+
+/** 배정 화면용 협력사 목록 (거래중) + 등록된 소속 인력 수 */
+assignmentsRouter.get('/partners', requireMenu('assignments'), async (_req, res) => {
+  const rows = await prisma.partner.findMany({
+    where: { statusCd: 'ACTIVE' },
+    select: { partnerId: true, partnerNm: true, contactNm: true, employees: { where: usableEmp, select: { empId: true } } },
+    orderBy: { partnerNm: 'asc' },
+  });
+  res.json(rows.map(({ employees, ...p }) => ({ ...p, staffName: staffNameOf(p), staffCount: employees.length })));
+});
+
+/**
+ * 협력사 소속 수행인력 확보: 이미 등록된 소속 인력이 있으면 그 사람, 없으면 새로 만든다.
+ * 새 인력은 로그인할 수 없는 상태(임의 비밀번호)로 만들고, 이메일·연락처는 인력 화면에서 보완한다.
+ */
+assignmentsRouter.post('/partners/:partnerId/staff', requireMenu('assignments', 'EDIT'), async (req, res) => {
+  const partnerId = String(req.params.partnerId);
+  const p = await prisma.partner.findUnique({ where: { partnerId }, include: { employees: { where: usableEmp, select: { empId: true, name: true } } } });
+  if (!p) throw notFound('협력사');
+  if (p.employees.length) {
+    res.json({ empId: p.employees[0].empId, name: p.employees[0].name, created: false });
+    return;
+  }
+  const individual = p.partnerNm.startsWith('(개인)');
+  const name = staffNameOf(p);
+  const created = await prisma.employee.create({
+    data: {
+      empId: await nextEmpId(),
+      name,
+      deptCd: p.partnerNm,
+      gradeCd: '-',
+      skillLevel: '중급',
+      employType: individual ? 'FREE' : 'PARTNER',
+      partnerId,
+      email: `${partnerId.toLowerCase()}.${Date.now().toString(36)}@partner.bt-hrm.local`, // 임시 (인력 화면에서 실제 이메일로 수정)
+      phone: p.contactPhone,
+      role: 'EMP',
+      utilTarget: true,
+      mustChangePw: true,
+      passwordHash: await bcrypt.hash(randomBytes(24).toString('hex'), 10), // 로그인 불가 상태
+    },
+  });
+  res.status(201).json({ empId: created.empId, name, created: true });
+});
 
 async function validateTarget(empId: string, prjCd: string) {
   const emp = await prisma.employee.findUnique({ where: { empId } });

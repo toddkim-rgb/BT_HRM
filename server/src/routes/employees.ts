@@ -38,7 +38,7 @@ function careerYears(start: string | null): number | null {
 }
 
 /** 내부 관리 번호 (사번 아님, 화면에 표시하지 않음) — 다른 테이블과 연결하는 키 */
-async function nextEmpId(): Promise<string> {
+export async function nextEmpId(): Promise<string> {
   const rows = await prisma.employee.findMany({ where: { empId: { startsWith: 'U' } }, select: { empId: true } });
   const max = rows.reduce((m, r) => Math.max(m, Number(r.empId.slice(1)) || 0), 0);
   return `U${String(max + 1).padStart(5, '0')}`;
