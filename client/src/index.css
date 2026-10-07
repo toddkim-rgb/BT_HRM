@@ -480,3 +480,19 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .board-status-actions { display: flex; justify-content: flex-end; }
 .tl-table th.tl-month { cursor: pointer; background: var(--surface-2); border-left: 2px solid #fff; white-space: nowrap; }
 .tl-table th.tl-week { font-weight: 600; font-size: 12px; min-width: 72px; }
+
+/* 주별 투입현황: 히트맵 + 투입 인원 막대 */
+.tl-heat td.tl-hcell { min-width: 52px; height: 34px; text-align: center; font-size: 12px; font-weight: 600; border: 2px solid var(--surface); border-radius: 6px; font-variant-numeric: tabular-nums; cursor: default; }
+.tl-heat td.tl-hcell.zero { background: #f0efec; color: var(--muted); font-weight: 400; }
+.tl-heat td.tl-hcell.over { background: #d03b3b; color: #fff; }
+.tl-heat .tl-chart-row td { vertical-align: bottom; padding: 6px 4px 2px; border-bottom: 1px solid var(--border); }
+.tl-heat .tl-chart-row th { vertical-align: bottom; text-align: left; font-weight: 600; }
+.tl-bar-wrap { position: relative; height: 72px; display: flex; align-items: flex-end; justify-content: center; }
+.tl-bar { width: 60%; max-width: 28px; min-height: 0; background: #2a78d6; border-radius: 4px 4px 0 0; }
+.tl-ref { position: absolute; left: 0; right: 0; border-top: 2px dashed #9b9a96; }
+.tl-bar-val { font-size: 11px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+.tl-legend { align-items: center; }
+.tl-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+.tl-legend i.tl-over-sw { background: #d03b3b; color: #fff; font-style: normal; font-size: 10px; font-weight: 700; text-align: center; line-height: 14px; }
+.tl-legend i.tl-zero-sw { background: #f0efec; border: 1px solid rgba(0, 0, 0, 0.08); }
+.tl-tip { position: fixed; transform: translate(-50%, calc(-100% - 8px)); background: #1a1a19; color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; line-height: 1.5; pointer-events: none; z-index: 50; white-space: nowrap; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18); }
