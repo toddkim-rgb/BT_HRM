@@ -57,15 +57,25 @@ interface Person {
   projectCount: number;
   assignments: { asgId: number; prjCd: string; prjNm: string; roleCd: string; allocRate: number; startDt: string; endDt: string; planMd: number; actualMd: number }[];
   timeline: { ym: string; total: number; items: { prjCd: string; prjNm?: string; pct: number }[] }[];
+  weekly: { week: string; total: number; items: { prjCd: string; prjNm?: string; pct: number }[] }[];
 }
 export interface StaffingResp {
   ym: string;
   months: string[];
+  weeks: WeekCol[];
   projects: Prj[];
   people: Person[];
 }
 
 type Tab = 'project' | 'person' | 'timeline';
+/** 주별 칸: ISO 주(월~일), ym = 목요일이 속한 달, n = 그 달의 몇 번째 주 */
+interface WeekCol {
+  week: string;
+  start: string;
+  end: string;
+  ym: string;
+  n: number;
+}
 
 /** 프로젝트별 투입인력 현황판: 프로젝트 기준 / 인력 기준 / 월 타임라인 */
 export default function Staffing() {
@@ -126,7 +136,7 @@ export default function Staffing() {
                 [
                   ['project', '프로젝트별'],
                   ['person', '인력별'],
-                  ['timeline', '월 타임라인'],
+                  ['timeline', '주별 투입현황'],
                 ] as [Tab, string][]
               ).map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>
@@ -139,7 +149,7 @@ export default function Staffing() {
             </div>
             {tab === 'project' && <ByProject list={projects} ym={ym} />}
             {tab === 'person' && <ByPerson list={people} />}
-            {tab === 'timeline' && <Timeline list={people} months={data.months} />}
+            {tab === 'timeline' && <Timeline list={people} months={data.months} weeks={data.weeks} />}
           </Card>
         </>
       ) : null}
@@ -287,38 +297,83 @@ const shortName = (name: string) => (name.length > 9 ? `${name.slice(0, 8)}…` 
 
 const cellTone = (total: number) => (total === 0 ? 'tl-0' : total > 100 ? 'tl-over' : total >= 80 ? 'tl-full' : 'tl-part');
 
-function Timeline({ list, months }: { list: Person[]; months: string[] }) {
+function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; weeks: WeekCol[] }) {
+  // 월별로 접기: 접힌 달은 월 투입률 한 칸, 펼친 달은 주별 칸
+  const [folded, setFolded] = useState<Set<string>>(new Set());
+  const toggle = (ym: string) =>
+    setFolded((s) => {
+      const n = new Set(s);
+      if (n.has(ym)) n.delete(ym);
+      else n.add(ym);
+      return n;
+    });
   if (!list.length) return <Empty />;
+  const weeksOf = (ym: string) => weeks.filter((w) => w.ym === ym);
+  const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
+  const cell = (key: string, c: { total: number; items: { prjCd: string; prjNm?: string; pct: number }[] } | undefined, title: string) => (
+    <td key={key} className={`tl-cell ${cellTone(c?.total ?? 0)}`} title={`${title}\n${c?.items.map((i) => `${i.prjNm ?? i.prjCd} ${i.pct}%`).join('\n') || '대기'}`}>
+      <strong>{c?.total ? `${c.total}%` : '대기'}</strong>
+      <div className="tl-items">{c?.items.map((i) => `${shortName(i.prjNm ?? i.prjCd)} ${i.pct}`).join(' · ')}</div>
+    </td>
+  );
   return (
     <>
-      <div className="legend" style={{ marginBottom: 8 }}>
-        <span>
-          <i className="tl-full" />
-          80~100%
-        </span>
-        <span>
-          <i className="tl-part" />
-          80% 미만
-        </span>
-        <span>
-          <i className="tl-over" />
-          과투입
-        </span>
-        <span>
-          <i className="tl-0" />
-          대기
-        </span>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+        <div className="legend">
+          <span>
+            <i className="tl-full" />
+            80~100%
+          </span>
+          <span>
+            <i className="tl-part" />
+            80% 미만
+          </span>
+          <span>
+            <i className="tl-over" />
+            과투입
+          </span>
+          <span>
+            <i className="tl-0" />
+            대기
+          </span>
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn sm" onClick={() => setFolded(new Set(months))}>
+            모두 월별
+          </button>
+          <button className="btn sm" onClick={() => setFolded(new Set())}>
+            모두 주별
+          </button>
+        </div>
       </div>
       <div className="table-wrap">
         <table className="tbl tl-table">
           <thead>
             <tr>
-              <th>인력</th>
-              {months.map((m) => (
-                <th key={m}>
-                  {m.slice(2, 4)}.{Number(m.slice(5))}월
-                </th>
-              ))}
+              <th rowSpan={2}>인력</th>
+              {months.map((m) => {
+                const f = folded.has(m);
+                return (
+                  <th key={m} colSpan={f ? 1 : weeksOf(m).length || 1} className="tl-month" onClick={() => toggle(m)} title={f ? '주별로 펼치기' : '월별로 접기'}>
+                    {m.slice(2, 4)}.{Number(m.slice(5))}월 <span className="muted">{f ? '▸' : '▾'}</span>
+                  </th>
+                );
+              })}
+            </tr>
+            <tr>
+              {months.flatMap((m) =>
+                folded.has(m)
+                  ? [
+                      <th key={m} className="tl-week">
+                        월 합계
+                      </th>,
+                    ]
+                  : weeksOf(m).map((w) => (
+                      <th key={w.week} className="tl-week" title={`${w.start} ~ ${w.end}`}>
+                        {w.n}주<div className="small muted">{md(w.start)}~</div>
+                      </th>
+                    )),
+              )}
             </tr>
           </thead>
           <tbody>
@@ -328,19 +383,18 @@ function Timeline({ list, months }: { list: Person[]; months: string[] }) {
                   <strong>{p.name}</strong>
                   <div className="small muted">{p.deptCd}</div>
                 </td>
-                {p.timeline.map((c) => (
-                  <td key={c.ym} className={`tl-cell ${cellTone(c.total)}`} title={c.items.map((i) => `${i.prjNm ?? i.prjCd} ${i.pct}%`).join('\n') || '대기'}>
-                    <strong>{c.total ? `${c.total}%` : '대기'}</strong>
-                    <div className="tl-items">{c.items.map((i) => `${shortName(i.prjNm ?? i.prjCd)} ${i.pct}`).join(' · ')}</div>
-                  </td>
-                ))}
+                {months.flatMap((m) =>
+                  folded.has(m)
+                    ? [cell(m, p.timeline.find((c) => c.ym === m), `${m} 월 합계`)]
+                    : weeksOf(m).map((w) => cell(w.week, p.weekly.find((c) => c.week === w.week), `${w.start} ~ ${w.end}`)),
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className="muted small" style={{ marginBottom: 0 }}>
-        월 투입률 = Σ(배정 영업일 × 투입률) ÷ 그 달 영업일. 월 중간에 시작·종료하는 배정은 그만큼 낮게 표시됩니다.
+        주 투입률 = Σ(배정 영업일 × 투입률) ÷ 그 주 영업일 · 월 합계 = 같은 방식의 월 기준. 주(월~일)는 목요일이 속한 달로 묶습니다. 월 머리글을 누르면 그 달을 월별로 접거나 주별로 펼칩니다.
       </p>
     </>
   );

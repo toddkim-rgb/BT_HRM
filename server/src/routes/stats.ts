@@ -3,7 +3,7 @@ import { me, pmProjectCodes, pmScoped, staffOnly } from '../auth.js';
 import { requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { plannedMd } from '../lib/alloc.js';
-import { addDays, addMonths, businessDays, isValidWeek, monthRange, shiftWeek, today } from '../lib/dates.js';
+import { addDays, addMonths, businessDays, isValidWeek, isoWeek, monthRange, shiftWeek, today, weekDays } from '../lib/dates.js';
 import { getSettings, holidaySet, mdPerMm } from '../lib/settings.js';
 import { usableEmp } from '../lib/empFilter.js';
 import { workforce } from '../lib/workforce.js';
@@ -180,6 +180,14 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
   const t = today();
   const months = Array.from({ length: q.months }, (_, i) => addMonths(q.ym, i));
   const last = monthRange(months[months.length - 1]);
+  // 주별 칸: 조회 기간의 ISO 주(월~일). 주는 목요일이 속한 달로 묶는다 (예: 9/28~10/4 → 10월 1주)
+  const weeks: { week: string; start: string; end: string; ym: string; n: number }[] = [];
+  for (let w = isoWeek(start); ; w = shiftWeek(w, 1)) {
+    const d = weekDays(w);
+    const ym = d[3].slice(0, 7);
+    if (ym > months[months.length - 1]) break;
+    if (months.includes(ym)) weeks.push({ week: w, start: d[0], end: d[6], ym, n: weeks.filter((x) => x.ym === ym).length + 1 });
+  }
 
   // PM은 담당 프로젝트만
   const scope = pmScoped(u) ? await pmProjectCodes(u.empId) : null;
@@ -190,6 +198,13 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
       project: { select: { prjNm: true, prjType: true, statusCd: true, customerNm: true, startDt: true, endDt: true, contractMm: true, pm: { select: { name: true } } } },
     },
     orderBy: [{ allocRate: 'desc' }, { startDt: 'asc' }],
+  });
+  // 주별 칸은 조회 월의 앞뒤 며칠(예: 9/28~9/30)까지 걸치므로 그 범위의 배정을 따로 조회
+  const wStart = weeks[0]?.start ?? start;
+  const wEnd = weeks[weeks.length - 1]?.end ?? last.end;
+  const asgW = await prisma.assignment.findMany({
+    where: { canceled: false, startDt: { lte: wEnd }, endDt: { gte: wStart }, ...(scope ? { prjCd: { in: scope } } : {}) },
+    select: { empId: true, prjCd: true, startDt: true, endDt: true, allocRate: true, project: { select: { prjNm: true } } },
   });
   const ts = await prisma.timesheet.groupBy({
     by: ['empId', 'prjCd'],
@@ -301,6 +316,15 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
         overAlloc: Math.max(0, currentAlloc - 100),
         projectCount: new Set(mine.map((a) => a.prjCd)).size,
         assignments: mine.map((a) => ({ asgId: a.asgId, prjCd: a.prjCd, prjNm: a.project.prjNm, roleCd: a.roleCd, allocRate: a.allocRate, startDt: a.startDt, endDt: a.endDt, planMd: round1(plannedMd(a, start, end, holidays)), actualMd: actualOf(empId, a.prjCd) })),
+        // 주별 투입률(%) = Σ(배정 영업일 × 투입률) ÷ 그 주 영업일
+        weekly: weeks.map((w) => {
+          const bd = businessDays(w.start, w.end, holidays).length;
+          const items = asgW
+            .filter((a) => a.empId === empId && a.startDt <= w.end && a.endDt >= w.start)
+            .map((a) => ({ prjCd: a.prjCd, prjNm: a.project.prjNm, pct: bd ? Math.round((plannedMd(a, w.start, w.end, holidays) / bd) * 100) : 0 }))
+            .filter((x) => x.pct > 0);
+          return { week: w.week, total: items.reduce((s2, x) => s2 + x.pct, 0), items };
+        }),
         // 월별 투입률(%) = Σ(배정 영업일 × 투입률) ÷ 그 달 영업일
         timeline: months.map((ym) => {
           const m = monthRange(ym);
@@ -315,5 +339,5 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
     })
     .sort((a, b) => a.deptCd.localeCompare(b.deptCd) || a.name.localeCompare(b.name));
 
-  res.json({ ym: q.ym, months, projects, people });
+  res.json({ ym: q.ym, months, weeks, projects, people });
 });

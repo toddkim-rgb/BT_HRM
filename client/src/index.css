@@ -478,3 +478,5 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .board-final-md { font-size: 12px; background: var(--surface-2); border-radius: 8px; padding: 6px 8px; }
 .board-final-md strong { margin-right: 6px; }
 .board-status-actions { display: flex; justify-content: flex-end; }
+.tl-table th.tl-month { cursor: pointer; background: var(--surface-2); border-left: 2px solid #fff; white-space: nowrap; }
+.tl-table th.tl-week { font-weight: 600; font-size: 12px; min-width: 72px; }
