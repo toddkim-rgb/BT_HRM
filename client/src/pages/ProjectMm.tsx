@@ -62,6 +62,7 @@ function ProjectList() {
             <table className="tbl responsive">
               <thead>
                 <tr>
+                  <th>고객사</th>
                   <th>프로젝트</th>
                   <th>PM</th>
                   <th className="num">투입인원</th>
@@ -75,6 +76,7 @@ function ProjectList() {
               <tbody>
                 {rows.map((p) => (
                   <tr key={p.prjCd} className="clickable" onClick={() => nav(`/project-mm/${p.prjCd}`)}>
+                    <td data-label="고객사">{p.customerNm ?? '-'}</td>
                     <td data-label="프로젝트">
                       <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge> <strong title={p.prjCd}>{p.prjNm}</strong>
                     </td>
