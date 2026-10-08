@@ -49,7 +49,7 @@ projectsRouter.get('/', async (req, res) => {
     where: {
       ...(type ? { prjType: type } : includeNp === 'Y' ? {} : { prjType: { not: 'NP' } }),
       ...(status ? { statusCd: { in: status.split(',') } } : {}),
-      ...(mine === 'Y' ? { pmEmpId: u.empId } : {}),
+      ...(mine === 'Y' ? { prjCd: { in: u.pmPrjCds ?? [] } } : {}),
     },
     include: { pm: { select: { name: true } }, _count: { select: { assignments: { where: { canceled: false, startDt: { lte: today() }, endDt: { gte: today() } } } } } },
     orderBy: [{ prjType: 'asc' }, { prjCd: 'desc' }],

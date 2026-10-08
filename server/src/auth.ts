@@ -12,7 +12,14 @@ export interface AuthUser {
   role: Role;
   mustChangePw?: boolean;
   pm?: boolean; // 투입 배정에서 PM으로 지정된 프로젝트가 있음
+  pmPrjCds?: string[]; // PM으로 지정된 프로젝트 코드 (테스트 계정의 'PM 역할' 시험 중이면 고른 프로젝트)
+  tester?: boolean; // 테스트 계정 (@bt-hrm.test) — 역할 전환 가능
+  testPm?: string; // (토큰) 테스트 계정이 PM 역할로 시험 중인 프로젝트
 }
+
+/** 테스트 계정: 이 도메인의 계정만 '테스트 역할' 전환 가능 (개발 완료 후 계정 삭제) */
+export const TEST_DOMAIN = '@bt-hrm.test';
+export const isTesterEmail = (email: string) => email.toLowerCase().endsWith(TEST_DOMAIN);
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -41,10 +48,12 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     throw new HttpError(401, '세션이 만료되었습니다. 다시 로그인해 주세요.');
   }
   // 삭제 처리·퇴사된 인력은 발급된 토큰도 사용 불가
-  const emp = await prisma.employee.findUnique({ where: { empId: payload.empId }, select: { deletedAt: true, statusCd: true, role: true } });
+  const emp = await prisma.employee.findUnique({ where: { empId: payload.empId }, select: { deletedAt: true, statusCd: true, role: true, email: true } });
   if (!emp || emp.deletedAt || emp.statusCd === 'RETIRED') throw new HttpError(401, '사용할 수 없는 계정입니다. 다시 로그인해 주세요.');
-  const pm = (await prisma.project.count({ where: { pmEmpId: payload.empId } })) > 0;
-  req.user = { empId: payload.empId, name: payload.name, role: emp.role as Role, mustChangePw: !!payload.mustChangePw, pm };
+  const tester = isTesterEmail(emp.email);
+  // 프로젝트 PM 지정 (테스트 계정이 PM 역할로 시험 중이면 고른 프로젝트 하나만)
+  const pmPrjCds = tester && payload.testPm ? [payload.testPm] : (await prisma.project.findMany({ where: { pmEmpId: payload.empId }, select: { prjCd: true } })).map((p) => p.prjCd);
+  req.user = { empId: payload.empId, name: payload.name, role: emp.role as Role, mustChangePw: !!payload.mustChangePw, pm: pmPrjCds.length > 0, pmPrjCds, tester, testPm: tester ? payload.testPm : undefined };
   next();
 }
 
@@ -74,11 +83,10 @@ export const staffOnly = (u: AuthUser) => u.role === 'EMP' && !u.pm;
 /** 전사 조회 권한 (사업관리자·시스템관리자) */
 export const isManager = (u: AuthUser) => u.role === 'EXEC' || u.role === 'ADMIN';
 
-/** PM이 담당하는 프로젝트 코드 목록 */
-export async function pmProjectCodes(empId: string): Promise<string[]> {
-  const rows = await prisma.project.findMany({ where: { pmEmpId: empId }, select: { prjCd: true } });
-  return rows.map((r) => r.prjCd);
-}
+/** 로그인 사용자가 PM으로 지정된 프로젝트 코드 */
+export const pmProjectCodes = (u: AuthUser): string[] => u.pmPrjCds ?? [];
+/** 로그인 사용자가 이 프로젝트의 PM인가 */
+export const isPmOf = (u: AuthUser, prjCd: string) => (u.pmPrjCds ?? []).includes(prjCd);
 
 /**
  * 프로젝트 단위 편집 권한: 해당 메뉴 '편집' 권한(메뉴 권한 설정) + 프로젝트 PM(수행인력)은 담당 프로젝트만
@@ -88,5 +96,5 @@ export async function assertProjectManager(u: AuthUser, prjCd: string, menu: 'as
   await assertMenu(u, menu, 'EDIT');
   const p = await prisma.project.findUnique({ where: { prjCd }, select: { pmEmpId: true } });
   if (!p) throw new HttpError(404, '프로젝트를 찾을 수 없습니다.');
-  if (pmScoped(u) && p.pmEmpId !== u.empId) throw forbidden();
+  if (pmScoped(u) && !isPmOf(u, prjCd)) throw forbidden();
 }

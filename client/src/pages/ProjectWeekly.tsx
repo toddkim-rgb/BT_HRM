@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Badge, Card, Empty, ErrorBox, Field, Kpi, Loading, Modal, PageHeader, ProgressBar, Select, useToast } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { pmScoped, useAuth } from '../lib/auth';
-import { ISSUE_TYPE, ITEM_STATUS, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
+import { isPmOf, pmScoped, useAuth } from '../lib/auth';
+import { ASG_ROLE, ISSUE_TYPE, ITEM_STATUS, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
 import { dateTime, label, num, pct } from '../lib/format';
 import { isoWeek, shiftWeek, today, weekLabel } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
@@ -86,7 +86,7 @@ export default function ProjectWeekly() {
 
   const go = (p: string, w: string) => nav(`/project-weekly/${p}/${w}`);
   // 편집: 프로젝트 주간보고 '편집' 권한 + PM 역할은 담당 프로젝트만
-  const canManage = !!data && can('projectWeekly', 'EDIT') && (!pmScoped(user) || data.project.pmEmpId === user?.empId);
+  const canManage = !!data && can('projectWeekly', 'EDIT') && (!pmScoped(user) || isPmOf(user, data.project.prjCd));
   const editable = canManage && !data?.confirmedYn;
 
   const saveComment = async (confirm?: boolean) => {
@@ -188,9 +188,9 @@ export default function ProjectWeekly() {
                   <div className="item-card" key={m.empId}>
                     <div className="item-head">
                       <div className="row">
-                        <strong>{m.name}</strong>
+                        <span className="muted small">{m.gradeCd}</span> <strong>{m.name}</strong>
                         <span className="muted small">
-                          {m.roleCd} · {m.allocRate}%
+                          {label(ASG_ROLE, m.roleCd)} · {m.allocRate}%
                         </span>
                         <Badge code={m.statusCd}>{label(WW_STATUS, m.statusCd)}</Badge>
                       </div>

@@ -6,7 +6,7 @@ import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num } from '../lib/format';
 import { addMonths, today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
-import { useAuth } from '../lib/auth';
+import { useAuth, useShowHr } from '../lib/auth';
 
 export interface Member {
   asgId: number;
@@ -235,6 +235,7 @@ function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
 }
 
 function ByPerson({ list }: { list: Person[] }) {
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   if (!list.length) return <Empty />;
   return (
     <div className="table-wrap">
@@ -253,10 +254,8 @@ function ByPerson({ list }: { list: Person[] }) {
           {list.map((p) => (
             <tr key={p.empId}>
               <td data-label="인력">
-                <strong>{p.name}</strong>{' '}
-                <span className="small muted">
-                  {p.gradeCd} · {label(EMPLOY_TYPE, p.employType)}
-                </span>
+                <span className="small muted">{p.gradeCd}</span> <strong>{p.name}</strong>
+                {showHr && <div className="small muted">{label(EMPLOY_TYPE, p.employType)}</div>}
               </td>
               <td data-label="소속">{p.deptCd}</td>
               <td data-label="현재 투입률" className="num">
@@ -417,8 +416,8 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
           <tbody>
             {list.map((p) => (
               <tr key={p.empId}>
-                <td className="tl-name" title={p.deptCd}>
-                  {p.name} <span className="muted">{p.deptCd}</span>
+                <td className="tl-name" title={`${p.gradeCd} ${p.name} · ${p.deptCd}`}>
+                  <span className="muted">{p.gradeCd}</span> {p.name} <span className="muted">{p.deptCd}</span>
                 </td>
                 {cols.map((c) => {
                   const v = c.of(p);

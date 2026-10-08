@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { useAuth } from '../lib/auth';
+import { useAuth, useShowHr } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, EMP_STATUS, EMPLOY_TYPE, ROLE_LABEL, SKILL_LEVELS } from '../lib/codes';
 import { label } from '../lib/format';
 import { useFetch } from '../lib/hooks';
@@ -47,6 +47,7 @@ const blank: Partial<Employee> = {
 
 export default function Employees() {
   const { can } = useAuth();
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const isAdmin = can('employees', 'EDIT'); // 인력 '편집' 권한 (관리자 계정·역할 변경은 시스템관리자만)
   const [q, setQ] = useState('');
   const [employType, setEmployType] = useState('');
@@ -118,11 +119,12 @@ export default function Employees() {
             <table className="tbl responsive">
               <thead>
                 <tr>
+                  <th>직급</th>
                   <th>성명</th>
                   <th>소속</th>
-                  <th>직급</th>
-                  <th>기술등급</th>
-                  <th>고용형태</th>
+                  <th>역할</th>
+                  {showHr && <th>기술등급</th>}
+                  {showHr && <th>고용형태</th>}
                   <th className="num">경력</th>
                   <th className="num">투입률</th>
                   <th>상태</th>
@@ -132,16 +134,17 @@ export default function Employees() {
               <tbody>
                 {data.map((e) => (
                   <tr key={e.empId} className="clickable" onClick={() => setDetail(e.empId)}>
+                    <td data-label="직급">{e.gradeCd}</td>
                     <td data-label="성명">
                       <strong>{e.name}</strong>
                     </td>
-                    <td data-label="소속">{e.deptCd}</td>
-                    <td data-label="직급">{e.gradeCd}</td>
-                    <td data-label="기술등급">{e.skillLevel}</td>
-                    <td data-label="고용형태">
-                      {label(EMPLOY_TYPE, e.employType)}
-                      {e.partner && <div className="small muted">{e.partner.partnerNm}</div>}
+                    <td data-label="소속">
+                      {e.deptCd}
+                      {e.partner && <div className="small muted">협력사 {e.partner.partnerNm}</div>}
                     </td>
+                    <td data-label="역할">{e.jobCd ?? '-'}</td>
+                    {showHr && <td data-label="기술등급">{e.skillLevel}</td>}
+                    {showHr && <td data-label="고용형태">{label(EMPLOY_TYPE, e.employType)}</td>}
                     <td data-label="경력" className="num">
                       {e.careerYears != null ? `${e.careerYears}년` : '-'}
                     </td>
@@ -249,6 +252,7 @@ export default function Employees() {
 }
 
 function EmployeeDetail({ empId, onClose, onEdit, onDelete }: { empId: string; onClose: () => void; onEdit?: (e: Employee) => void; onDelete?: (e: Employee) => void }) {
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const { data, loading, error } = useFetch<Employee & { assignments: { asgId: number; prjCd: string; roleCd: string; startDt: string; endDt: string; allocRate: number; status: string; project: { prjNm: string } }[] }>(
     `/employees/${empId}`,
   );
@@ -281,22 +285,28 @@ function EmployeeDetail({ empId, onClose, onEdit, onDelete }: { empId: string; o
       ) : (
         <div className="stack">
           <dl className="desc-list">
+            <dt>직급</dt>
+            <dd>{data.gradeCd}</dd>
             <dt>성명</dt>
             <dd>
               <strong>{data.name}</strong>
             </dd>
-            <dt>소속 / 직급</dt>
+            <dt>소속</dt>
             <dd>
-              {data.deptCd} / {data.gradeCd} {data.jobCd && `(${data.jobCd})`}
+              {data.deptCd} {data.partner && `· 협력사 ${data.partner.partnerNm}`}
             </dd>
-            <dt>고용형태</dt>
-            <dd>
-              {label(EMPLOY_TYPE, data.employType)} {data.partner && `· ${data.partner.partnerNm}`}
-            </dd>
-            <dt>기술</dt>
-            <dd>
-              {data.skillLevel} {data.skillStack && `· ${data.skillStack}`}
-            </dd>
+            <dt>역할</dt>
+            <dd>{data.jobCd ?? '-'}</dd>
+            {showHr && (
+              <>
+                <dt>고용형태</dt>
+                <dd>{label(EMPLOY_TYPE, data.employType)}</dd>
+                <dt>기술등급</dt>
+                <dd>{data.skillLevel}</dd>
+              </>
+            )}
+            <dt>기술스택</dt>
+            <dd>{data.skillStack ?? '-'}</dd>
             <dt>경력</dt>
             <dd>{data.careerYears != null ? `${data.careerYears}년 (IT 경력 시작 ${data.careerStartDt})` : '-'}</dd>
             <dt>이메일 (로그인)</dt>

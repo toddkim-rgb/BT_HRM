@@ -35,7 +35,7 @@ assignmentsRouter.get('/', async (req, res) => {
   if (staffOnly(u)) scope = { empId: u.empId };
   else if (pmScoped(u)) {
     // 프로젝트 PM: 담당 프로젝트 배정 + 본인 배정, 특정 인력 조회 시 그 인력의 전체 배정(과투입 판단용)
-    scope = empId ? {} : { OR: [{ prjCd: { in: await pmProjectCodes(u.empId) } }, { empId: u.empId }] };
+    scope = empId ? {} : { OR: [{ prjCd: { in: pmProjectCodes(u) } }, { empId: u.empId }] };
   }
   const rows = await prisma.assignment.findMany({
     where: { ...scope, ...(prjCd ? { prjCd } : {}), ...(empId ? { empId } : {}) },
@@ -109,7 +109,7 @@ assignmentsRouter.patch('/projects/:prjCd/status', async (req, res) => {
  */
 assignmentsRouter.get('/project-md', requireMenu('assignments'), async (req, res) => {
   const u = me(req);
-  const scope = pmScoped(u) ? await pmProjectCodes(u.empId) : null;
+  const scope = pmScoped(u) ? pmProjectCodes(u) : null;
   const holidays = await holidaySet();
   const mdmm = await mdPerMm();
   const asg = await prisma.assignment.findMany({ where: { canceled: false, ...(scope ? { prjCd: { in: scope } } : {}) }, select: { prjCd: true, empId: true, startDt: true, endDt: true, allocRate: true } });

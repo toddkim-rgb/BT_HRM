@@ -117,7 +117,7 @@ export default function Submissions() {
                   {reports.map((r) => (
                     <tr key={r.wwId}>
                       <td data-label="인력">
-                        <strong>{r.name}</strong> <span className="muted small">{r.gradeCd}</span>
+                        <span className="muted small">{r.gradeCd}</span> <strong>{r.name}</strong>
                       </td>
                       <td data-label="투입MD" className="num">
                         {num(r.totalMd)}

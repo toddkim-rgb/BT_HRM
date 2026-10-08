@@ -34,13 +34,35 @@ authRouter.get('/me', requireAuth, async (req, res) => {
   });
   if (!emp) throw new HttpError(401, '사용자를 찾을 수 없습니다.');
   const { passwordHash: _, ...rest } = emp;
-  res.json({ ...rest, isPm: !!u.pm });
+  // 수행인력에게는 기술등급·고용형태를 내려보내지 않음
+  const out: Record<string, unknown> = { ...rest, isPm: !!u.pm, pmPrjCds: u.pmPrjCds ?? [], tester: !!u.tester, testPm: u.testPm ?? null };
+  if (u.role === 'EMP') {
+    delete out.skillLevel;
+    delete out.employType;
+  }
+  res.json(out);
 });
 
 // 내 메뉴 권한 (메뉴 표시·화면 접근용)
 authRouter.get('/me/permissions', requireAuth, async (req, res) => {
   const u = me(req);
   res.json({ ...(await effectivePermissions(u)), permissions: u.role === 'ADMIN' ? 'EDIT' : 'NONE' });
+});
+
+/**
+ * 테스트 계정 역할 전환 (@bt-hrm.test 계정만): 시스템관리자 / 사업관리자 / 수행인력 / 프로젝트 PM(프로젝트 선택)
+ * - 역할은 계정의 role을 바꾸고, 프로젝트 PM은 수행인력 + 토큰에 시험할 프로젝트를 담는다 (실제 프로젝트 PM은 바뀌지 않음)
+ */
+authRouter.post('/test-role', requireAuth, async (req, res) => {
+  const u = me(req);
+  if (!u.tester) throw new HttpError(403, '테스트 계정만 역할을 전환할 수 있습니다.');
+  const body = parse(z.object({ role: z.enum(['EMP', 'PM', 'EXEC', 'ADMIN']), prjCd: z.string().optional() }), req.body);
+  if (body.role === 'PM') {
+    if (!body.prjCd || !(await prisma.project.findUnique({ where: { prjCd: body.prjCd } }))) throw new HttpError(400, 'PM으로 시험할 프로젝트를 선택하세요.');
+  }
+  const emp = await prisma.employee.update({ where: { empId: u.empId }, data: { role: body.role === 'PM' ? 'EMP' : body.role } });
+  const user = { ...userOf(emp), ...(body.role === 'PM' ? { testPm: body.prjCd } : {}) };
+  res.json({ token: signToken(user), user });
 });
 
 // 비밀번호 변경 (초기·임시 비밀번호 변경 강제 포함) → 변경 강제 해제된 새 토큰 발급

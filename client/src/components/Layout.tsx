@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '../lib/auth';
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth, type User } from '../lib/auth';
+import { api } from '../lib/api';
 import { useFetch } from '../lib/hooks';
 import { ROLE_LABEL } from '../lib/codes';
 
@@ -50,7 +51,8 @@ export const NAV: { group: string; items: NavItem[] }[] = [
 ];
 
 export function Layout() {
-  const { user, logout, can } = useAuth();
+  const { user, logout, can, applySession, reloadPerms } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const loc = useLocation();
   useEffect(() => setOpen(false), [loc.pathname]);
@@ -97,6 +99,7 @@ export function Layout() {
             </div>
           ))}
         </nav>
+        {user.tester && <TestRoleSwitch user={user} onSwitched={(token, u) => { applySession(token, { ...user, ...u, testPm: u.testPm ?? null }); reloadPerms(); navigate('/'); }} />}
         <div className="side-user">
           <NavLink to="/me" className="side-user-name">
             <strong>{user.name}</strong>
@@ -139,4 +142,43 @@ export function Home({ children }: { children: ReactNode }) {
   if (can('dashboard')) return <>{children}</>;
   const first = NAV.flatMap((g) => g.items).find((i) => can(i.menu));
   return first ? <Navigate to={first.to} replace /> : <Guard menu="dashboard">{children}</Guard>;
+}
+
+/** 테스트 계정 전용: 역할을 바꿔 가며 화면·권한 시험 (프로젝트 PM은 시험할 프로젝트 선택) */
+function TestRoleSwitch({ user, onSwitched }: { user: User; onSwitched: (token: string, u: User) => void }) {
+  const { data: projects } = useFetch<{ prjCd: string; prjNm: string }[]>('/projects?status=ACTIVE,PROPOSAL');
+  const cur = user.testPm ? 'PM' : user.role;
+  const [busy, setBusy] = useState(false);
+  const switchTo = async (role: string, prjCd?: string) => {
+    if (role === 'PM' && !prjCd) prjCd = user.testPm ?? projects?.[0]?.prjCd;
+    setBusy(true);
+    try {
+      const r = await api.post<{ token: string; user: User }>('/auth/test-role', { role, prjCd });
+      onSwitched(r.token, r.user);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="test-role">
+      <div className="test-role-title">테스트 역할</div>
+      <select value={cur} disabled={busy} onChange={(e) => switchTo(e.target.value)} aria-label="테스트 역할">
+        <option value="ADMIN">시스템관리자</option>
+        <option value="EXEC">사업관리자</option>
+        <option value="PM">프로젝트 PM</option>
+        <option value="EMP">수행인력</option>
+      </select>
+      {cur === 'PM' && (
+        <select value={user.testPm ?? ''} disabled={busy} onChange={(e) => switchTo('PM', e.target.value)} aria-label="PM으로 시험할 프로젝트">
+          {(projects ?? []).map((p) => (
+            <option key={p.prjCd} value={p.prjCd}>
+              {p.prjNm}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
 }

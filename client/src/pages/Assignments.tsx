@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { pmScoped, useAuth } from '../lib/auth';
+import { isPmOf, pmScoped, useAuth, useShowHr } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, EMPLOY_TYPE } from '../lib/codes';
 import { label } from '../lib/format';
 import { today } from '../lib/dates';
@@ -24,6 +24,7 @@ interface Asg {
 }
 
 export default function Assignments() {
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const { user, can } = useAuth();
   const [prjCd, setPrjCd] = useState('');
   const [status, setStatus] = useState('PLANNED,ACTIVE');
@@ -34,8 +35,8 @@ export default function Assignments() {
   const [refreshKey, setRefreshKey] = useState(0); // 저장 후 보드 새로고침
   const toast = useToast();
 
-  const myProjects = (projects ?? []).filter((p) => !pmScoped(user) || p.pmEmpId === user?.empId);
-  const canManage = (a: Asg) => can('assignments', 'EDIT') && (!pmScoped(user) || a.project.pmEmpId === user?.empId);
+  const myProjects = (projects ?? []).filter((p) => !pmScoped(user) || isPmOf(user, p.prjCd));
+  const canManage = (a: Asg) => can('assignments', 'EDIT') && (!pmScoped(user) || isPmOf(user, a.prjCd));
   const t = today();
   const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
@@ -108,8 +109,11 @@ export default function Assignments() {
                   return (
                     <tr key={a.asgId}>
                       <td data-label="인력">
-                        <strong>{a.employee.name}</strong> <span className="small muted">{a.employee.skillLevel}</span>
-                        <div className="small muted">{label(EMPLOY_TYPE, a.employee.employType)}</div>
+                        <span className="small muted">{a.employee.gradeCd}</span> <strong>{a.employee.name}</strong>
+                        <div className="small muted">
+                          {a.employee.deptCd}
+                          {showHr && ` · ${a.employee.skillLevel} · ${label(EMPLOY_TYPE, a.employee.employType)}`}
+                        </div>
                       </td>
                       <td data-label="프로젝트">
                         <strong title={a.prjCd}>{a.project.prjNm}</strong>
@@ -173,6 +177,7 @@ export default function Assignments() {
 }
 
 function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Partial<Asg>; projects: { prjCd: string; prjNm: string }[]; onClose: () => void; onSaved: () => void }) {
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const toast = useToast();
   const isNew = !initial.asgId;
   const [f, setF] = useState(initial);
@@ -183,7 +188,7 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
     overAlloc: number;
     overlapping: { asgId: number; prjCd: string; roleCd: string; startDt: string; endDt: string; allocRate: number; project: { prjNm: string } }[];
   } | null>(null);
-  const { data: emps } = useFetch<{ empId: string; name: string; deptCd: string; skillLevel: string; employType: string; allocTotal: number }[]>('/employees');
+  const { data: emps } = useFetch<{ empId: string; name: string; gradeCd: string; jobCd: string | null; deptCd: string; skillLevel: string; employType: string; allocTotal: number }[]>('/employees');
   const set = (p: Partial<Asg>) => setF((s) => ({ ...s, ...p }));
 
   useEffect(() => {
@@ -234,7 +239,7 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
             value={f.empId}
             onChange={(empId) => set({ empId })}
             placeholder="선택"
-            options={(emps ?? []).map((e) => [e.empId, `${e.name} · ${orgOf(e)} · ${e.skillLevel} · ${label(EMPLOY_TYPE, e.employType)} (현재 ${e.allocTotal}%)`] as [string, string])}
+            options={(emps ?? []).map((e) => [e.empId, `${e.gradeCd} ${e.name} · ${orgOf(e)}${e.jobCd ? ` · ${e.jobCd}` : ''}${showHr ? ` · ${e.skillLevel} · ${label(EMPLOY_TYPE, e.employType)}` : ''} (현재 ${e.allocTotal}%)`] as [string, string])}
           />
         </Field>
         <Field label="투입 역할" required>

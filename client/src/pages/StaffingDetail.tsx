@@ -5,13 +5,14 @@ import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num, pct } from '../lib/format';
 import { addMonths, isoWeek, today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
-import { useAuth } from '../lib/auth';
+import { useAuth, useShowHr } from '../lib/auth';
 import { MilestoneTrack, type Milestone } from './ProjectWeekly';
 import type { StaffingResp } from './Staffing';
 
 /** 프로젝트 투입 상세: 카드에서 선택한 프로젝트의 투입 인력·기간·MD·마일스톤 */
 export default function StaffingDetail() {
   const { can } = useAuth();
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const { prjCd = '' } = useParams();
   const [sp, setSp] = useSearchParams();
   const ym = sp.get('ym') ?? today().slice(0, 7);
@@ -107,10 +108,12 @@ export default function StaffingDetail() {
                       {p.members.map((m) => (
                         <tr key={m.asgId}>
                           <td data-label="인력">
-                            <strong>{m.name}</strong>{' '}
-                            <span className="small muted">
-                              {m.gradeCd} · {m.skillLevel} · {label(EMPLOY_TYPE, m.employType)}
-                            </span>
+                            <span className="small muted">{m.gradeCd}</span> <strong>{m.name}</strong>
+                            {showHr && (
+                              <div className="small muted">
+                                {m.skillLevel} · {label(EMPLOY_TYPE, m.employType)}
+                              </div>
+                            )}
                           </td>
                           <td data-label="역할">{label(ASG_ROLE, m.roleCd)}</td>
                           <td data-label="투입률" className="num">

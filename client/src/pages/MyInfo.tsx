@@ -1,12 +1,13 @@
 import { ChangePasswordForm } from '../components/ChangePasswordForm';
 import { Badge, Card, ErrorBox, Loading, PageHeader, useToast } from '../components/ui';
-import { useAuth } from '../lib/auth';
+import { useAuth, useShowHr } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, EMP_STATUS, EMPLOY_TYPE, ROLE_LABEL } from '../lib/codes';
 import { label } from '../lib/format';
 import { useFetch } from '../lib/hooks';
 import type { Employee } from './Employees';
 
 export default function MyInfo() {
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const { user, logout } = useAuth();
   const { data, error } = useFetch<
     Employee & { assignments: { asgId: number; prjCd: string; roleCd: string; startDt: string; endDt: string; allocRate: number; status: string; project: { prjNm: string } }[] }
@@ -29,24 +30,30 @@ export default function MyInfo() {
         <div className="grid cols-2">
           <Card title="인력 정보">
             <dl className="desc-list">
+              <dt>직급</dt>
+              <dd>{data.gradeCd}</dd>
               <dt>성명</dt>
               <dd>
                 <strong>{data.name}</strong>
               </dd>
+              <dt>소속</dt>
+              <dd>
+                {data.deptCd} {data.partner && `· 협력사 ${data.partner.partnerNm}`}
+              </dd>
+              <dt>역할</dt>
+              <dd>{data.jobCd ?? '-'}</dd>
+              {showHr && (
+                <>
+                  <dt>고용형태</dt>
+                  <dd>{label(EMPLOY_TYPE, data.employType)}</dd>
+                  <dt>기술등급</dt>
+                  <dd>{data.skillLevel}</dd>
+                </>
+              )}
+              <dt>기술스택</dt>
+              <dd>{data.skillStack ?? '-'}</dd>
               <dt>이메일 (로그인)</dt>
               <dd>{data.email}</dd>
-              <dt>소속 / 직급</dt>
-              <dd>
-                {data.deptCd} / {data.gradeCd}
-              </dd>
-              <dt>고용형태</dt>
-              <dd>
-                {label(EMPLOY_TYPE, data.employType)} {data.partner && `· ${data.partner.partnerNm}`}
-              </dd>
-              <dt>기술</dt>
-              <dd>
-                {data.skillLevel} {data.skillStack && `· ${data.skillStack}`}
-              </dd>
               <dt>경력</dt>
               <dd>{data.careerYears != null ? `${data.careerYears}년` : '-'}</dd>
               <dt>상태</dt>

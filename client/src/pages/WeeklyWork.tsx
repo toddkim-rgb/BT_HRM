@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Card, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast, PrjTypeBadge } from '../components/ui';
 import { api, ApiError } from '../lib/api';
-import { useAuth } from '../lib/auth';
+import { useAuth, useShowHr } from '../lib/auth';
 import { ISSUE_TYPE, ITEM_STATUS, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
 import { dateTime, label, num } from '../lib/format';
 import { dow, isoWeek, md as mdLabel, shiftWeek, today, weekLabel } from '../lib/dates';
@@ -42,7 +42,7 @@ interface View {
   days: string[];
   businessDays: string[];
   holidays: string[];
-  employee: { empId: string; name: string; gradeCd: string; skillLevel: string; jobCd: string | null } | null;
+  employee: { empId: string; name: string; gradeCd: string; deptCd: string; skillLevel?: string; jobCd: string | null } | null;
   wwId: number | null;
   statusCd: string;
   remark: string | null;
@@ -68,6 +68,7 @@ const MD_OPTS: [string, string][] = [
 ];
 
 export default function WeeklyWork() {
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const { user, can } = useAuth();
   const params = useParams();
   const nav = useNavigate();
@@ -250,7 +251,8 @@ export default function WeeklyWork() {
         desc={
           v.employee && (
             <>
-              {v.employee.name} ({v.employee.jobCd ?? '-'} / {v.employee.skillLevel}) {!isMine && <Badge tone="info">조회</Badge>}
+              {v.employee.gradeCd} {v.employee.name} · {v.employee.deptCd} · {v.employee.jobCd ?? '-'}
+              {showHr && v.employee.skillLevel ? ` · ${v.employee.skillLevel}` : ''} {!isMine && <Badge tone="info">조회</Badge>}
             </>
           )
         }

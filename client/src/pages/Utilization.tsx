@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Kpi, Loading, Modal, PageHeader, ProgressBar } from '../components/ui';
 import { qs } from '../lib/api';
-import { useAuth } from '../lib/auth';
+import { useAuth, useShowHr } from '../lib/auth';
 import { EMPLOY_TYPE } from '../lib/codes';
 import { label, num, pct } from '../lib/format';
 import { isoWeek, md, shiftWeek, today, weekLabel } from '../lib/dates';
@@ -58,6 +58,7 @@ const diffText = (d: number | null) => (d == null ? undefined : `전주 대비 $
 
 export default function Utilization() {
   const { user } = useAuth();
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const isEmp = user?.role === 'EMP' && !user?.isPm; // 일반 수행인력은 본인만
   const [week, setWeek] = useState(lastWeek());
   const { data, error, loading } = useFetch<Resp>(`/stats/utilization${qs({ week })}`);
@@ -137,7 +138,7 @@ export default function Utilization() {
                     <tr>
                       <th>인력</th>
                       <th>소속</th>
-                      <th>고용형태</th>
+                      {showHr && <th>고용형태</th>}
                       <th>투입</th>
                       <th>배정 프로젝트</th>
                       <th className="num" title="제출된 주간 업무보고 기준 (참고)">
@@ -150,10 +151,10 @@ export default function Utilization() {
                     {rows.map((r) => (
                       <tr key={r.empId}>
                         <td data-label="인력">
-                          <strong>{r.name}</strong> <span className="small muted">{r.gradeCd}</span>
+                          <span className="small muted">{r.gradeCd}</span> <strong>{r.name}</strong>
                         </td>
                         <td data-label="소속">{r.deptCd}</td>
-                        <td data-label="고용형태">{label(EMPLOY_TYPE, r.employType)}</td>
+                        {showHr && <td data-label="고용형태">{label(EMPLOY_TYPE, r.employType)}</td>}
                         <td data-label="투입">{r.assigned ? <Badge tone="good">투입</Badge> : <Badge tone="warn">미투입</Badge>}</td>
                         <td data-label="배정 프로젝트">
                           {r.projects.length ? (

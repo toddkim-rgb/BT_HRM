@@ -8,6 +8,9 @@ export interface User {
   role: Role;
   mustChangePw?: boolean; // 초기 비밀번호(이메일 주소) → 변경 전까지 다른 화면 이용 불가
   isPm?: boolean; // 투입 배정에서 PM으로 지정된 프로젝트가 있음
+  pmPrjCds?: string[]; // PM으로 지정된 프로젝트
+  tester?: boolean; // 테스트 계정 (역할 전환 가능)
+  testPm?: string | null; // 테스트 계정이 PM으로 시험 중인 프로젝트
 }
 
 /** 메뉴 키 → 권한 단계 (서버 '메뉴 권한' 설정, DB) */
@@ -49,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 프로젝트 PM 지정 여부 (로그인 후·배정 변경 후 갱신)
     api
       .get<User>('/auth/me')
-      .then((u) => setUser((prev) => (prev ? { ...prev, isPm: u.isPm } : prev)))
+      .then((u) => setUser((prev) => (prev ? { ...prev, isPm: u.isPm, pmPrjCds: u.pmPrjCds, tester: u.tester, testPm: u.testPm } : prev)))
       .catch(() => undefined);
   }, []);
 
@@ -68,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api
       .get<User>('/auth/me')
-      .then((u) => setUser({ empId: u.empId, name: u.name, role: u.role, mustChangePw: u.mustChangePw, isPm: u.isPm }))
+      .then((u) => setUser({ empId: u.empId, name: u.name, role: u.role, mustChangePw: u.mustChangePw, isPm: u.isPm, pmPrjCds: u.pmPrjCds, tester: u.tester, testPm: u.testPm }))
       .catch(() => tokenStore.clear())
       .finally(() => setReady(true));
   }, [logout]);
@@ -94,3 +97,12 @@ export const hasRole = (u: User | null, ...roles: Role[]) => !!u && roles.includ
 
 /** 프로젝트 PM(수행인력): 담당 프로젝트로 범위 제한 */
 export const pmScoped = (u: User | null) => !!u && u.role === 'EMP' && !!u.isPm;
+
+/** 기술등급·고용형태 표시 여부: 수행인력(프로젝트 PM 포함)에게는 표시하지 않음 */
+export const useShowHr = () => {
+  const { user } = useAuth();
+  return !!user && user.role !== 'EMP';
+};
+
+/** 이 프로젝트의 PM인가 (투입 배정 지정, 테스트 계정은 시험 중인 프로젝트) */
+export const isPmOf = (u: User | null, prjCd: string) => !!u?.pmPrjCds?.includes(prjCd);

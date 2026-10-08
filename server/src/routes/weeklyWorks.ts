@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
-import { type AuthUser, me, pmProjectCodes, pmScoped, staffOnly } from '../auth.js';
+import { type AuthUser, isPmOf, me, pmProjectCodes, pmScoped, staffOnly } from '../auth.js';
 import { assertMenu, requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { businessDays, isValidWeek, isoWeek, shiftWeek, today, weekDays } from '../lib/dates.js';
@@ -63,7 +63,7 @@ async function assertCanView(u: AuthUser, empId: string, week: string) {
   if (u.empId === empId) return;
   await assertMenu(u, 'submissions', 'VIEW');
   if (!pmScoped(u)) return;
-  const mine = await pmProjectCodes(u.empId);
+  const mine = pmProjectCodes(u);
   const days = weekDays(week);
   const hit =
     (await prisma.assignment.count({ where: { empId, prjCd: { in: mine }, canceled: false, startDt: { lte: days[6] }, endDt: { gte: days[0] } } })) +
@@ -166,7 +166,7 @@ async function buildView(empId: string, week: string) {
   for (const p of plan) if (!tsRows.some((r) => r.prjCd === p.prjCd)) tsRows.push({ prjCd: p.prjCd, md: {} });
 
   const pm = await projectMap(tsRows.map((r) => r.prjCd));
-  const emp = await prisma.employee.findUnique({ where: { empId }, select: { empId: true, name: true, gradeCd: true, skillLevel: true, jobCd: true } });
+  const emp = await prisma.employee.findUnique({ where: { empId }, select: { empId: true, name: true, gradeCd: true, deptCd: true, skillLevel: true, jobCd: true } });
   return {
     week,
     days,
@@ -346,7 +346,7 @@ weeklyWorksRouter.get('/', requireMenu('submissions'), async (req, res) => {
   const { status, week, prjCd } = req.query as Record<string, string | undefined>;
   const where: Prisma.WeeklyWorkWhereInput = { statusCd: { in: (status ?? 'SUBMITTED').split(',') }, ...(week ? { reportWeek: week } : {}) };
   let scope: string[] | null = null;
-  if (pmScoped(u)) scope = await pmProjectCodes(u.empId);
+  if (pmScoped(u)) scope = pmProjectCodes(u);
   if (prjCd) scope = scope ? scope.filter((c) => c === prjCd) : [prjCd];
   if (scope) where.OR = [{ timesheets: { some: { prjCd: { in: scope } } } }, { workItems: { some: { prjCd: { in: scope } } } }];
   const rows = await prisma.weeklyWork.findMany({
@@ -394,7 +394,7 @@ weeklyWorksRouter.get('/project-summary', requireMenu(['submissions', 'dashboard
   checkWeek(week);
   const days = weekDays(week);
   const projects = await prisma.project.findMany({
-    where: { prjType: { not: 'NP' }, statusCd: 'ACTIVE', ...(pmScoped(u) ? { pmEmpId: u.empId } : {}) },
+    where: { prjType: { not: 'NP' }, statusCd: 'ACTIVE', ...(pmScoped(u) ? { prjCd: { in: pmProjectCodes(u) } } : {}) },
     select: { prjCd: true, prjNm: true },
     orderBy: { prjCd: 'asc' },
   });
@@ -427,7 +427,7 @@ weeklyWorksRouter.get('/project/:prjCd/:week/status', async (req, res) => {
   const prj = await prisma.project.findUnique({ where: { prjCd } });
   if (!prj) throw notFound('프로젝트');
   await assertMenu(u, 'submissions', 'VIEW');
-  if (pmScoped(u) && prj.pmEmpId !== u.empId) throw forbidden();
+  if (pmScoped(u) && !isPmOf(u, prj.prjCd)) throw forbidden();
   const days = weekDays(week);
   const holidays = await holidaySet();
   const asg = await prisma.assignment.findMany({

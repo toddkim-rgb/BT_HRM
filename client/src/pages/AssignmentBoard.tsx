@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from 'react';
 import { Badge, Empty, ErrorBox, Loading, useToast, PrjTypeBadge } from '../components/ui';
 import { api } from '../lib/api';
-import { pmScoped, useAuth } from '../lib/auth';
+import { isPmOf, pmScoped, useAuth, useShowHr } from '../lib/auth';
 import { ASG_ROLE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num } from '../lib/format';
 import { today } from '../lib/dates';
@@ -27,7 +27,7 @@ interface Emp {
   deptCd: string;
   gradeCd: string;
   jobCd: string | null;
-  skillLevel: string;
+  skillLevel?: string;
   employType: string;
   partner: { partnerNm: string } | null;
   utilTarget: boolean;
@@ -78,6 +78,7 @@ const roleOf = (job: string | null) => (!job ? 'DEV' : job.includes('설계') ? 
  */
 export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) => void; refreshKey: number }) {
   const { user, can } = useAuth();
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const toast = useToast();
   const t = today();
   const { data: asgs, error, reload: reloadAsg } = useFetch<BoardAsg[]>(`/assignments?status=PLANNED,ACTIVE,ENDED&_=${refreshKey}`);
@@ -93,10 +94,10 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
 
   // 편집: 투입 배정 '편집' 권한 + PM 역할은 담당 프로젝트만
   const canEditMenu = can('assignments', 'EDIT');
-  const canManage = (p: { pmEmpId: string | null }) => canEditMenu && (!pmScoped(user) || p.pmEmpId === user?.empId);
+  const canManage = (p: { prjCd: string }) => canEditMenu && (!pmScoped(user) || isPmOf(user, p.prjCd));
   const canDragEmp = canEditMenu && (projects ?? []).some(canManage);
   // 상태 변경: 프로젝트 편집 권한 또는 이 프로젝트의 배정 관리 권한
-  const canStatus = (p: { pmEmpId: string | null }) => can('projects', 'EDIT') || canManage(p);
+  const canStatus = (p: { prjCd: string }) => can('projects', 'EDIT') || canManage(p);
   const reload = () => {
     reloadAsg();
     reloadEmp();
@@ -200,8 +201,8 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
     // 다른 프로젝트에서 옮기기 = 새 프로젝트에 배정 + 기존 프로젝트에서 빼기
     run(async () => {
       const msg = await assign(a.empId, p);
-      if (canManage(a.project)) await unassign(a);
-      return canManage(a.project) ? `${a.employee.name}님을 ${a.project.prjNm} → ${p.prjNm}(으)로 옮겼습니다.` : msg;
+      if (canManage(a)) await unassign(a);
+      return canManage(a) ? `${a.employee.name}님을 ${a.project.prjNm} → ${p.prjNm}(으)로 옮겼습니다.` : msg;
     });
   };
   const dropOnPool = (e: DragEvent) => {
@@ -246,9 +247,13 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
           {pool.map((e) => (
             <div key={e.empId} className="board-emp" draggable={canDragEmp} onDragStart={(ev) => startDrag(ev, { kind: 'emp', empId: e.empId })} title={canDragEmp ? '프로젝트 카드로 끌어다 놓으세요' : undefined}>
               <span className="board-emp-name">
-                <strong>{e.name}</strong>
+                <strong>
+                  <span className="muted">{e.gradeCd}</span> {e.name}
+                </strong>
                 <small>
-                  {orgOf(e)} · {e.gradeCd} · {e.skillLevel}
+                  {orgOf(e)}
+                  {e.jobCd ? ` · ${e.jobCd}` : ''}
+                  {showHr && e.skillLevel ? ` · ${e.skillLevel}` : ''}
                 </small>
               </span>
               <span className="board-emp-badges">
@@ -355,7 +360,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                   >
                     <button type="button" className="board-chip-main" disabled={!mine} onClick={() => onEdit(a)}>
                       <strong>
-                        {a.employee.name}
+                        <span className="muted">{a.employee.gradeCd}</span> {a.employee.name}
                         {a.roleCd === 'PM' && <span className="board-pm">PM</span>}
                       </strong>
                       <span>
@@ -389,7 +394,8 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                   <optgroup label="수행인력">
                     {addable.map((e) => (
                       <option key={e.empId} value={e.empId}>
-                        {e.name} · {orgOf(e)} · 현재 {e.allocTotal}%
+                        {e.gradeCd} {e.name} · {orgOf(e)}
+                        {e.jobCd ? ` · ${e.jobCd}` : ''} · 현재 {e.allocTotal}%
                       </option>
                     ))}
                   </optgroup>

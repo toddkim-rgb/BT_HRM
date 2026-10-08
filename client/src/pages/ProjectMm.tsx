@@ -3,6 +3,7 @@ import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, ProgressBar, Se
 import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num, pct } from '../lib/format';
 import { useFetch } from '../lib/hooks';
+import { useShowHr } from '../lib/auth';
 
 interface Summary {
   prjCd: string;
@@ -31,7 +32,7 @@ interface Detail extends Summary {
     allocRate: number;
     planMm: number;
     actualMmByEmp: number;
-    employee: { name: string; gradeCd: string; skillLevel: string; employType: string };
+    employee: { name: string; gradeCd: string; deptCd: string; skillLevel: string; employType: string };
   }[];
 }
 
@@ -120,6 +121,7 @@ function ProjectList() {
 }
 
 function ProjectDetail({ prjCd }: { prjCd: string }) {
+  const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const { data, error, loading } = useFetch<Detail>(`/stats/projects/${prjCd}/mm`);
   const { data: list } = useFetch<Summary[]>('/stats/projects');
   const nav = useNavigate();
@@ -205,7 +207,8 @@ function ProjectDetail({ prjCd }: { prjCd: string }) {
                   {data.members.map((m) => (
                     <tr key={m.asgId}>
                       <td data-label="인력">
-                        <strong>{m.employee.name}</strong> <span className="small muted">{m.employee.skillLevel} · {label(EMPLOY_TYPE, m.employee.employType)}</span>
+                        <span className="small muted">{m.employee.gradeCd}</span> <strong>{m.employee.name}</strong> <span className="small muted">{m.employee.deptCd}</span>
+                        {showHr && <div className="small muted">{m.employee.skillLevel} · {label(EMPLOY_TYPE, m.employee.employType)}</div>}
                       </td>
                       <td data-label="역할">{label(ASG_ROLE, m.roleCd)}</td>
                       <td data-label="기간" className="nowrap small">

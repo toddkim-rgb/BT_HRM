@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { me, pmProjectCodes, pmScoped, staffOnly } from '../auth.js';
+import { isPmOf, me, pmProjectCodes, pmScoped, staffOnly } from '../auth.js';
 import { requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { plannedMd } from '../lib/alloc.js';
@@ -102,7 +102,7 @@ async function projectMm(prjCds: string[]) {
 statsRouter.get('/projects', requireMenu(['projectMm', 'dashboard']), async (req, res) => {
   const u = me(req);
   // PM은 담당 프로젝트만, 그 외 권한 보유자는 전체
-  const codes = pmScoped(u) ? await pmProjectCodes(u.empId) : (await prisma.project.findMany({ where: { prjType: { not: 'NP' } }, select: { prjCd: true } })).map((p) => p.prjCd);
+  const codes = pmScoped(u) ? pmProjectCodes(u) : (await prisma.project.findMany({ where: { prjType: { not: 'NP' } }, select: { prjCd: true } })).map((p) => p.prjCd);
   res.json(await projectMm(codes));
 });
 
@@ -110,13 +110,13 @@ statsRouter.get('/projects/:prjCd/mm', requireMenu('projectMm'), async (req, res
   const u = me(req);
   const p = await prisma.project.findUnique({ where: { prjCd: String(req.params.prjCd) } });
   if (!p) throw notFound('프로젝트');
-  if (pmScoped(u) && p.pmEmpId !== u.empId) throw forbidden();
+  if (pmScoped(u) && !isPmOf(u, p.prjCd)) throw forbidden();
   const [summary] = await projectMm([p.prjCd]);
   const holidays = await holidaySet();
   const mdmm = await mdPerMm();
   const asg = await prisma.assignment.findMany({
     where: { prjCd: p.prjCd, canceled: false },
-    include: { employee: { select: { name: true, gradeCd: true, skillLevel: true, employType: true } } },
+    include: { employee: { select: { name: true, gradeCd: true, deptCd: true, skillLevel: true, employType: true } } },
     orderBy: { startDt: 'asc' },
   });
   const ts = await submittedTimesheets('0000-01-01', '9999-12-31', { prjCd: p.prjCd });
@@ -190,7 +190,7 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
   }
 
   // PM은 담당 프로젝트만
-  const scope = pmScoped(u) ? await pmProjectCodes(u.empId) : null;
+  const scope = pmScoped(u) ? pmProjectCodes(u) : null;
   const asg = await prisma.assignment.findMany({
     where: { canceled: false, startDt: { lte: last.end }, endDt: { gte: start }, ...(scope ? { prjCd: { in: scope } } : {}) },
     include: {

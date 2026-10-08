@@ -4,7 +4,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { blockUntilPasswordChanged, requireAuth } from './auth.js';
 import { HttpError } from './db.js';
 import { ensureDefaultSettings } from './lib/settings.js';
-import { ensureDefaultPermissions, migratePmRole } from './lib/permissions.js';
+import { can, ensureDefaultPermissions, migratePmRole } from './lib/permissions.js';
 import { accountRequestsRouter } from './routes/accountRequests.js';
 import { adminRouter } from './routes/admin.js';
 import { assignmentsRouter } from './routes/assignments.js';
@@ -43,6 +43,18 @@ app.use(async (_req, _res, next) => {
 const api = express.Router();
 api.use('/auth', authRouter);
 api.use(requireAuth, blockUntilPasswordChanged);
+// 수행인력에게는 기술등급·고용형태를 내려보내지 않음 (인력 편집 권한을 받은 경우는 예외 — 편집 화면에 필요)
+const HR_KEYS = new Set(['skillLevel', 'employType']);
+const stripHr = (v: unknown): unknown =>
+  Array.isArray(v) ? v.map(stripHr) : v && typeof v === 'object' && !(v instanceof Date) ? Object.fromEntries(Object.entries(v).filter(([k]) => !HR_KEYS.has(k)).map(([k, x]) => [k, stripHr(x)])) : v;
+api.use(async (req, res, next) => {
+  const u = req.user;
+  if (u?.role === 'EMP' && !(await can(u, 'employees', 'EDIT'))) {
+    const json = res.json.bind(res);
+    res.json = (body: unknown) => json(stripHr(body));
+  }
+  next();
+});
 api.use('/employees', employeesRouter);
 api.use('/admin/partners', partnersRouter);
 api.use('/admin/account-requests', accountRequestsRouter);
