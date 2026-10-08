@@ -90,7 +90,7 @@ export default function Staffing() {
   const kw = q.trim().toLowerCase();
   // 프로젝트 카드는 진행중 프로젝트만 표시
   const activeProjects = (data?.projects ?? []).filter((p) => p.statusCd === 'ACTIVE');
-  const projects = activeProjects.filter((p) => !kw || p.prjCd.toLowerCase().includes(kw) || p.prjNm.toLowerCase().includes(kw) || p.members.some((m) => m.name.includes(q.trim())));
+  const projects = (data?.projects ?? []).filter((p) => !kw || p.prjCd.toLowerCase().includes(kw) || p.prjNm.toLowerCase().includes(kw) || p.members.some((m) => m.name.includes(q.trim())));
   const filterPeople = (list: Person[]) => list.filter((p) => !kw || p.name.includes(q.trim()) || p.deptCd.toLowerCase().includes(kw) || p.assignments.some((a) => a.prjNm.toLowerCase().includes(kw)));
   const people = filterPeople(data?.people ?? []);
   const all = data?.people ?? [];
@@ -163,80 +163,108 @@ export default function Staffing() {
 /** 프로젝트 카드: 프로젝트명 · 투입인력 · 투입률 · 시작일/종료일 · 소요 MD */
 function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
   const nav = useNavigate();
-  if (!list.length) return <Empty>진행중인 프로젝트가 없습니다.</Empty>;
+  const [showDone, setShowDone] = useState(false);
+  if (!list.length) return <Empty>프로젝트가 없습니다.</Empty>;
   const month = Number(ym.slice(5));
-  // 투입 배정 화면과 같은 카드: 기본은 주요 정보만, 마우스를 올리면(포커스) 반전 + 상세 펼침, 누르면 상세 페이지
-  return (
-    <div className="board-projects">
-      {list.map((p) => {
-        const rate = p.planMd ? Math.round((p.actualMd / p.planMd) * 100) : null;
-        const ended = ['DONE', 'STOP'].includes(p.statusCd);
-        const go = () => nav(`/staffing/${p.prjCd}?ym=${ym}`);
-        return (
-          <section
-            key={p.prjCd}
-            className={`board-prj clickable ${ended ? 'ended' : ''}`}
-            tabIndex={0}
-            role="link"
-            aria-label={`${p.prjNm} 상세 보기`}
-            onClick={go}
-            onKeyDown={(e) => e.key === 'Enter' && go()}
-          >
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <span className="row" style={{ gap: 6 }}>
-                <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
-                <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
-              </span>
-              <span className="small muted">
-                {p.headcount}명 · {p.allocTotal}%
+  const t = today();
+  // 진행중: 진행중 상태이고 시작됨 / 예정: 제안 상태 또는 시작 전 / 완료: 완료·중단
+  const groupOf = (p: Prj) => (['DONE', 'STOP'].includes(p.statusCd) ? 'done' : p.statusCd === 'PROPOSAL' || (p.startDt && p.startDt > t) ? 'planned' : 'active');
+  const groups: { key: 'active' | 'planned' | 'done'; title: string; desc: string }[] = [
+    { key: 'active', title: '진행중', desc: '진행중 상태이고 시작된 프로젝트' },
+    { key: 'planned', title: '예정', desc: '제안 상태이거나 시작 전인 프로젝트' },
+    { key: 'done', title: '완료', desc: '완료·중단된 프로젝트' },
+  ];
+  const card = (p: Prj) => {
+    const rate = p.planMd ? Math.round((p.actualMd / p.planMd) * 100) : null;
+    const ended = ['DONE', 'STOP'].includes(p.statusCd);
+    const go = () => nav(`/staffing/${p.prjCd}?ym=${ym}`);
+    return (
+      <section
+        key={p.prjCd}
+        className={`board-prj clickable ${ended ? 'ended' : ''}`}
+        tabIndex={0}
+        role="link"
+        aria-label={`${p.prjNm} 상세 보기`}
+        onClick={go}
+        onKeyDown={(e) => e.key === 'Enter' && go()}
+      >
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <span className="row" style={{ gap: 6 }}>
+            <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
+            <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
+          </span>
+          <span className="small muted">
+            {p.headcount}명 · {p.allocTotal}%
+          </span>
+        </div>
+        <div className="board-prj-title" title={p.prjCd}>
+          {p.prjNm}
+        </div>
+        <div className="board-members">
+          {p.members.map((m) => (
+            <div className="board-chip" key={m.asgId}>
+              <span className="board-chip-main">
+                <strong>
+                  <span className="muted">{m.gradeCd}</span> {m.name}
+                  {m.roleCd === 'PM' && <span className="board-pm">PM</span>}
+                </strong>
               </span>
             </div>
-            <div className="board-prj-title" title={p.prjCd}>
-              {p.prjNm}
-            </div>
-            <div className="board-members">
+          ))}
+          {!p.members.length && <div className="board-drop-hint">{month}월에 배정된 인력 없음</div>}
+        </div>
+        <div className="board-prj-detail">
+          <div className="board-detail-meta">
+            {p.customerNm ? `${p.customerNm} · ` : ''}PM {p.pmName ?? '-'} · {p.startDt ?? '-'} ~ {p.endDt ?? '-'}
+          </div>
+          {p.members.length > 0 && (
+            <ul className="board-detail-members">
               {p.members.map((m) => (
-                <div className="board-chip" key={m.asgId}>
-                  <span className="board-chip-main">
-                    <strong>
-                      <span className="muted">{m.gradeCd}</span> {m.name}
-                      {m.roleCd === 'PM' && <span className="board-pm">PM</span>}
-                    </strong>
-                  </span>
-                </div>
-              ))}
-              {!p.members.length && <div className="board-drop-hint">{month}월에 배정된 인력 없음</div>}
-            </div>
-            <div className="board-prj-detail">
-              <div className="board-detail-meta">
-                {p.customerNm ? `${p.customerNm} · ` : ''}PM {p.pmName ?? '-'} · {p.startDt ?? '-'} ~ {p.endDt ?? '-'}
-              </div>
-              {p.members.length > 0 && (
-                <ul className="board-detail-members">
-                  {p.members.map((m) => (
-                    <li key={m.asgId}>
-                      <span>
-                        {m.gradeCd} {m.name}
-                      </span>
-                      <span>
-                        {m.allocRate}% · {label(ASG_ROLE, m.roleCd)} · {month}월 {num(m.actualMd)}/{num(m.planMd)} MD
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="board-final-md">
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <strong>{month}월 소요 MD</strong>
+                <li key={m.asgId}>
                   <span>
-                    {num(p.actualMd)} / 계획 {num(p.planMd)}
+                    {m.gradeCd} {m.name}
                   </span>
-                </div>
-                <ProgressBar value={rate} tone={rate != null && rate > 100 ? 'bad' : 'good'} />
-                <div style={{ marginTop: 4 }}>누적 소요 {num(p.cumMd)} MD</div>
-              </div>
-              <div className="board-status-actions small">상세 보기 →</div>
+                  <span>
+                    {m.allocRate}% · {label(ASG_ROLE, m.roleCd)} · {month}월 {num(m.actualMd)}/{num(m.planMd)} MD
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="board-final-md">
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <strong>{month}월 소요 MD</strong>
+              <span>
+                {num(p.actualMd)} / 계획 {num(p.planMd)}
+              </span>
             </div>
+            <ProgressBar value={rate} tone={rate != null && rate > 100 ? 'bad' : 'good'} />
+            <div style={{ marginTop: 4 }}>누적 소요 {num(p.cumMd)} MD</div>
+          </div>
+          <div className="board-status-actions small">상세 보기 →</div>
+        </div>
+      </section>
+    );
+  };
+  return (
+    <div className="stack">
+      {groups.map((g) => {
+        const items = list.filter((p) => groupOf(p) === g.key);
+        const folded = g.key === 'done' && !showDone;
+        return (
+          <section key={g.key} className={`prj-group prj-group-${g.key}`}>
+            <div className="prj-group-head">
+              <h3>
+                {g.title} <span className="muted">{items.length}</span>
+              </h3>
+              <span className="small muted">{g.desc}</span>
+              {g.key === 'done' && items.length > 0 && (
+                <button type="button" className="btn sm" onClick={() => setShowDone((v) => !v)}>
+                  {showDone ? '접기' : '펼치기'}
+                </button>
+              )}
+            </div>
+            {folded ? null : items.length ? <div className="board-projects">{items.map(card)}</div> : <div className="small muted">해당 프로젝트가 없습니다.</div>}
           </section>
         );
       })}

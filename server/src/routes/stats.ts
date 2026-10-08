@@ -261,9 +261,9 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
     })
     .sort((a, b) => b.headcount - a.headcount || a.prjCd.localeCompare(b.prjCd));
 
-  // 진행중인데 해당 월에 배정된 인력이 없는 프로젝트도 카드에 표시 (투입 필요 여부 확인용)
+  // 해당 월에 배정된 인력이 없는 프로젝트도 카드에 표시 (진행중·제안·완료·중단 — 화면에서 진행중/예정/완료로 묶음)
   const idle = await prisma.project.findMany({
-    where: { statusCd: 'ACTIVE', prjType: { not: 'NP' }, prjCd: { notIn: prjCodes, ...(scope ? { in: scope } : {}) } },
+    where: { statusCd: { in: ['ACTIVE', 'PROPOSAL', 'DONE', 'STOP'] }, prjType: { not: 'NP' }, prjCd: { notIn: prjCodes, ...(scope ? { in: scope } : {}) } },
     include: { pm: { select: { name: true } } },
     orderBy: { prjCd: 'asc' },
   });

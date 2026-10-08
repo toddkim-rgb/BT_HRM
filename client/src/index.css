@@ -537,3 +537,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .board-prj-detail { display: flex; }
 }
 .board-prj.clickable { cursor: pointer; }
+.prj-group-head { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 10px; }
+.prj-group-head h3 { margin: 0; font-size: 15px; }
+.prj-group-head .btn { margin-left: auto; }
