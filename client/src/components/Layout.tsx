@@ -99,7 +99,7 @@ export function Layout() {
             </div>
           ))}
         </nav>
-        {user.tester && <TestRoleSwitch user={user} onSwitched={(token, u) => { applySession(token, { ...user, ...u, testPm: u.testPm ?? null }); reloadPerms(); navigate('/'); }} />}
+        {user.tester && <TestRoleSwitch user={user} onSwitched={(token, u) => { applySession(token, { ...u, tester: true }); reloadPerms(); navigate('/'); }} />}
         <div className="side-user">
           <NavLink to="/me" className="side-user-name">
             <strong>{user.name}</strong>
@@ -144,16 +144,21 @@ export function Home({ children }: { children: ReactNode }) {
   return first ? <Navigate to={first.to} replace /> : <Guard menu="dashboard">{children}</Guard>;
 }
 
-/** 테스트 계정 전용: 역할을 바꿔 가며 화면·권한 시험 (프로젝트 PM은 시험할 프로젝트 선택) */
+/** 테스트 계정 전용: 실제 인력 계정으로 전환해 역할별 화면·권한 시험 */
+const PERSONAS: [string, string][] = [
+  ['SELF', '테스트계정 (본인)'],
+  ['ADMIN', '시스템관리자 — 김석현'],
+  ['EXEC', '사업관리자 — 김석현'],
+  ['PM', '프로젝트 PM — 정창원'],
+  ['EMP', '수행인력 — 신현석'],
+];
 function TestRoleSwitch({ user, onSwitched }: { user: User; onSwitched: (token: string, u: User) => void }) {
-  const { data: projects } = useFetch<{ prjCd: string; prjNm: string }[]>('/projects?status=ACTIVE,PROPOSAL');
-  const cur = user.testPm ? 'PM' : user.role;
   const [busy, setBusy] = useState(false);
-  const switchTo = async (role: string, prjCd?: string) => {
-    if (role === 'PM' && !prjCd) prjCd = user.testPm ?? projects?.[0]?.prjCd;
+  const cur = user.testAs ?? 'SELF';
+  const switchTo = async (as: string) => {
     setBusy(true);
     try {
-      const r = await api.post<{ token: string; user: User }>('/auth/test-role', { role, prjCd });
+      const r = await api.post<{ token: string; user: User }>('/auth/test-role', { as });
       onSwitched(r.token, r.user);
     } catch (e) {
       window.alert(e instanceof Error ? e.message : String(e));
@@ -163,22 +168,15 @@ function TestRoleSwitch({ user, onSwitched }: { user: User; onSwitched: (token: 
   };
   return (
     <div className="test-role">
-      <div className="test-role-title">테스트 역할</div>
+      <div className="test-role-title">테스트 역할 {cur !== 'SELF' && <span>· {user.name}(으)로 보는 중</span>}</div>
       <select value={cur} disabled={busy} onChange={(e) => switchTo(e.target.value)} aria-label="테스트 역할">
-        <option value="ADMIN">시스템관리자</option>
-        <option value="EXEC">사업관리자</option>
-        <option value="PM">프로젝트 PM</option>
-        <option value="EMP">수행인력</option>
+        {PERSONAS.map(([k, l]) => (
+          <option key={k} value={k}>
+            {l}
+          </option>
+        ))}
       </select>
-      {cur === 'PM' && (
-        <select value={user.testPm ?? ''} disabled={busy} onChange={(e) => switchTo('PM', e.target.value)} aria-label="PM으로 시험할 프로젝트">
-          {(projects ?? []).map((p) => (
-            <option key={p.prjCd} value={p.prjCd}>
-              {p.prjNm}
-            </option>
-          ))}
-        </select>
-      )}
+      {cur !== 'SELF' && <div className="test-role-note">작성·저장한 내용은 {user.name} 이름으로 기록됩니다.</div>}
     </div>
   );
 }

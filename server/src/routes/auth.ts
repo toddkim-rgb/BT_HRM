@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Router, type Request } from 'express';
 import { z } from 'zod';
-import { me, requireAuth, signToken, type Role } from '../auth.js';
+import { TEST_PERSONAS, isTesterEmail, me, requireAuth, signToken, type Role } from '../auth.js';
 import { HttpError, prisma } from '../db.js';
 import { isUsable, usableEmp } from '../lib/empFilter.js';
 import { assertPasswordPolicy, maskEmail, rateLimit } from '../lib/password.js';
@@ -35,7 +35,7 @@ authRouter.get('/me', requireAuth, async (req, res) => {
   if (!emp) throw new HttpError(401, '사용자를 찾을 수 없습니다.');
   const { passwordHash: _, ...rest } = emp;
   // 수행인력에게는 기술등급·고용형태를 내려보내지 않음
-  const out: Record<string, unknown> = { ...rest, isPm: !!u.pm, pmPrjCds: u.pmPrjCds ?? [], tester: !!u.tester, testPm: u.testPm ?? null };
+  const out: Record<string, unknown> = { ...rest, role: u.role, isPm: !!u.pm, pmPrjCds: u.pmPrjCds ?? [], tester: !!u.tester, testAs: u.testAs ?? null };
   if (u.role === 'EMP') {
     delete out.skillLevel;
     delete out.employType;
@@ -50,23 +50,33 @@ authRouter.get('/me/permissions', requireAuth, async (req, res) => {
 });
 
 /**
- * 테스트 계정 역할 전환 (@bt-hrm.test 계정만): 시스템관리자 / 사업관리자 / 수행인력 / 프로젝트 PM(프로젝트 선택)
- * - 역할은 계정의 role을 바꾸고, 프로젝트 PM은 수행인력 + 토큰에 시험할 프로젝트를 담는다 (실제 프로젝트 PM은 바뀌지 않음)
+ * 테스트 계정 역할 전환 (@bt-hrm.test 계정만): 실제 인력 계정으로 전환해 화면·권한 시험
+ * - 시스템관리자·사업관리자 = 김석현(사업관리자는 권한만 좁힘), 프로젝트 PM = 정창원, 수행인력 = 신현석, SELF = 테스트 계정 본인
+ * - 전환 중 작성·저장한 내용은 전환한 인력 이름으로 기록됨, 비밀번호 변경은 막음
  */
 authRouter.post('/test-role', requireAuth, async (req, res) => {
   const u = me(req);
   if (!u.tester) throw new HttpError(403, '테스트 계정만 역할을 전환할 수 있습니다.');
-  const body = parse(z.object({ role: z.enum(['EMP', 'PM', 'EXEC', 'ADMIN']), prjCd: z.string().optional() }), req.body);
-  if (body.role === 'PM') {
-    if (!body.prjCd || !(await prisma.project.findUnique({ where: { prjCd: body.prjCd } }))) throw new HttpError(400, 'PM으로 시험할 프로젝트를 선택하세요.');
+  const body = parse(z.object({ as: z.enum(['SELF', 'ADMIN', 'EXEC', 'PM', 'EMP']) }), req.body);
+  const testerId = u.impersonator ?? u.empId;
+  const tester = await prisma.employee.findUnique({ where: { empId: testerId } });
+  if (!tester || !isTesterEmail(tester.email)) throw new HttpError(403, '테스트 계정만 역할을 전환할 수 있습니다.');
+  if (body.as === 'SELF') {
+    const user = userOf(tester);
+    res.json({ token: signToken(user), user });
+    return;
   }
-  const emp = await prisma.employee.update({ where: { empId: u.empId }, data: { role: body.role === 'PM' ? 'EMP' : body.role } });
-  const user = { ...userOf(emp), ...(body.role === 'PM' ? { testPm: body.prjCd } : {}) };
-  res.json({ token: signToken(user), user });
+  const persona = TEST_PERSONAS[body.as];
+  const target = await prisma.employee.findFirst({ where: { AND: [usableEmp, { name: persona.name }] } });
+  if (!target) throw new HttpError(400, `${persona.label} 시험용 인력(${persona.name})을 찾을 수 없습니다.`);
+  const user = { ...userOf(target), mustChangePw: false, ...(persona.roleOverride ? { role: persona.roleOverride } : {}) };
+  const token = signToken({ ...user, impersonator: testerId, roleOverride: persona.roleOverride, testAs: body.as });
+  res.json({ token, user });
 });
 
 // 비밀번호 변경 (초기·임시 비밀번호 변경 강제 포함) → 변경 강제 해제된 새 토큰 발급
 authRouter.put('/me/password', requireAuth, async (req, res) => {
+  if (me(req).impersonator) throw new HttpError(403, '테스트 계정으로 전환한 상태에서는 비밀번호를 바꿀 수 없습니다.');
   const u = me(req);
   const body = parse(z.object({ current: z.string(), next: z.string() }), req.body);
   const emp = await prisma.employee.findUniqueOrThrow({ where: { empId: u.empId } });
