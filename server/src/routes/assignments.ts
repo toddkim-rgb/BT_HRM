@@ -5,6 +5,7 @@ import { assertMenu, can } from '../lib/permissions.js';
 import { HttpError, notFound, prisma } from '../db.js';
 import { assignmentStatus, maxAllocation, plannedMd } from '../lib/alloc.js';
 import { today } from '../lib/dates.js';
+import { projectRates } from '../lib/projectRate.js';
 import { holidaySet, mdPerMm } from '../lib/settings.js';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
@@ -45,7 +46,7 @@ assignmentsRouter.get('/', async (req, res) => {
     },
     orderBy: [{ startDt: 'desc' }],
   });
-  // 과투입: 같은 인력의 전체 배정(다른 프로젝트 포함) 기준 기간 내 최대 투입률 합계
+  // 과투입: 같은 인력의 전체 배정(다른 프로젝트 포함) 기준 기간 내 최대 배정률 합계
   const all = await prisma.assignment.findMany({
     where: { empId: { in: [...new Set(rows.map((r) => r.empId))] }, canceled: false },
     select: { empId: true, startDt: true, endDt: true, allocRate: true },
@@ -104,7 +105,7 @@ assignmentsRouter.patch('/projects/:prjCd/status', async (req, res) => {
 
 /**
  * 프로젝트별 MD 산정 (배정 보드의 종료 프로젝트 최종 MD)
- * - 계획 MD = Σ(배정 기간 영업일 × 투입률), 실적 MD = 제출된 주간 업무보고의 투입 MD
+ * - 계획 MD = Σ(배정 기간 영업일 × 배정률), 실적 MD = 제출된 주간 업무보고의 투입 MD
  * - 인력별 계획/실적 MD 포함, MM = MD ÷ 1MM 환산 MD(기준값)
  */
 assignmentsRouter.get('/project-md', requireMenu('assignments'), async (req, res) => {
@@ -143,7 +144,8 @@ assignmentsRouter.get('/project-md', requireMenu('assignments'), async (req, res
       e.actualMd = r2(e.actualMd);
     }
   }
-  res.json(out);
+  const rates = await projectRates(Object.keys(out));
+  res.json(Object.fromEntries(Object.entries(out).map(([k, v]) => [k, { ...v, pr: rates.get(k) ?? null }])));
 });
 
 // ---- 협력사를 바로 수행인력으로 배정 ----
@@ -251,7 +253,7 @@ assignmentsRouter.get('/preview/overalloc', async (req, res) => {
     select: { asgId: true, prjCd: true, roleCd: true, startDt: true, endDt: true, allocRate: true, project: { select: { prjNm: true } } },
     orderBy: { startDt: 'asc' },
   });
-  // 기간 중 기존 배정 투입률 합계의 최댓값 (시작 지점 기준)
+  // 기간 중 기존 배정률 합계의 최댓값 (시작 지점 기준)
   const points = [q.startDt, ...overlapping.map((o) => o.startDt).filter((d) => d > q.startDt && d <= q.endDt)];
   const existing = Math.max(0, ...points.map((p) => overlapping.filter((o) => o.startDt <= p && o.endDt >= p).reduce((s, o) => s + o.allocRate, 0)));
   const total = existing + q.allocRate;

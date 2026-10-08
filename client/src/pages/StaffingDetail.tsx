@@ -59,7 +59,7 @@ export default function StaffingDetail() {
         <>
           <div className="kpis">
             <Kpi label="투입인력" value={`${p?.headcount ?? 0}명`} sub={`${month}월 배정 기준`} />
-            <Kpi label="투입률 합계" value={`${p?.allocTotal ?? 0}%`} sub="100% = 1명 전일 투입" />
+            <Kpi label="배정률 합계" value={`${p?.allocTotal ?? 0}%`} sub="100% = 1명 전일 투입" />
             <Kpi label={`${month}월 소요 MD`} value={num(p?.actualMd ?? 0)} sub={`계획 ${num(p?.planMd ?? 0)} MD`} />
             <Kpi label="누적 소요 MD" value={num(p?.cumMd ?? 0)} sub={prj?.contractMm ? `계약 ${num(prj.contractMm)} MM` : undefined} />
             <Kpi label="마일스톤" value={ms?.milestones.length ? pct(ms.progress) : '-'} sub={ms?.milestones.length ? `${ms.milestones.filter((m) => m.status === 'DONE').length}/${ms.milestones.length} 완료` : '미등록'} tone={ms?.milestones.some((m) => m.status === 'DELAY') ? 'bad' : undefined} />
@@ -81,7 +81,7 @@ export default function StaffingDetail() {
                   )}
                   {can('projectMm') && (
                     <Link className="btn sm" to={`/project-mm/${prjCd}`}>
-                      MM 현황
+                      투입률
                     </Link>
                   )}
                 </>
@@ -96,7 +96,7 @@ export default function StaffingDetail() {
                       <tr>
                         <th>인력</th>
                         <th>역할</th>
-                        <th className="num">투입률</th>
+                        <th className="num">배정률</th>
                         <th>시작일</th>
                         <th>종료일</th>
                         <th>상태</th>
@@ -116,7 +116,7 @@ export default function StaffingDetail() {
                             )}
                           </td>
                           <td data-label="역할">{label(ASG_ROLE, m.roleCd)}</td>
-                          <td data-label="투입률" className="num">
+                          <td data-label="배정률" className="num">
                             {m.allocRate}%
                           </td>
                           <td data-label="시작일" className="nowrap">
@@ -148,7 +148,7 @@ export default function StaffingDetail() {
                 </div>
               )}
               <p className="muted small" style={{ marginBottom: 0 }}>
-                소요 MD는 제출된 주간 업무보고 기준, 계획 MD는 배정 투입률 × 영업일 기준입니다. 같은 인력이 여러 번 배정된 경우 소요 MD는 인력 기준으로 같은 값이 표시됩니다.
+                소요 MD는 제출된 주간 업무보고 기준, 계획 MD는 배정률 × 영업일 기준입니다. 같은 인력이 여러 번 배정된 경우 소요 MD는 인력 기준으로 같은 값이 표시됩니다.
               </p>
             </Card>
             <Card title="주요 마일스톤">{ms ? <MilestoneTrack list={ms.milestones} progress={ms.progress} /> : <Loading />}</Card>

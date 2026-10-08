@@ -31,7 +31,7 @@ export const MENUS: MenuDef[] = [
   { key: 'onepage', label: '전사 One-Page', group: '주간보고', editable: true, editDesc: '종합 의견·차주 계획 입력, 확정·확정 취소' },
   { key: 'staffing', label: '프로젝트별 투입현황', group: '현황', editable: false },
   { key: 'utilization', label: '가동률', group: '현황', editable: false },
-  { key: 'projectMm', label: '프로젝트 MM', group: '현황', editable: false },
+  { key: 'projectMm', label: '프로젝트 투입률', group: '현황', editable: false },
   { key: 'employees', label: '인력', group: '기준정보', editable: true, editDesc: '등록·수정·삭제·일괄 등록·비밀번호 초기화 (관리자 계정·권한은 시스템관리자만)' },
   { key: 'projects', label: '프로젝트', group: '기준정보', editable: true, editDesc: '등록·수정·삭제' },
   { key: 'partners', label: '협력사', group: '기준정보', editable: true, editDesc: '등록·수정·삭제' },

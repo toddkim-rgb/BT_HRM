@@ -78,7 +78,7 @@ export default function Employees() {
     <div>
       <PageHeader
         title="인력"
-        desc="자사·협력사 인력 마스터. 투입률 합계는 오늘 기준이며 100% 초과분은 과투입으로 표시합니다."
+        desc="자사·협력사 인력 마스터. 배정률 합계는 오늘 기준이며 100% 초과분은 과투입으로 표시합니다."
         actions={
           isAdmin && (
             <>
@@ -126,7 +126,7 @@ export default function Employees() {
                   {showHr && <th>기술등급</th>}
                   {showHr && <th>고용형태</th>}
                   <th className="num">경력</th>
-                  <th className="num">투입률</th>
+                  <th className="num">배정률</th>
                   <th>상태</th>
                   {isAdmin && <th>권한</th>}
                 </tr>
@@ -148,7 +148,7 @@ export default function Employees() {
                     <td data-label="경력" className="num">
                       {e.careerYears != null ? `${e.careerYears}년` : '-'}
                     </td>
-                    <td data-label="투입률" className="num">
+                    <td data-label="배정률" className="num">
                       {e.allocTotal ? (
                         <span title={(e.currentAssignments ?? []).map((a) => `${a.prjNm} ${a.allocRate}%`).join('\n')}>
                           {e.allocTotal}%{(e.projectCount ?? 0) > 1 && <div className="small muted">{e.projectCount}개 프로젝트</div>}
@@ -328,7 +328,7 @@ function EmployeeDetail({ empId, onClose, onEdit, onDelete }: { empId: string; o
                       <th>프로젝트</th>
                       <th>역할</th>
                       <th>기간</th>
-                      <th className="num">투입률</th>
+                      <th className="num">배정률</th>
                       <th>상태</th>
                     </tr>
                   </thead>
@@ -342,7 +342,7 @@ function EmployeeDetail({ empId, onClose, onEdit, onDelete }: { empId: string; o
                         <td data-label="기간" className="nowrap">
                           {a.startDt} ~ {a.endDt}
                         </td>
-                        <td data-label="투입률" className="num">
+                        <td data-label="배정률" className="num">
                           {a.allocRate}%
                         </td>
                         <td data-label="상태">

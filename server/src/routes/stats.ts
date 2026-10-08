@@ -7,7 +7,8 @@ import { addDays, addMonths, businessDays, isValidWeek, isoWeek, monthRange, shi
 import { getSettings, holidaySet, mdPerMm } from '../lib/settings.js';
 import { usableEmp } from '../lib/empFilter.js';
 import { workforce } from '../lib/workforce.js';
-import { lastWeek, weeklyTrend, weeklyUtilization } from '../lib/weeklyUtil.js';
+import { lastWeek, reconfirmWeek, weeklyTrend, weeklyUtilization } from '../lib/weeklyUtil.js';
+import { projectRates } from '../lib/projectRate.js';
 import { parse, ymStr } from '../lib/validate.js';
 import { z } from 'zod';
 import { PAID_TYPES, WORK_TYPES } from './projects.js';
@@ -47,6 +48,15 @@ statsRouter.get('/utilization', requireMenu('utilization'), async (req, res) => 
   });
 });
 
+/** 지난 주 확정 가동률 다시 집계 (배정을 정정한 뒤, 기준값 편집 권한) */
+statsRouter.post('/utilization/:week/reconfirm', requireMenu('settings', 'EDIT'), async (req, res) => {
+  const week = String(req.params.week);
+  if (!isValidWeek(week)) throw new HttpError(400, '주차 형식은 YYYY-Www 입니다.');
+  if (week >= isoWeek(today())) throw new HttpError(400, '지난 주만 다시 확정할 수 있습니다.');
+  const r = await reconfirmWeek(week);
+  res.json({ ok: true, week, rate: r.rate, fteRate: r.fteRate, confirmedAt: r.confirmedAt });
+});
+
 /** 인력별 최근 12주 투입 여부 */
 statsRouter.get('/utilization/:empId/trend', requireMenu('utilization'), async (req, res) => {
   const u = me(req);
@@ -74,6 +84,7 @@ async function projectMm(prjCds: string[]) {
     _sum: { md: true },
   });
   const t = today();
+  const rates = await projectRates(prjCds);
   return projects.map((p) => {
     const pa = asg.filter((a) => a.prjCd === p.prjCd);
     const planMd = pa.reduce((s, a) => s + plannedMd(a, a.startDt, a.endDt, holidays), 0);
@@ -95,6 +106,7 @@ async function projectMm(prjCds: string[]) {
       planToDateMm: round2(planToDateMd / mdmm),
       actualMm: round2(actualMm),
       burnRate: p.contractMm ? round1((actualMm / p.contractMm) * 100) : null,
+      pr: rates.get(p.prjCd) ?? null, // 프로젝트 투입률 (lib/projectRate)
     };
   });
 }
@@ -139,6 +151,14 @@ statsRouter.get('/projects/:prjCd/mm', requireMenu('projectMm'), async (req, res
 });
 
 /** 대시보드 요약 (F-020 일부) */
+async function activeProjectRates() {
+  const active = await prisma.project.findMany({ where: { statusCd: 'ACTIVE', prjType: { not: 'NP' } }, select: { prjCd: true, prjNm: true, customerNm: true } });
+  const rates = await projectRates(active.map((p) => p.prjCd));
+  return active
+    .map((p) => ({ ...rates.get(p.prjCd)!, prjNm: p.prjNm, customerNm: p.customerNm }))
+    .sort((a, b) => ['UNDER', 'OVER', 'NO_BASE', 'NORMAL', 'NOT_STARTED'].indexOf(a.status) - ['UNDER', 'OVER', 'NO_BASE', 'NORMAL', 'NOT_STARTED'].indexOf(b.status));
+}
+
 statsRouter.get('/summary', requireMenu('dashboard'), async (req, res) => {
   // 전사 요약: 대시보드 권한 + 수행인력 역할 제외 (수행인력 대시보드는 본인 정보만)
   if (staffOnly(me(req))) throw forbidden();
@@ -160,16 +180,18 @@ statsRouter.get('/summary', requireMenu('dashboard'), async (req, res) => {
     bench: wf.summary.bench,
     overAllocated: wf.summary.overAllocated,
     releasingIn30: releasing,
-    util: { week: lw, rate: util.rate, total: util.total, assigned: util.assigned },
+    util: { week: lw, rate: util.rate, total: util.total, assigned: util.assigned, fteRate: util.fteRate ?? null, confirmed: !!util.confirmedAt },
     prevUtil: { week: prevUtil.week, rate: prevUtil.rate },
+    // 진행중 프로젝트 투입률 (경과율 대비 상태)
+    projectRates: await activeProjectRates(),
   });
 });
 
 /**
  * 프로젝트별 투입인력 현황판 (v1.0 핵심 ①)
- * - projects: 프로젝트 → 투입인력(역할·투입률·기간·해당 월 계획/실적 MD)
+ * - projects: 프로젝트 → 투입인력(역할·배정률·기간·해당 월 계획/실적 MD)
  * - people: 인력 → 투입 프로젝트 (다중 투입·과투입·대기)
- * - timeline: 인력 × 월 투입률 (배정 기준)
+ * - timeline: 인력 × 월 배정률 (배정 기준)
  */
 statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
   const u = me(req);
@@ -250,7 +272,7 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
         endDt: p.endDt,
         contractMm: p.contractMm,
         headcount: empIds.length,
-        allocTotal: members.reduce((s2, m) => s2 + m.allocRate, 0), // 투입률 합계 (100% = 1명 전일)
+        allocTotal: members.reduce((s2, m) => s2 + m.allocRate, 0), // 배정률 합계 (100% = 1명 전일)
         cumMd: cum.find((c) => c.prjCd === prjCd)?._sum.md ?? 0,
         planMd: round1(planMd),
         actualMd,
@@ -316,7 +338,7 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
         overAlloc: Math.max(0, currentAlloc - 100),
         projectCount: new Set(mine.map((a) => a.prjCd)).size,
         assignments: mine.map((a) => ({ asgId: a.asgId, prjCd: a.prjCd, prjNm: a.project.prjNm, roleCd: a.roleCd, allocRate: a.allocRate, startDt: a.startDt, endDt: a.endDt, planMd: round1(plannedMd(a, start, end, holidays)), actualMd: actualOf(empId, a.prjCd) })),
-        // 주별 투입률(%) = Σ(배정 영업일 × 투입률) ÷ 그 주 영업일
+        // 주별 배정률(%) = Σ(배정 영업일 × 배정률) ÷ 그 주 영업일
         weekly: weeks.map((w) => {
           const bd = businessDays(w.start, w.end, holidays).length;
           const items = asgW
@@ -325,7 +347,7 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
             .filter((x) => x.pct > 0);
           return { week: w.week, total: items.reduce((s2, x) => s2 + x.pct, 0), items };
         }),
-        // 월별 투입률(%) = Σ(배정 영업일 × 투입률) ÷ 그 달 영업일
+        // 월별 배정률(%) = Σ(배정 영업일 × 배정률) ÷ 그 달 영업일
         timeline: months.map((ym) => {
           const m = monthRange(ym);
           const bd = businessDays(m.start, m.end, holidays).length;
@@ -339,5 +361,6 @@ statsRouter.get('/staffing', requireMenu('staffing'), async (req, res) => {
     })
     .sort((a, b) => a.deptCd.localeCompare(b.deptCd) || a.name.localeCompare(b.name));
 
-  res.json({ ym: q.ym, months, weeks, projects, people });
+  const rates = await projectRates(projects.map((p) => p.prjCd));
+  res.json({ ym: q.ym, months, weeks, projects: projects.map((p) => ({ ...p, pr: rates.get(p.prjCd) ?? null })), people });
 });

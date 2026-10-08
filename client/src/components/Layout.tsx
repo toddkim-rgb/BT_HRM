@@ -34,7 +34,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { to: '/staffing', label: '프로젝트별 투입현황', icon: '▩', menu: 'staffing' },
       { to: '/utilization', label: '가동률', icon: '▤', menu: 'utilization' },
-      { to: '/project-mm', label: '프로젝트 MM', icon: '▥', menu: 'projectMm' },
+      { to: '/project-mm', label: '프로젝트 투입률', icon: '▥', menu: 'projectMm' },
     ],
   },
   {

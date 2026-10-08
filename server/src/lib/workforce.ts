@@ -16,8 +16,8 @@ export interface WorkforceRow {
   name: string;
   deptCd: string;
   employType: string;
-  current: number; // 기준일 투입률 합계(%)
-  planned: number; // 기준일 이후 시작하는 배정의 투입률 합계(%)
+  current: number; // 기준일 배정률 합계(%)
+  planned: number; // 기준일 이후 시작하는 배정의 배정률 합계(%)
   plannedStartDt: string | null; // 가장 빠른 예정 시작일
   category: WorkforceCategory;
 }

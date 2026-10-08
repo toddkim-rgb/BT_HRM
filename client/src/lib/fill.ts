@@ -1,9 +1,9 @@
-// 다중 프로젝트 투입: '배정대로 채우기' — 배정 투입률에 맞춰 요일별 MD를 0.5 단위로 배분
+// 다중 프로젝트 투입: '배정대로 채우기' — 배정률에 맞춰 요일별 MD를 0.5 단위로 배분
 
 export interface WeekPlan {
   prjCd: string;
   plannedMd: number;
-  days: Record<string, number>; // 영업일별 투입률(%)
+  days: Record<string, number>; // 영업일별 배정률(%)
 }
 
 export interface TsRowLike {
@@ -14,7 +14,7 @@ export interface TsRowLike {
 /**
  * - 배정 프로젝트 행은 새로 계산해 덮어쓰고, 그 외 행(휴가·교육 등 공통코드)은 유지
  * - 프로젝트별 목표 = 계획 MD를 0.5 단위로 반올림
- * - 투입률 높은 프로젝트부터, 배정된 날짜에 0.5씩 돌아가며 배분 (하루 합계 1.0 이하)
+ * - 배정률 높은 프로젝트부터, 배정된 날짜에 0.5씩 돌아가며 배분 (하루 합계 1.0 이하)
  */
 export function fillByAssignment<T extends TsRowLike>(rows: T[], plan: WeekPlan[], businessDays: string[]): T[] {
   const planned = new Set(plan.map((p) => p.prjCd));

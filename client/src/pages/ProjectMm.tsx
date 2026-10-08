@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, ProgressBar, Select, PrjTypeBadge } from '../components/ui';
+import { Badge, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, PrjTypeBadge } from '../components/ui';
 import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num, pct } from '../lib/format';
 import { useFetch } from '../lib/hooks';
+import { RateBar, baseLabel, type ProjectRate } from '../components/ProjectRate';
 import { useShowHr } from '../lib/auth';
 
 interface Summary {
@@ -20,6 +22,7 @@ interface Summary {
   planToDateMm: number;
   actualMm: number;
   burnRate: number | null;
+  pr: ProjectRate | null;
 }
 interface Detail extends Summary {
   monthly: { ym: string; planMm: number; actualMm: number }[];
@@ -48,10 +51,26 @@ function ProjectList() {
   const { data: settings } = useFetch<Record<string, string>>('/admin/settings');
   const mdPerMm = settings?.MD_PER_MM ?? '22';
   const nav = useNavigate();
-  const rows = (data ?? []).filter((p) => p.statusCd !== 'PROPOSAL');
+  const [showDone, setShowDone] = useState(false);
+  // 진행중 → 완료 순, 진행중은 과소·과다를 위로
+  const order = ['UNDER', 'OVER', 'NO_BASE', 'NORMAL', 'NOT_STARTED', 'DONE'];
+  const rows = (data ?? [])
+    .filter((p) => p.statusCd !== 'PROPOSAL' && (showDone || !['DONE', 'STOP'].includes(p.statusCd)))
+    .sort((a, b) => order.indexOf(a.pr?.status ?? 'NORMAL') - order.indexOf(b.pr?.status ?? 'NORMAL'));
+  const doneCount = (data ?? []).filter((p) => ['DONE', 'STOP'].includes(p.statusCd)).length;
   return (
     <div>
-      <PageHeader title="프로젝트 MM 현황" desc={`계획 MM = Σ(배정 기간 영업일 × 투입률) ÷ ${mdPerMm} · 실적 MM = 제출된 투입MD ÷ ${mdPerMm} · 소진율 = 누적 실적 MM ÷ 계약 MM (1MM = ${mdPerMm}MD, 기준값 설정)`} />
+      <PageHeader
+        title="프로젝트 투입률"
+        desc={`투입률 = 누적 실적 MD ÷ 기준 MD (종료 시 100% 목표). 기준 MD = 계약 MM × ${mdPerMm}MD, 계약 MM이 없으면 배정 계획 MD. 실적 MD는 제출된 주간 업무보고 기준. 진행 중에는 기간 경과율과 비교해 ±10%p를 넘으면 과소·과다로 표시하고, 종료 예상 = (실적 + 남은 배정 계획) ÷ 기준입니다.`}
+        actions={
+          doneCount > 0 && (
+            <label className="check small">
+              <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> 완료 프로젝트 포함 ({doneCount})
+            </label>
+          )
+        }
+      />
       <Card>
         <ErrorBox error={error} />
         {loading && !data ? (
@@ -66,12 +85,11 @@ function ProjectList() {
                   <th>고객사</th>
                   <th>프로젝트</th>
                   <th>PM</th>
-                  <th className="num">투입인원</th>
-                  <th className="num">계약MM</th>
-                  <th className="num">계획MM</th>
-                  <th className="num">현재까지 계획</th>
-                  <th className="num">실적MM</th>
-                  <th>MM 소진율</th>
+                  <th>기간</th>
+                  <th className="num">기준 MD</th>
+                  <th className="num">실적 MD</th>
+                  <th style={{ minWidth: 200 }}>투입률 / 경과율</th>
+                  <th className="num">종료 예상</th>
                 </tr>
               </thead>
               <tbody>
@@ -82,32 +100,21 @@ function ProjectList() {
                       <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge> <strong title={p.prjCd}>{p.prjNm}</strong>
                     </td>
                     <td data-label="PM">{p.pmName ?? '-'}</td>
-                    <td data-label="투입인원" className="num">
-                      {p.headcount}명
+                    <td data-label="기간" className="small nowrap">
+                      {p.startDt ?? '-'} ~ {p.endDt ?? '-'}
                     </td>
-                    <td data-label="계약MM" className="num">
-                      {num(p.contractMm)}
+                    <td data-label="기준 MD" className="num">
+                      {p.pr?.baseMd != null ? num(p.pr.baseMd) : '-'}
+                      {p.pr && <div className="small muted">{baseLabel(p.pr)}</div>}
                     </td>
-                    <td data-label="계획MM" className="num">
-                      {num(p.planMm, 2)}
+                    <td data-label="실적 MD" className="num">
+                      <strong>{num(p.pr?.actualMd ?? 0)}</strong>
                     </td>
-                    <td data-label="현재까지 계획" className="num">
-                      {num(p.planToDateMm, 2)}
+                    <td data-label="투입률 / 경과율">
+                      <RateBar pr={p.pr} />
                     </td>
-                    <td data-label="실적MM" className="num">
-                      <strong>{num(p.actualMm, 2)}</strong>
-                    </td>
-                    <td data-label="MM 소진율">
-                      {p.burnRate == null ? (
-                        <span className="muted">-</span>
-                      ) : (
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 130, justifyContent: 'flex-end' }}>
-                          <div style={{ flex: 1, maxWidth: 90 }}>
-                            <ProgressBar value={p.burnRate} />
-                          </div>
-                          <span className={`num ${burnTone(p.burnRate)}-text`}>{pct(p.burnRate)}</span>
-                        </div>
-                      )}
+                    <td data-label="종료 예상" className="num">
+                      {p.pr?.forecast != null ? <span className={p.pr.forecast > 100 ? 'bad-text' : undefined}>{pct(p.pr.forecast)}</span> : '-'}
                     </td>
                   </tr>
                 ))}
@@ -154,7 +161,16 @@ function ProjectDetail({ prjCd }: { prjCd: string }) {
         <Kpi label="계획 MM" value={num(data.planMm, 2)} sub={`현재까지 ${num(data.planToDateMm, 2)}`} />
         <Kpi label="실적 MM" value={num(data.actualMm, 2)} />
         <Kpi label="MM 소진율" value={pct(data.burnRate)} tone={burnTone(data.burnRate)} sub={data.burnRate != null && data.burnRate >= 80 ? '80% 이상 소진' : undefined} />
+        <Kpi label="종료 예상 투입률" value={pct(data.pr?.forecast ?? null)} sub="실적 + 남은 배정 계획" tone={data.pr?.forecast != null && data.pr.forecast > 100 ? 'bad' : undefined} />
       </div>
+      {data.pr && (
+        <Card title="프로젝트 투입률 (종료 시 100% 목표)">
+          <RateBar pr={data.pr} />
+          <div className="small muted" style={{ marginTop: 6 }}>
+            실적 {num(data.pr.actualMd)} MD ÷ 기준 {data.pr.baseMd != null ? num(data.pr.baseMd) : '-'} MD ({baseLabel(data.pr)}) · 남은 배정 계획 {num(data.pr.remainingPlanMd)} MD
+          </div>
+        </Card>
+      )}
       <div className="stack">
         <Card
           title="월별 계획 vs 실적 MM"
@@ -198,7 +214,7 @@ function ProjectDetail({ prjCd }: { prjCd: string }) {
                     <th>인력</th>
                     <th>역할</th>
                     <th>기간</th>
-                    <th className="num">투입률</th>
+                    <th className="num">배정률</th>
                     <th className="num">계획MM</th>
                     <th className="num">실적MM</th>
                   </tr>
@@ -214,7 +230,7 @@ function ProjectDetail({ prjCd }: { prjCd: string }) {
                       <td data-label="기간" className="nowrap small">
                         {m.startDt} ~ {m.endDt}
                       </td>
-                      <td data-label="투입률" className="num">
+                      <td data-label="배정률" className="num">
                         {m.allocRate}%
                       </td>
                       <td data-label="계획MM" className="num">

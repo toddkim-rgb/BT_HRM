@@ -105,8 +105,8 @@ async function projectMap(codes: string[]) {
 }
 
 /**
- * 다중 프로젝트 투입: 프로젝트별 해당 주 계획 MD (배정 투입률 기준)
- * days = 영업일별 투입률 합계(%) — 같은 프로젝트 중복 배정은 합산
+ * 다중 프로젝트 투입: 프로젝트별 해당 주 계획 MD (배정률 기준)
+ * days = 영업일별 배정률 합계(%) — 같은 프로젝트 중복 배정은 합산
  */
 async function weekPlan(empId: string, week: string, holidays: Set<string>) {
   const days = weekDays(week);
@@ -162,7 +162,7 @@ async function buildView(empId: string, week: string) {
     planItems = [];
     issues = [];
   }
-  // 배정된 프로젝트(해당 주 배정기간 내) 행 자동 생성 — 투입률 높은 순
+  // 배정된 프로젝트(해당 주 배정기간 내) 행 자동 생성 — 배정률 높은 순
   for (const p of plan) if (!tsRows.some((r) => r.prjCd === p.prjCd)) tsRows.push({ prjCd: p.prjCd, md: {} });
 
   const pm = await projectMap(tsRows.map((r) => r.prjCd));

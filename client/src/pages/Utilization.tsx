@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Badge, Card, Empty, ErrorBox, Kpi, Loading, Modal, PageHeader, ProgressBar } from '../components/ui';
-import { qs } from '../lib/api';
+import { Badge, Card, Empty, ErrorBox, Kpi, Loading, Modal, PageHeader, ProgressBar, useToast } from '../components/ui';
+import { api, qs } from '../lib/api';
 import { useAuth, useShowHr } from '../lib/auth';
 import { EMPLOY_TYPE } from '../lib/codes';
 import { label, num, pct } from '../lib/format';
@@ -45,6 +45,9 @@ interface Resp {
   assigned: number;
   notAssigned: number;
   rate: number | null;
+  fte: number;
+  fteRate: number | null;
+  confirmedAt: string | null; // 지난 주 확정 시각 (이번 주 이후는 null = 배정 기준 예상)
   prevRate: number | null;
   diff: number | null;
   rows: Row[];
@@ -57,11 +60,23 @@ const lastWeek = () => shiftWeek(isoWeek(today()), -1);
 const diffText = (d: number | null) => (d == null ? undefined : `전주 대비 ${d >= 0 ? '▲' : '▼'}${Math.abs(d)}%p`);
 
 export default function Utilization() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const showHr = useShowHr(); // 기술등급·고용형태는 수행인력에게 표시하지 않음
   const isEmp = user?.role === 'EMP' && !user?.isPm; // 일반 수행인력은 본인만
   const [week, setWeek] = useState(lastWeek());
-  const { data, error, loading } = useFetch<Resp>(`/stats/utilization${qs({ week })}`);
+  const { data, error, loading, reload } = useFetch<Resp>(`/stats/utilization${qs({ week })}`);
+  const toast = useToast();
+  // 지난 주 확정 기록 다시 집계 (배정을 정정한 뒤, 기준값 편집 권한)
+  const reconfirm = async () => {
+    if (!window.confirm(`${weekLabel(week)} 가동률을 현재 배정 기준으로 다시 집계해 확정할까요?`)) return;
+    try {
+      await api.post(`/stats/utilization/${week}/reconfirm`);
+      toast('다시 확정했습니다.', 'info');
+      reload();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'bad');
+    }
+  };
   const [sort, setSort] = useState<'assigned' | 'name' | 'dept'>('assigned');
   const [trend, setTrend] = useState<Row | null>(null);
 
@@ -86,10 +101,16 @@ export default function Utilization() {
             </button>
             <span style={{ minWidth: 150, textAlign: 'center' }}>
               <strong>{weekLabel(week)}</strong>
+              {data && (data.confirmedAt ? <Badge tone="good">확정</Badge> : <Badge tone="neutral">예상</Badge>)}
             </span>
             <button className="btn sm" onClick={() => setWeek(shiftWeek(week, 1))} aria-label="다음 주">
               ▶
             </button>
+            {data?.confirmedAt && can('settings', 'EDIT') && (
+              <button className="btn sm" onClick={reconfirm} title="배정을 정정했을 때 이 주 가동률을 다시 집계">
+                다시 확정
+              </button>
+            )}
             {week !== lastWeek() && (
               <button className="btn sm" onClick={() => setWeek(lastWeek())}>
                 지난주
@@ -105,6 +126,7 @@ export default function Utilization() {
         <>
           <div className="kpis">
             <Kpi label={isFuture ? '가동률 (배정 기준 예상)' : '가동률'} value={pct(data.rate)} sub={diffText(data.diff)} />
+            <Kpi label="FTE 가동률 (보조)" value={pct(data.fteRate)} sub={`배정 비중 합 ${data.fte}명 · 반만 투입도 반영`} />
             <Kpi label="대상 인원" value={`${data.total}명`} />
             <Kpi label="투입" value={`${data.assigned}명`} sub="그 주 배정 있음" />
             <Kpi label="미투입" value={`${data.notAssigned}명`} sub="그 주 배정 없음" tone={data.notAssigned ? 'warn' : undefined} />

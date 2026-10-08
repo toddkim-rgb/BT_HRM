@@ -11,13 +11,13 @@ export function assignmentStatus(a: { startDt: string; endDt: string; canceled: 
   return 'ACTIVE';
 }
 
-/** 기간 중 일자별 투입률 합계의 최댓값 (100 초과분 = 과투입 %) */
+/** 기간 중 일자별 배정률 합계의 최댓값 (100 초과분 = 과투입 %) */
 export async function maxAllocation(empId: string, start: string, end: string): Promise<number> {
   const rows = await prisma.assignment.findMany({
     where: { empId, canceled: false, startDt: { lte: end }, endDt: { gte: start } },
     select: { startDt: true, endDt: true, allocRate: true },
   });
-  // 투입률 합계는 배정 시작일에서만 증가하므로 시작 지점들만 확인
+  // 배정률 합계는 배정 시작일에서만 증가하므로 시작 지점들만 확인
   const points = new Set([start, ...rows.map((r) => r.startDt).filter((d) => d >= start && d <= end)]);
   let max = 0;
   for (const p of points) {
@@ -51,7 +51,7 @@ export async function currentAllocations(): Promise<Map<string, CurrentAlloc[]>>
   return m;
 }
 
-/** 아직 시작 전인 예정 배정: 인력별 투입률 합계와 가장 빠른 시작일 */
+/** 아직 시작 전인 예정 배정: 인력별 배정률 합계와 가장 빠른 시작일 */
 export async function plannedAllocations(): Promise<Map<string, { alloc: number; startDt: string }>> {
   const t = today();
   const rows = await prisma.assignment.findMany({ where: { canceled: false, startDt: { gt: t } }, select: { empId: true, allocRate: true, startDt: true } });
@@ -63,7 +63,7 @@ export async function plannedAllocations(): Promise<Map<string, { alloc: number;
   return m;
 }
 
-/** 배정의 기간 내 계획 MD = 영업일 × 투입률 */
+/** 배정의 기간 내 계획 MD = 영업일 × 배정률 */
 export function plannedMd(
   a: { startDt: string; endDt: string; allocRate: number },
   rangeStart: string,

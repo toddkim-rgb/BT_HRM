@@ -341,3 +341,14 @@ model MenuPermission {
 
   @@id([role, menu])
 }
+
+// 주간 인력 가동률 확정 기록 (지난 주는 처음 집계할 때 확정·저장 → 이후 배정을 고쳐도 과거 기록 유지)
+model UtilSnapshot {
+  week        String   @id // YYYY-Www
+  total       Int
+  assigned    Int
+  rate        Float?
+  fteRate     Float?
+  data        String // 집계 결과 전체(JSON)
+  confirmedAt DateTime @default(now())
+}

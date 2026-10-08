@@ -167,15 +167,15 @@ export default function WeeklyWork() {
     }
   };
 
-  // 다중 프로젝트 투입: 배정 투입률대로 요일별 MD 자동 배분
+  // 다중 프로젝트 투입: 배정률대로 요일별 MD 자동 배분
   const fill = () => {
     const hasInput = v.timesheet.some((r) => v.plan.some((p) => p.prjCd === r.prjCd) && Object.values(r.md).some((x) => x));
-    if (hasInput && !window.confirm('배정된 프로젝트 행의 입력값을 투입률대로 다시 채웁니다. 계속할까요?')) return;
+    if (hasInput && !window.confirm('배정된 프로젝트 행의 입력값을 배정률대로 다시 채웁니다. 계속할까요?')) return;
     update((d) => {
       const names = new Map(d.timesheet.map((r) => [r.prjCd, r]));
       d.timesheet = fillByAssignment(d.timesheet, d.plan, d.businessDays).map((r) => ({ ...names.get(r.prjCd), ...r }));
     });
-    toast('배정 투입률대로 채웠습니다. 실제와 다르면 수정하세요.', 'info');
+    toast('배정률대로 채웠습니다. 실제와 다르면 수정하세요.', 'info');
   };
 
   const loadCarryover = async () => {
@@ -309,7 +309,7 @@ export default function WeeklyWork() {
       {v.plan.length > 1 && (
         <div className="alert info">
           이번 주 {v.plan.length}개 프로젝트에 투입 중입니다 · {v.plan.map((p) => `${nameOf({ prjCd: p.prjCd })} 계획 ${num(p.plannedMd)}MD`).join(' · ')}
-          {Object.values(v.dayAlloc).some((a) => a > 100) && ' · 투입률 합계가 100%를 넘는 날이 있어 하루 1.0MD 안에서 나눠 입력해야 합니다.'}
+          {Object.values(v.dayAlloc).some((a) => a > 100) && ' · 배정률 합계가 100%를 넘는 날이 있어 하루 1.0MD 안에서 나눠 입력해야 합니다.'}
         </div>
       )}
       <ErrorBox error={err} />

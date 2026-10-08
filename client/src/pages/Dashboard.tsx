@@ -2,9 +2,10 @@ import { Link } from 'react-router-dom';
 import { Badge, Card, Empty, Kpi, Loading, PageHeader, ProgressBar } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, WW_STATUS } from '../lib/codes';
-import { label, num, pct } from '../lib/format';
+import { label, pct } from '../lib/format';
 import { isoWeek, shiftWeek, today, weekLabel } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
+import { RateBar, type ProjectRate } from '../components/ProjectRate';
 
 interface Summary {
   totalHeadcount: number;
@@ -16,7 +17,8 @@ interface Summary {
   planned: number;
   plannedNames: { name: string; startDt: string | null }[];
   releasingIn30: number;
-  util: { week: string; rate: number | null; total: number; assigned: number };
+  util: { week: string; rate: number | null; total: number; assigned: number; fteRate: number | null; confirmed: boolean };
+  projectRates: (ProjectRate & { prjNm: string; customerNm: string | null })[];
   prevUtil: { week: string; rate: number | null };
 }
 
@@ -46,16 +48,38 @@ export default function Dashboard() {
 function CompanySummary() {
   const { data } = useFetch<Summary>('/stats/summary');
   if (!data) return <Loading />;
+  const pr = data.projectRates;
+  const cnt = (s: string) => pr.filter((p) => p.status === s).length;
   return (
+    <>
+      {/* 시스템의 두 목표: 인력 가동률 100% · 프로젝트 투입률 종료 시 100% */}
+      <div className="goal-row">
+        <Link to="/utilization" className="goal-card">
+          <div className="goal-title">인력 가동률 <span className="muted small">목표 100% · {weekLabel(data.util.week)}{data.util.confirmed ? ' 확정' : ''}</span></div>
+          <div className="goal-value">{pct(data.util.rate)}</div>
+          <div className="small">
+            투입 {data.util.assigned}/{data.util.total}명 · FTE {pct(data.util.fteRate)} · 대기 {data.bench}명
+            {diff(data.util.rate, data.prevUtil.rate) ? ` · ${diff(data.util.rate, data.prevUtil.rate)}` : ''}
+          </div>
+          <ProgressBar value={data.util.rate} tone={data.util.rate != null && data.util.rate >= 100 ? 'good' : 'warn'} />
+        </Link>
+        <Link to="/project-mm" className="goal-card">
+          <div className="goal-title">프로젝트 투입률 <span className="muted small">종료 시 100% 목표 · 진행중 {pr.length}개</span></div>
+          <div className="goal-value">
+            정상 {cnt('NORMAL')} <span className="goal-sep">·</span> <span className="warn-text">과소 {cnt('UNDER')}</span> <span className="goal-sep">·</span> <span className="bad-text">과다 {cnt('OVER')}</span>
+          </div>
+          <div className="small muted">경과율 대비 ±10%p 기준{cnt('NO_BASE') ? ` · 기준 MD 없음 ${cnt('NO_BASE')}개` : ''}{cnt('NOT_STARTED') ? ` · 시작 전 ${cnt('NOT_STARTED')}개` : ''}</div>
+        </Link>
+      </div>
     <div className="kpis">
       <Kpi label="총 인원" value={`${data.totalHeadcount}명`} sub={`자사 ${data.ownHeadcount} · 협력사 ${data.partnerHeadcount}`} />
       <Kpi label="투입 인원" value={`${data.assigned}명`} />
       <Kpi label="투입 예정" value={`${data.planned}명`} sub={data.planned ? data.plannedNames.map((p) => `${p.name}${p.startDt ? ` ${Number(p.startDt.slice(5, 7))}/${Number(p.startDt.slice(8))}~` : ''}`).join(', ') : '시작 전 배정 없음'} />
       <Kpi label="대기 인원" value={`${data.bench}명`} sub="현재·예정 배정 없음" tone={data.bench ? 'warn' : undefined} />
-      <Kpi label="지난주 가동률" value={pct(data.util.rate)} sub={`${weekLabel(data.util.week)} · ${data.util.assigned}/${data.util.total}명${diff(data.util.rate, data.prevUtil.rate) ? ` · ${diff(data.util.rate, data.prevUtil.rate)}` : ''}`} />
       <Kpi label="과투입" value={`${data.overAllocated}명`} tone={data.overAllocated ? 'bad' : undefined} />
       <Kpi label="30일 내 철수 예정" value={`${data.releasingIn30}건`} tone={data.releasingIn30 ? 'warn' : undefined} />
     </div>
+    </>
   );
 }
 
@@ -107,7 +131,7 @@ function MyAssignments() {
       actions={
         activeTotal > 0 && (
           <Badge tone={activeTotal > 100 ? 'bad' : 'info'}>
-            현재 투입률 합계 {activeTotal}%{activeTotal > 100 && ` (과투입 +${activeTotal - 100}%)`}
+            현재 배정률 합계 {activeTotal}%{activeTotal > 100 && ` (과투입 +${activeTotal - 100}%)`}
           </Badge>
         )
       }
@@ -180,11 +204,12 @@ function SubmissionSummary() {
 }
 
 function ProjectBurn() {
-  const { data } = useFetch<{ prjCd: string; prjNm: string; contractMm: number | null; actualMm: number; burnRate: number | null; statusCd: string }[]>('/stats/projects');
-  const list = (data ?? []).filter((p) => p.burnRate != null && p.statusCd !== 'PROPOSAL').sort((a, b) => (b.burnRate ?? 0) - (a.burnRate ?? 0));
+  const { data } = useFetch<{ prjCd: string; prjNm: string; customerNm: string | null; statusCd: string; pr: ProjectRate | null }[]>('/stats/projects');
+  const order = ['UNDER', 'OVER', 'NO_BASE', 'NORMAL', 'NOT_STARTED', 'DONE'];
+  const list = (data ?? []).filter((p) => p.statusCd === 'ACTIVE' && p.pr).sort((a, b) => order.indexOf(a.pr!.status) - order.indexOf(b.pr!.status));
   return (
     <Card
-      title="프로젝트 MM 소진율"
+      title="프로젝트 투입률 (진행중)"
       actions={
         <Link className="btn sm" to="/project-mm">
           전체 보기
@@ -194,19 +219,14 @@ function ProjectBurn() {
       {!data ? (
         <Loading />
       ) : !list.length ? (
-        <Empty>계약 MM이 등록된 프로젝트가 없습니다.</Empty>
+        <Empty>진행중인 프로젝트가 없습니다.</Empty>
       ) : (
         list.slice(0, 8).map((p) => (
-          <Link key={p.prjCd} to={`/project-mm/${p.prjCd}`} style={{ display: 'block', color: 'inherit', marginBottom: 10 }}>
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-              <span>
-                <strong title={p.prjCd}>{p.prjNm}</strong>
-              </span>
-              <span className="num small">
-                {num(p.actualMm, 2)} / {num(p.contractMm)} MM · <strong>{pct(p.burnRate)}</strong>
-              </span>
+          <Link key={p.prjCd} to={`/project-mm/${p.prjCd}`} style={{ display: 'block', color: 'inherit', marginBottom: 12 }}>
+            <div className="small" style={{ marginBottom: 2 }}>
+              <span className="muted">{p.customerNm ?? ''}</span> <strong title={p.prjCd}>{p.prjNm}</strong>
             </div>
-            <ProgressBar value={p.burnRate} />
+            <RateBar pr={p.pr} compact />
           </Link>
         ))
       )}

@@ -547,3 +547,26 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 @media (hover: hover) {
   .board-prj.planned:hover, .board-prj.planned:focus-within { background: #1f3b63; border-color: #1f3b63; }
 }
+
+/* 두 목표 카드 (대시보드) */
+.goal-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.goal-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: inherit; box-shadow: var(--shadow); }
+.goal-card:hover { border-color: var(--primary-2); }
+.goal-title { font-weight: 700; }
+.goal-value { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.goal-sep { color: var(--muted); font-weight: 400; }
+/* 프로젝트 투입률 막대: 채움 = 투입률, 세로선 = 경과율 */
+.rate { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.rate-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.rate-elapsed { color: var(--muted); }
+.rate-bar { position: relative; height: 8px; background: #e9edf3; border-radius: 4px; overflow: visible; }
+.rate-fill { height: 100%; background: #2a78d6; border-radius: 4px; }
+.rate-fill.over { background: #d03b3b; }
+.rate-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); transform: translateX(-1px); border-radius: 1px; }
+.rate.compact .badge { font-size: 11px; padding: 0 6px; }
+/* 카드 안 투입률 막대: 반전(마우스 오버) 시 대비 */
+@media (hover: hover) {
+  .board-prj:hover .rate-bar, .board-prj:focus-within .rate-bar { background: rgba(255, 255, 255, 0.25); }
+  .board-prj:hover .rate-mark, .board-prj:focus-within .rate-mark { background: #fff; }
+  .board-prj:hover .rate-elapsed, .board-prj:focus-within .rate-elapsed { color: rgba(255, 255, 255, 0.75); }
+}

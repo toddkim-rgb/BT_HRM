@@ -6,6 +6,7 @@ import { ASG_ROLE, EMPLOY_TYPE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num } from '../lib/format';
 import { addMonths, today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
+import { RateBar, type ProjectRate } from '../components/ProjectRate';
 import { useAuth, useShowHr } from '../lib/auth';
 
 export interface Member {
@@ -41,6 +42,7 @@ export interface Prj {
   planMm: number;
   actualMm: number;
   members: Member[];
+  pr: ProjectRate | null; // 프로젝트 투입률
 }
 interface Person {
   empId: string;
@@ -100,7 +102,7 @@ export default function Staffing() {
     <div>
       <PageHeader
         title="프로젝트별 투입현황"
-        desc="어느 프로젝트에 누가, 얼마나 투입되어 있는지 봅니다. 진행중인 프로젝트만 카드로 표시하며, 카드를 누르면 상세로 이동합니다. 소요 MD는 제출된 주간 업무보고 기준, 계획 MD는 배정 투입률 기준입니다."
+        desc="어느 프로젝트에 누가, 얼마나 투입되어 있는지 봅니다. 진행중인 프로젝트만 카드로 표시하며, 카드를 누르면 상세로 이동합니다. 소요 MD는 제출된 주간 업무보고 기준, 계획 MD는 배정률 기준입니다."
         actions={
           <>
             <div className="week-nav">
@@ -160,7 +162,7 @@ export default function Staffing() {
   );
 }
 
-/** 프로젝트 카드: 프로젝트명 · 투입인력 · 투입률 · 시작일/종료일 · 소요 MD */
+/** 프로젝트 카드: 프로젝트명 · 투입인력 · 배정률 · 시작일/종료일 · 소요 MD */
 function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
   const nav = useNavigate();
   const [showDone, setShowDone] = useState(false);
@@ -201,6 +203,7 @@ function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
         <div className="board-prj-title" title={p.prjCd}>
           {p.prjNm}
         </div>
+        {p.pr && p.pr.status !== 'NO_BASE' && <RateBar pr={p.pr} compact />}
         <div className="board-members">
           {p.members.map((m) => (
             <div className="board-chip" key={m.asgId}>
@@ -283,8 +286,8 @@ function ByPerson({ list }: { list: Person[] }) {
           <tr>
             <th>인력</th>
             <th>소속</th>
-            <th className="num">현재 투입률</th>
-            <th>투입 프로젝트 (역할 · 투입률 · 기간)</th>
+            <th className="num">현재 배정률</th>
+            <th>투입 프로젝트 (역할 · 배정률 · 기간)</th>
             <th className="num">계획 MD</th>
             <th className="num">실적 MD</th>
           </tr>
@@ -297,7 +300,7 @@ function ByPerson({ list }: { list: Person[] }) {
                 {showHr && <div className="small muted">{label(EMPLOY_TYPE, p.employType)}</div>}
               </td>
               <td data-label="소속">{p.deptCd}</td>
-              <td data-label="현재 투입률" className="num">
+              <td data-label="현재 배정률" className="num">
                 {p.currentAlloc ? `${p.currentAlloc}%` : p.plannedAlloc ? null : <Badge tone="warn">대기</Badge>}
                 {p.plannedAlloc > 0 && (
                   <div title={`${p.plannedStartDt}부터 투입 예정`}>
@@ -379,7 +382,7 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
   );
   const span = (m: string) => cols.filter((c) => c.ym === m).length || 1;
 
-  // 주별 투입 인원(FTE) = Σ투입률 ÷ 100, 기준선 = 대상 인원
+  // 주별 투입 인원(FTE) = Σ배정률 ÷ 100, 기준선 = 대상 인원
   const fte = cols.map((c) => Math.round(list.reduce((s, p) => s + (c.of(p)?.total ?? 0), 0)) / 100);
   const head = list.length;
   const maxV = Math.max(head, ...fte, 1);
@@ -392,7 +395,7 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
     <>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
         <div className="legend tl-legend" aria-label="범례">
-          <span>투입률</span>
+          <span>배정률</span>
           {['1~20', '21~40', '41~60', '61~80', '81~100'].map((l, i) => (
             <span key={l}>
               <i style={{ background: HEAT[i] }} />
@@ -439,7 +442,7 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
               ))}
             </tr>
             <tr className="tl-chart-row">
-              <th className="tl-name" title="투입 인원(FTE) = 투입률 합 ÷ 100, 점선 = 대상 인원">
+              <th className="tl-name" title="투입 인원(FTE) = 배정률 합 ÷ 100, 점선 = 대상 인원">
                 투입 인원 <span className="muted">/ {head}명</span>
               </th>
               {cols.map((c, i) => (
@@ -490,7 +493,7 @@ function Timeline({ list, months, weeks }: { list: Person[]; months: string[]; w
         </div>
       )}
       <p className="muted small" style={{ marginBottom: 0 }}>
-        칸 색 = 투입률(%) = Σ(배정 영업일 × 투입률) ÷ 그 주(접힌 달은 그 달) 영업일. 위 막대는 주별 투입 인원(FTE = 투입률 합 ÷ 100), 점선은 대상 인원입니다. 주 머리글 숫자는 그 달의 몇 번째 주입니다. 주(월~일)는 목요일이 속한 달로 묶고, 월 머리글을 누르면 그 달을 월별로 접거나 펼칩니다. 칸에 마우스를 올리면 프로젝트별 내역이 보입니다.
+        칸 색 = 배정률(%) = Σ(배정 영업일 × 배정률) ÷ 그 주(접힌 달은 그 달) 영업일. 위 막대는 주별 투입 인원(FTE = 배정률 합 ÷ 100), 점선은 대상 인원입니다. 주 머리글 숫자는 그 달의 몇 번째 주입니다. 주(월~일)는 목요일이 속한 달로 묶고, 월 머리글을 누르면 그 달을 월별로 접거나 펼칩니다. 칸에 마우스를 올리면 프로젝트별 내역이 보입니다.
       </p>
     </>
   );

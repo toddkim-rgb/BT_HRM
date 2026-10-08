@@ -199,7 +199,7 @@ function Members({ prjCd, week }: { prjCd: string; week: string }) {
       <thead>
         <tr>
           <th>인력</th>
-          <th className="num">투입률</th>
+          <th className="num">배정률</th>
           <th>동시 투입 (다른 프로젝트)</th>
           <th>상태</th>
           <th className="num">이 프로젝트 MD / 계획</th>

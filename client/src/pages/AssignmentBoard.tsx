@@ -6,6 +6,7 @@ import { ASG_ROLE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label, num } from '../lib/format';
 import { today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
+import { RateBar, type ProjectRate } from '../components/ProjectRate';
 
 export interface BoardAsg {
   asgId: number;
@@ -33,7 +34,7 @@ interface Emp {
   utilTarget: boolean;
   allocTotal: number;
   overAlloc: number;
-  plannedAlloc: number; // 아직 시작 전인 예정 배정의 투입률 합계
+  plannedAlloc: number; // 아직 시작 전인 예정 배정의 배정률 합계
   plannedStartDt: string | null;
 }
 interface Prj {
@@ -53,6 +54,7 @@ interface ProjectMd {
   planMm: number;
   actualMm: number;
   byEmp: Record<string, { planMd: number; actualMd: number }>;
+  pr: ProjectRate | null; // 프로젝트 투입률
 }
 
 type Drag = { kind: 'emp'; empId: string } | { kind: 'asg'; asgId: number } | { kind: 'partner'; partnerId: string };
@@ -125,12 +127,12 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
     if (endDt < startDt) startDt = p.startDt && p.startDt <= endDt ? p.startDt : endDt;
     return { startDt, endDt };
   };
-  /** 끌어 놓기·목록 선택 → 입력 폼 열기 (투입 시작일·철수일·투입률·역할) */
+  /** 끌어 놓기·목록 선택 → 입력 폼 열기 (투입 시작일·철수일·배정률·역할) */
   const openAssign = (p: Prj, who: { empId: string } | { partnerId: string }, from?: BoardAsg) => {
     if ('empId' in who) {
       const e = emps?.find((x) => x.empId === who.empId);
       if (!e) return toast('인력을 찾을 수 없습니다.', 'bad');
-      if ((asgs ?? []).some((a) => a.empId === who.empId && a.prjCd === p.prjCd && a.status !== 'ENDED')) return toast(`${e.name}님은 이미 이 프로젝트에 배정되어 있습니다. 칩을 눌러 기간·투입률을 수정하세요.`, 'bad');
+      if ((asgs ?? []).some((a) => a.empId === who.empId && a.prjCd === p.prjCd && a.status !== 'ENDED')) return toast(`${e.name}님은 이미 이 프로젝트에 배정되어 있습니다. 칩을 눌러 기간·배정률을 수정하세요.`, 'bad');
       const remain = 100 - e.allocTotal + (from?.allocRate ?? 0);
       setPending({ prj: p, who, name: `${e.gradeCd} ${e.name}`, from, ...defaultPeriod(p), allocRate: from?.allocRate ?? (remain > 0 ? Math.min(100, remain) : 100), roleCd: from?.roleCd ?? roleOf(e.jobCd) });
     } else {
@@ -142,7 +144,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const confirmAssign = (f: PendingAssign) => {
     if (!f.startDt || !f.endDt) return toast('투입 시작일과 철수일을 입력하세요.', 'bad');
     if (f.startDt > f.endDt) return toast('철수일이 투입 시작일보다 빠릅니다.', 'bad');
-    if (!(f.allocRate >= 1 && f.allocRate <= 100)) return toast('투입률은 1~100% 사이로 입력하세요.', 'bad');
+    if (!(f.allocRate >= 1 && f.allocRate <= 100)) return toast('배정률은 1~100% 사이로 입력하세요.', 'bad');
     setPending(null);
     run(async () => {
       let empId: string;
@@ -307,7 +309,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
           )}
         </div>
         <p className="board-hint">
-          % = 오늘 투입률 · 예정 = 아직 시작 전인 배정 · 대기 = 배정 없음
+          % = 오늘 배정률 · 예정 = 아직 시작 전인 배정 · 대기 = 배정 없음
           <br />
           프로젝트에서 빼려면 인력 칩을 이 목록으로 끌어다 놓으세요.
         </p>
@@ -349,6 +351,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
               <div className="board-prj-title" title={p.prjCd}>
                 {p.prjNm}
               </div>
+              {pmd?.pr && pmd.pr.status !== 'NO_BASE' && <RateBar pr={pmd.pr} compact />}
               <div className="board-members">
                 {members.map((a) => (
                   <div
@@ -396,7 +399,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                   </ul>
                 )}
                 {ended && (
-                  <div className="board-final-md" title="계획 MD = Σ(배정 기간 영업일 × 투입률) · 실적 MD = 제출된 주간 업무보고 기준">
+                  <div className="board-final-md" title="계획 MD = Σ(배정 기간 영업일 × 배정률) · 실적 MD = 제출된 주간 업무보고 기준">
                     <strong>최종 MD</strong> 실적 {num(pmd?.actualMd ?? 0)} MD ({num(pmd?.actualMm ?? 0, 2)} MM) · 계획 {num(pmd?.planMd ?? 0)} MD ({num(pmd?.planMm ?? 0, 2)} MM)
                   </div>
                 )}
@@ -466,7 +469,7 @@ interface PendingAssign {
   roleCd: string;
 }
 
-/** 배정 입력 폼: 투입 시작일 · 철수일 · 투입률 · 역할 */
+/** 배정 입력 폼: 투입 시작일 · 철수일 · 배정률 · 역할 */
 function AssignDialog({ f, onChange, onCancel, onConfirm, busy }: { f: PendingAssign; onChange: (f: PendingAssign) => void; onCancel: () => void; onConfirm: (f: PendingAssign) => void; busy: boolean }) {
   const set = (patch: Partial<PendingAssign>) => onChange({ ...f, ...patch });
   return (
@@ -499,7 +502,7 @@ function AssignDialog({ f, onChange, onCancel, onConfirm, busy }: { f: PendingAs
         <Field label="철수일" required>
           <input type="date" value={f.endDt} min={f.startDt || undefined} onChange={(e) => set({ endDt: e.target.value })} />
         </Field>
-        <Field label="투입률 (%)" required hint="100 = 전일, 50 = 겸임">
+        <Field label="배정률 (%)" required hint="100 = 전일, 50 = 겸임">
           <input type="number" min={1} max={100} value={f.allocRate} onChange={(e) => set({ allocRate: Number(e.target.value) })} />
         </Field>
         <Field label="투입 역할" required hint={f.roleCd === 'PM' ? 'PM으로 지정하면 이 프로젝트의 PM이 됩니다' : undefined}>

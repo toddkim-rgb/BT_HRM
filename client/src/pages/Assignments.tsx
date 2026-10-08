@@ -96,7 +96,7 @@ export default function Assignments() {
                   <th>프로젝트</th>
                   <th>역할</th>
                   <th>기간</th>
-                  <th className="num">투입률</th>
+                  <th className="num">배정률</th>
                   <th>구분</th>
                   <th>상태</th>
                   <th />
@@ -127,7 +127,7 @@ export default function Assignments() {
                           </div>
                         )}
                       </td>
-                      <td data-label="투입률" className="num">
+                      <td data-label="배정률" className="num">
                         {a.allocRate}%{over > 0 && a.status !== 'CANCELED' && (
                           <div>
                             <Badge tone="bad">과투입 +{over}%</Badge>
@@ -246,7 +246,7 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
           <Select value={f.roleCd} onChange={(roleCd) => set({ roleCd })} options={ASG_ROLE} />
           {f.roleCd === 'PM' && <span className="field-hint">PM으로 지정하면 이 프로젝트의 PM이 됩니다 (프로젝트당 1명, 기존 PM은 일반 역할로 바뀜)</span>}
         </Field>
-        <Field label="투입률 (%)" required hint="100 = 전일, 50 = 겸임">
+        <Field label="배정률 (%)" required hint="100 = 전일, 50 = 겸임">
           <input type="number" min={1} max={100} value={f.allocRate ?? ''} onChange={(e) => set({ allocRate: Number(e.target.value) })} />
         </Field>
         <Field label="투입 시작일" required>
@@ -272,11 +272,11 @@ function AssignmentForm({ initial, projects, onClose, onSaved }: { initial: Part
                   </li>
                 ))}
               </ul>
-              기간 중 투입률 합계 최대 {preview.existing}% + 이번 {f.allocRate}% = {preview.total}%
+              기간 중 배정률 합계 최대 {preview.existing}% + 이번 {f.allocRate}% = {preview.total}%
               {preview.overAlloc > 0 && ` → 과투입 +${preview.overAlloc}% (저장은 가능)`}
             </>
           ) : (
-            <>같은 기간 다른 투입이 없습니다. 투입률 {f.allocRate}%</>
+            <>같은 기간 다른 투입이 없습니다. 배정률 {f.allocRate}%</>
           )}
         </div>
       )}
