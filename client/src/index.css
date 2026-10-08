@@ -506,3 +506,33 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .test-role { margin: 8px 12px; padding: 8px; border: 1px dashed #f0b429; border-radius: 8px; background: rgba(250, 178, 25, 0.12); display: flex; flex-direction: column; gap: 6px; }
 .test-role-title { font-size: 11px; font-weight: 700; color: #f0b429; }
 .test-role select { font-size: 12px; padding: 4px 6px; }
+
+/* ---- 투입 배정 카드: 주요 정보만, 마우스를 올리면 반전 + 상세 펼침 ---- */
+.board-prj { position: relative; transition: background 0.15s, color 0.15s, border-color 0.15s; outline: none; }
+.board-prj-detail { display: none; flex-direction: column; gap: 8px; }
+.board-detail-meta { font-size: 12px; opacity: 0.85; }
+.board-detail-members { list-style: none; margin: 0; padding: 0; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+.board-detail-members li { display: flex; justify-content: space-between; gap: 8px; }
+.board-detail-members li span:last-child { opacity: 0.8; text-align: right; }
+/* 완료·중단 카드: 회색 톤 */
+.board-prj.ended { background: #f1f1ef; border-color: #d6d5d1; border-style: dashed; color: #6b6b68; opacity: 1; }
+.board-prj.ended .badge, .board-prj.ended .board-chip { filter: grayscale(1); }
+.board-prj.ended .board-chip { background: #e6e5e1; }
+@media (hover: hover) {
+  .board-prj:hover, .board-prj:focus-within { background: #1f3b63; border-color: #1f3b63; color: #fff; z-index: 6; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .board-prj.ended:hover, .board-prj.ended:focus-within { background: #4a4a47; border-color: #4a4a47; border-style: solid; }
+  .board-prj:hover .muted, .board-prj:focus-within .muted { color: rgba(255, 255, 255, 0.75); }
+  .board-prj:hover .board-chip, .board-prj:focus-within .board-chip { background: rgba(255, 255, 255, 0.95); color: var(--text); }
+  .board-prj:hover .board-chip .muted, .board-prj:focus-within .board-chip .muted { color: var(--muted); }
+  .board-prj:hover .board-drop-hint, .board-prj:focus-within .board-drop-hint { color: rgba(255, 255, 255, 0.75); border-color: rgba(255, 255, 255, 0.4); }
+  .board-prj:hover .board-prj-detail, .board-prj:focus-within .board-prj-detail {
+    display: flex; position: absolute; left: -2px; right: -2px; top: 100%; padding: 4px 12px 12px; background: inherit; color: #fff;
+    border: 2px solid; border-color: inherit; border-top: 0; border-radius: 0 0 12px 12px; box-shadow: 0 10px 18px rgba(0, 0, 0, 0.22);
+  }
+  .board-prj:hover .board-final-md, .board-prj:focus-within .board-final-md { background: rgba(255, 255, 255, 0.12); }
+  .board-prj:hover .board-prj-detail .btn, .board-prj:focus-within .board-prj-detail .btn { background: #fff; color: var(--text); border-color: #fff; }
+  .board-prj:hover .board-add, .board-prj:focus-within .board-add { background: #fff; color: var(--text); }
+}
+@media (hover: none) {
+  .board-prj-detail { display: flex; }
+}

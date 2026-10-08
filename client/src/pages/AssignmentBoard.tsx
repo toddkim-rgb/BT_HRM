@@ -314,6 +314,8 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
               onDragOver={(e) => mine && allowDrop(e, p.prjCd)}
               onDragLeave={() => setOver(null)}
               onDrop={(e) => dropOnProject(e, p)}
+              tabIndex={0}
+              aria-label={`${p.prjNm} (상세는 마우스를 올리거나 선택하면 표시)`}
             >
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <span className="row" style={{ gap: 6 }}>
@@ -328,27 +330,6 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
               <div className="board-prj-title" title={p.prjCd}>
                 {p.prjNm}
               </div>
-              <div className="small muted">
-                PM {p.pmName ?? '-'} · {p.startDt ?? '-'} ~ {p.endDt ?? '-'}
-              </div>
-              {ended && (
-                <div className="board-final-md" title="계획 MD = Σ(배정 기간 영업일 × 투입률) · 실적 MD = 제출된 주간 업무보고 기준">
-                  <strong>최종 MD</strong> 실적 {num(pmd?.actualMd ?? 0)} MD ({num(pmd?.actualMm ?? 0, 2)} MM) · 계획 {num(pmd?.planMd ?? 0)} MD ({num(pmd?.planMm ?? 0, 2)} MM)
-                </div>
-              )}
-              {canStatus(p) && (
-                <div className="board-status-actions">
-                  {ended ? (
-                    <button type="button" className="btn sm" disabled={busy} onClick={() => changeStatus(p, 'ACTIVE')}>
-                      진행으로 변경
-                    </button>
-                  ) : (
-                    <button type="button" className="btn sm" disabled={busy} onClick={() => changeStatus(p, 'DONE')}>
-                      완료 처리
-                    </button>
-                  )}
-                </div>
-              )}
               <div className="board-members">
                 {members.map((a) => (
                   <div
@@ -363,11 +344,6 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                         <span className="muted">{a.employee.gradeCd}</span> {a.employee.name}
                         {a.roleCd === 'PM' && <span className="board-pm">PM</span>}
                       </strong>
-                      <span>
-                        {ended ? `실적 ${num(pmd?.byEmp[a.empId]?.actualMd ?? 0)}MD` : `${a.allocRate}%`} · {label(ASG_ROLE, a.roleCd)}
-                        {a.status === 'PLANNED' && ' · 예정'}
-                        {a.status === 'ENDED' && ' · 종료'}
-                      </span>
                     </button>
                     {mine && (
                       <button type="button" className="board-chip-x" aria-label={`${a.employee.name} 빼기`} disabled={busy} onClick={() => window.confirm(a.status === 'ENDED' ? `${a.employee.name}님의 ${p.prjNm} 지난 배정을 취소할까요? 가동률 등 지난 집계에서도 빠집니다.` : `${a.employee.name}님을 ${p.prjNm}에서 뺄까요?`) && run(() => unassign(a))}>
@@ -378,38 +354,79 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                 ))}
                 {!members.length && <div className="board-drop-hint">{mine ? '인력을 여기로 끌어다 놓으세요' : '배정된 인력 없음'}</div>}
               </div>
-              {mine && (
-                <select
-                  className="board-add"
-                  value=""
-                  disabled={busy}
-                  aria-label={`${p.prjNm}에 인력 추가`}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    if (id.startsWith('partner:')) run(() => assignPartner(id.slice(8), p));
-                    else if (id) run(() => assign(id, p));
-                  }}
-                >
-                  <option value="">+ 인력 추가 (목록에서 선택)</option>
-                  <optgroup label="수행인력">
-                    {addable.map((e) => (
-                      <option key={e.empId} value={e.empId}>
-                        {e.gradeCd} {e.name} · {orgOf(e)}
-                        {e.jobCd ? ` · ${e.jobCd}` : ''} · 현재 {e.allocTotal}%
-                      </option>
+              {/* 상세: 마우스를 올리면(또는 포커스) 카드 아래로 펼쳐짐, 터치 화면은 항상 표시 */}
+              <div className="board-prj-detail">
+                <div className="board-detail-meta">
+                  PM {p.pmName ?? '-'} · {p.startDt ?? '-'} ~ {p.endDt ?? '-'}
+                </div>
+                {members.length > 0 && (
+                  <ul className="board-detail-members">
+                    {members.map((a) => (
+                      <li key={a.asgId}>
+                        <span>
+                          {a.employee.gradeCd} {a.employee.name}
+                        </span>
+                        <span>
+                          {ended ? `실적 ${num(pmd?.byEmp[a.empId]?.actualMd ?? 0)}MD` : `${a.allocRate}%`} · {label(ASG_ROLE, a.roleCd)}
+                          {a.status === 'PLANNED' && ' · 예정'}
+                          {a.status === 'ENDED' && ' · 종료'}
+                          {a.overAlloc > 0 && ` · 과투입 +${a.overAlloc}%`}
+                        </span>
+                      </li>
                     ))}
-                  </optgroup>
-                  {newPartners.length > 0 && (
-                    <optgroup label="협력사 (인력 미등록 → 수행인력으로 추가)">
-                      {newPartners.map((x) => (
-                        <option key={x.partnerId} value={`partner:${x.partnerId}`}>
-                          {x.staffName} · 협력사 {x.partnerNm}
+                  </ul>
+                )}
+                {ended && (
+                  <div className="board-final-md" title="계획 MD = Σ(배정 기간 영업일 × 투입률) · 실적 MD = 제출된 주간 업무보고 기준">
+                    <strong>최종 MD</strong> 실적 {num(pmd?.actualMd ?? 0)} MD ({num(pmd?.actualMm ?? 0, 2)} MM) · 계획 {num(pmd?.planMd ?? 0)} MD ({num(pmd?.planMm ?? 0, 2)} MM)
+                  </div>
+                )}
+                {mine && (
+                  <select
+                    className="board-add"
+                    value=""
+                    disabled={busy}
+                    aria-label={`${p.prjNm}에 인력 추가`}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (id.startsWith('partner:')) run(() => assignPartner(id.slice(8), p));
+                      else if (id) run(() => assign(id, p));
+                    }}
+                  >
+                    <option value="">+ 인력 추가 (목록에서 선택)</option>
+                    <optgroup label="수행인력">
+                      {addable.map((e) => (
+                        <option key={e.empId} value={e.empId}>
+                          {e.gradeCd} {e.name} · {orgOf(e)}
+                          {e.jobCd ? ` · ${e.jobCd}` : ''} · 현재 {e.allocTotal}%
                         </option>
                       ))}
                     </optgroup>
-                  )}
-                </select>
-              )}
+                    {newPartners.length > 0 && (
+                      <optgroup label="협력사 (인력 미등록 → 수행인력으로 추가)">
+                        {newPartners.map((x) => (
+                          <option key={x.partnerId} value={`partner:${x.partnerId}`}>
+                            {x.staffName} · 협력사 {x.partnerNm}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                )}
+                {canStatus(p) && (
+                  <div className="board-status-actions">
+                    {ended ? (
+                      <button type="button" className="btn sm" disabled={busy} onClick={() => changeStatus(p, 'ACTIVE')}>
+                        진행으로 변경
+                      </button>
+                    ) : (
+                      <button type="button" className="btn sm" disabled={busy} onClick={() => changeStatus(p, 'DONE')}>
+                        완료 처리
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </section>
           );
         })}
