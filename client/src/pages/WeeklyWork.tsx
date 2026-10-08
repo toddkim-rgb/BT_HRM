@@ -226,6 +226,32 @@ export default function WeeklyWork() {
     setSel(null);
   };
 
+  /** 주간 업무(실적) 항목 → 차주 계획 항목: 작업 항목·내용·마일스톤·SM 업무유형을 그대로 옮김 */
+  const toPlan = (it: Item): Item => ({ prjCd: it.prjCd, msId: it.msId ?? null, workNm: it.workNm, content: it.content ?? null, smWorkType: it.smWorkType ?? null, targetProgress: null, dueDt: null });
+  /** 차주 계획에 이미 같은 작업 항목이 있으면 건너뜀 */
+  const copyToPlan = (items: Item[]) => {
+    // 추가할 목록을 먼저 계산 (상태 갱신 함수 안에서 세면 개발 모드에서 두 번 실행될 수 있음)
+    const plan = v?.planItems ?? [];
+    const toAdd: Item[] = [];
+    let skipped = 0;
+    for (const it of items) {
+      const name = it.workNm.trim();
+      const dup = (p: Item) => p.prjCd === it.prjCd && p.workNm.trim() === name;
+      if (!name || plan.some(dup) || toAdd.some(dup)) skipped += 1;
+      else toAdd.push(toPlan(it));
+    }
+    if (toAdd.length) update((d) => void d.planItems.push(...toAdd.map((x) => ({ ...x }))));
+    return { added: toAdd.length, skipped };
+  };
+  /** 이 프로젝트의 주간 업무 중 완료되지 않은 항목을 차주 계획으로 가져오기 (완료 = 금주 100%) */
+  const importFromActual = (prjCd: string) => {
+    const src = (v?.actualItems ?? []).filter((it) => it.prjCd === prjCd && it.workNm.trim() && it.progressAfter !== 100);
+    const done = (v?.actualItems ?? []).filter((it) => it.prjCd === prjCd && it.progressAfter === 100).length;
+    if (!src.length) return toast(done ? '완료되지 않은 주간 업무가 없습니다. (금주 100% 항목은 제외)' : '가져올 주간 업무가 없습니다. 주간 업무 내용을 먼저 입력하세요.', 'info');
+    const r = copyToPlan(src);
+    toast(`주간 업무 ${r.added}건을 차주 계획으로 가져왔습니다.${r.skipped ? ` (이미 있는 항목 ${r.skipped}건 제외)` : ''}${done ? ` 완료(100%) ${done}건은 제외했습니다.` : ''} 목표 진척률·완료 예정일을 입력하세요.`, 'info');
+  };
+
   const statusOf = (it: Item) => {
     if (isSm(it.prjCd)) return null;
     if (it.progressAfter === 100) return 'DONE';
@@ -468,9 +494,22 @@ export default function WeeklyWork() {
                         <div className="item-head">
                           <div className="row">{st && <Badge code={st}>{ITEM_STATUS[st]}</Badge>}</div>
                           {editable && (
-                            <button className="btn sm danger" onClick={() => update((d) => void d.actualItems.splice(i, 1))}>
-                              삭제
-                            </button>
+                            <div className="row" style={{ gap: 6 }}>
+                              <button
+                                className="btn sm"
+                                disabled={!it.workNm.trim()}
+                                title="이 업무를 차주 계획에 추가"
+                                onClick={() => {
+                                  const r = copyToPlan([it]);
+                                  toast(r.added ? `'${it.workNm}'을(를) 차주 계획에 추가했습니다.` : '차주 계획에 이미 같은 작업 항목이 있습니다.', 'info');
+                                }}
+                              >
+                                차주 계획으로 복사
+                              </button>
+                              <button className="btn sm danger" onClick={() => update((d) => void d.actualItems.splice(i, 1))}>
+                                삭제
+                              </button>
+                            </div>
                           )}
                         </div>
                         {curSm ? (
@@ -574,9 +613,14 @@ export default function WeeklyWork() {
                   <div className="ww-step-head">
                     <h3>차주 계획</h3>
                     {editable && (
-                      <button className="btn sm" onClick={() => update((d) => void d.planItems.push({ prjCd: curCd, workNm: '' }))}>
-                        + 계획 추가
-                      </button>
+                      <div className="row" style={{ gap: 6 }}>
+                        <button className="btn sm" onClick={() => importFromActual(curCd)} title="이 프로젝트의 주간 업무 중 완료(100%)되지 않은 항목을 차주 계획으로 복사">
+                          ⤓ 주간 업무 가져오기
+                        </button>
+                        <button className="btn sm" onClick={() => update((d) => void d.planItems.push({ prjCd: curCd, workNm: '' }))}>
+                          + 계획 추가
+                        </button>
+                      </div>
                     )}
                   </div>
                   {!v.planItems.some((i) => i.prjCd === curCd) && <div className="empty">다음 주 계획을 추가하세요. (보고서 전체에 최소 1건, 차주 전일 휴가 시 예외)</div>}
