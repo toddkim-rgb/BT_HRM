@@ -66,7 +66,7 @@ function CompanySummary() {
         <Link to="/project-mm" className="goal-card">
           <div className="goal-title">프로젝트 투입률 <span className="muted small">종료 시 100% 목표 · 진행중 {pr.length}개</span></div>
           <div className="goal-value">
-            정상 {cnt('NORMAL')} <span className="goal-sep">·</span> <span className="warn-text">과소 {cnt('UNDER')}</span> <span className="goal-sep">·</span> <span className="bad-text">과다 {cnt('OVER')}</span>
+            정상 {cnt('NORMAL')} <span className="goal-sep">·</span> <span className="warn-text">미달 {cnt('UNDER')}</span> <span className="goal-sep">·</span> <span className="bad-text">초과 {cnt('OVER')}</span>
           </div>
           <div className="small muted">경과율 대비 ±10%p 기준{cnt('NO_BASE') ? ` · 기준 MD 없음 ${cnt('NO_BASE')}개` : ''}{cnt('NOT_STARTED') ? ` · 시작 전 ${cnt('NOT_STARTED')}개` : ''}</div>
         </Link>

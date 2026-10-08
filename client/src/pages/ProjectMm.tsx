@@ -52,7 +52,7 @@ function ProjectList() {
   const mdPerMm = settings?.MD_PER_MM ?? '22';
   const nav = useNavigate();
   const [showDone, setShowDone] = useState(false);
-  // 진행중 → 완료 순, 진행중은 과소·과다를 위로
+  // 진행중 → 완료 순, 진행중은 미달·초과를 위로
   const order = ['UNDER', 'OVER', 'NO_BASE', 'NORMAL', 'NOT_STARTED', 'DONE'];
   const rows = (data ?? [])
     .filter((p) => p.statusCd !== 'PROPOSAL' && (showDone || !['DONE', 'STOP'].includes(p.statusCd)))
@@ -62,7 +62,7 @@ function ProjectList() {
     <div>
       <PageHeader
         title="프로젝트 투입률"
-        desc={`투입률 = 누적 실적 MD ÷ 기준 MD (종료 시 100% 목표). 기준 MD = 계약 MM × ${mdPerMm}MD, 계약 MM이 없으면 배정 계획 MD. 실적 MD는 제출된 주간 업무보고 기준. 진행 중에는 기간 경과율과 비교해 ±10%p를 넘으면 과소·과다로 표시하고, 종료 예상 = (실적 + 남은 배정 계획) ÷ 기준입니다.`}
+        desc={`투입률 = 누적 실적 MD ÷ 기준 MD (종료 시 100% 목표). 기준 MD = 계약 MM × ${mdPerMm}MD, 계약 MM이 없으면 배정 계획 MD. 실적 MD는 제출된 주간 업무보고 기준. 진행 중에는 기간 경과율과 비교해 ±10%p를 넘으면 미달·초과로 표시하고, 종료 예상 = (실적 + 남은 배정 계획) ÷ 기준입니다.`}
         actions={
           doneCount > 0 && (
             <label className="check small">

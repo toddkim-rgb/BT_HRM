@@ -9,7 +9,7 @@ import { holidaySet, mdPerMm } from './settings.js';
  * - 기준 MD: 계약 MM × 1MM 환산 MD(기준값). 계약 MM이 없으면 배정 계획 MD(Σ 배정 기간 영업일 × 배정률)
  * - 실적 MD: 제출된 주간 업무보고의 투입 MD
  * - 경과율: 프로젝트 기간(달력일) 중 오늘까지 지난 비율
- * - 상태: 투입률이 경과율보다 10%p 넘게 낮으면 과소, 높으면 과다, 그 외 정상 (완료·중단은 완료, 시작 전은 시작 전)
+ * - 상태: 투입률이 경과율보다 10%p 넘게 낮으면 미달, 높으면 초과, 그 외 정상 (완료·중단은 완료, 시작 전은 시작 전)
  * - 종료 예상 투입률: (실적 MD + 오늘 이후 남은 배정 계획 MD) ÷ 기준 MD
  */
 export type RateStatus = 'NOT_STARTED' | 'NORMAL' | 'UNDER' | 'OVER' | 'DONE' | 'NO_BASE';

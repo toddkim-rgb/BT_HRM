@@ -20,8 +20,8 @@ export interface ProjectRate {
 /** 상태: 경과율 대비 ±10%p 기준 (색만으로 구분하지 않도록 글자 배지로 표시) */
 export const RATE_STATUS: Record<ProjectRate['status'], { label: string; tone: string }> = {
   NORMAL: { label: '정상', tone: 'good' },
-  UNDER: { label: '과소', tone: 'warn' },
-  OVER: { label: '과다', tone: 'bad' },
+  UNDER: { label: '미달', tone: 'warn' },
+  OVER: { label: '초과', tone: 'bad' },
   NOT_STARTED: { label: '시작 전', tone: 'neutral' },
   DONE: { label: '완료', tone: 'neutral' },
   NO_BASE: { label: '기준 없음', tone: 'neutral' },
