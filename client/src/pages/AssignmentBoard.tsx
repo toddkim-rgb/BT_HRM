@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from 'react';
-import { Badge, Empty, ErrorBox, Loading, useToast, PrjTypeBadge } from '../components/ui';
+import { Badge, Empty, ErrorBox, Field, Loading, Modal, Select, useToast, PrjTypeBadge } from '../components/ui';
 import { api } from '../lib/api';
 import { isPmOf, pmScoped, useAuth, useShowHr } from '../lib/auth';
 import { ASG_ROLE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
@@ -91,6 +91,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
   const [benchOnly, setBenchOnly] = useState(false);
   const [over, setOver] = useState<string | null>(null); // 드롭 대상 강조 (프로젝트 코드 또는 'pool')
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<PendingAssign | null>(null); // 배정 입력 폼
 
   // 편집: 투입 배정 '편집' 권한 + PM 역할은 담당 프로젝트만
   const canEditMenu = can('assignments', 'EDIT');
@@ -117,29 +118,48 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
     }
   };
 
-  /** 인력을 프로젝트에 배정 (기본값: 오늘~프로젝트 종료일, 남은 투입률 / 기간이 지난 프로젝트는 프로젝트 기간 전체) */
-  const assign = async (empId: string, p: Prj) => {
-    const e = emps?.find((x) => x.empId === empId);
-    if (!e) throw new Error('인력을 찾을 수 없습니다.');
-    if ((asgs ?? []).some((a) => a.empId === empId && a.prjCd === p.prjCd)) throw new Error(`${e.name}님은 이미 이 프로젝트에 배정되어 있습니다. 칩을 눌러 기간·투입률을 수정하세요.`);
+  /** 배정 기본 기간: 오늘(또는 프로젝트 시작일) ~ 프로젝트 종료일, 기간이 지난 프로젝트는 프로젝트 기간 */
+  const defaultPeriod = (p: Prj) => {
     let startDt = p.startDt && p.startDt > t ? p.startDt : t;
     const endDt = p.endDt ?? `${t.slice(0, 4)}-12-31`;
-    if (endDt < startDt) startDt = p.startDt && p.startDt <= endDt ? p.startDt : endDt; // 기간이 지난 프로젝트: 과거 기간으로 배정
-    const remain = 100 - e.allocTotal;
-    const allocRate = remain > 0 ? remain : 100;
-    const r = await api.post<{ overAlloc: number }>('/assignments', { empId, prjCd: p.prjCd, roleCd: roleOf(e.jobCd), startDt, endDt, allocRate, residentType: 'ONSITE' });
-    return `${e.name}님을 ${p.prjNm}에 배정했습니다 (${allocRate}%, ${startDt} ~ ${endDt})${r.overAlloc > 0 ? ` · 과투입 +${r.overAlloc}%` : ''}. 칩을 누르면 역할·기간·투입률을 수정할 수 있습니다.`;
+    if (endDt < startDt) startDt = p.startDt && p.startDt <= endDt ? p.startDt : endDt;
+    return { startDt, endDt };
   };
-
-  /** 협력사를 바로 배정: 소속 수행인력을 확보(없으면 생성)한 뒤 배정 */
-  const assignPartner = async (partnerId: string, p: Prj) => {
-    const r = await api.post<{ empId: string; name: string; created: boolean }>(`/assignments/partners/${partnerId}/staff`);
-    const startDt = p.startDt && p.startDt > t ? p.startDt : t;
-    let s = startDt;
-    const endDt = p.endDt ?? `${t.slice(0, 4)}-12-31`;
-    if (endDt < s) s = p.startDt && p.startDt <= endDt ? p.startDt : endDt;
-    const o = await api.post<{ overAlloc: number }>('/assignments', { empId: r.empId, prjCd: p.prjCd, roleCd: 'DEV', startDt: s, endDt, allocRate: 100, residentType: 'ONSITE' });
-    return `${r.name}님(협력사)을 ${p.prjNm}에 배정했습니다 (100%, ${s} ~ ${endDt})${o.overAlloc > 0 ? ` · 과투입 +${o.overAlloc}%` : ''}.${r.created ? ' 인력 화면에서 이메일·연락처를 보완하세요.' : ''}`;
+  /** 끌어 놓기·목록 선택 → 입력 폼 열기 (투입 시작일·철수일·투입률·역할) */
+  const openAssign = (p: Prj, who: { empId: string } | { partnerId: string }, from?: BoardAsg) => {
+    if ('empId' in who) {
+      const e = emps?.find((x) => x.empId === who.empId);
+      if (!e) return toast('인력을 찾을 수 없습니다.', 'bad');
+      if ((asgs ?? []).some((a) => a.empId === who.empId && a.prjCd === p.prjCd && a.status !== 'ENDED')) return toast(`${e.name}님은 이미 이 프로젝트에 배정되어 있습니다. 칩을 눌러 기간·투입률을 수정하세요.`, 'bad');
+      const remain = 100 - e.allocTotal + (from?.allocRate ?? 0);
+      setPending({ prj: p, who, name: `${e.gradeCd} ${e.name}`, from, ...defaultPeriod(p), allocRate: from?.allocRate ?? (remain > 0 ? Math.min(100, remain) : 100), roleCd: from?.roleCd ?? roleOf(e.jobCd) });
+    } else {
+      const x = partners?.find((y) => y.partnerId === who.partnerId);
+      setPending({ prj: p, who, name: `${x?.staffName ?? '협력사 인력'} (협력사)`, ...defaultPeriod(p), allocRate: 100, roleCd: 'DEV' });
+    }
+  };
+  /** 입력 폼 확인 → 배정 등록 (협력사는 소속 수행인력을 확보한 뒤, 옮기기는 기존 배정을 뺌) */
+  const confirmAssign = (f: PendingAssign) => {
+    if (!f.startDt || !f.endDt) return toast('투입 시작일과 철수일을 입력하세요.', 'bad');
+    if (f.startDt > f.endDt) return toast('철수일이 투입 시작일보다 빠릅니다.', 'bad');
+    if (!(f.allocRate >= 1 && f.allocRate <= 100)) return toast('투입률은 1~100% 사이로 입력하세요.', 'bad');
+    setPending(null);
+    run(async () => {
+      let empId: string;
+      let note = '';
+      if ('partnerId' in f.who) {
+        const r = await api.post<{ empId: string; name: string; created: boolean }>(`/assignments/partners/${f.who.partnerId}/staff`);
+        empId = r.empId;
+        if (r.created) note = ' 인력 화면에서 이메일·연락처를 보완하세요.';
+      } else empId = f.who.empId;
+      const r = await api.post<{ overAlloc: number }>('/assignments', { empId, prjCd: f.prj.prjCd, roleCd: f.roleCd, startDt: f.startDt, endDt: f.endDt, allocRate: f.allocRate, residentType: 'ONSITE' });
+      const over = r.overAlloc > 0 ? ` · 과투입 +${r.overAlloc}%` : '';
+      if (f.from && canManage(f.from)) {
+        await unassign(f.from);
+        return `${f.name}님을 ${f.from.project.prjNm} → ${f.prj.prjNm}(으)로 옮겼습니다 (${f.allocRate}%, ${f.startDt} ~ ${f.endDt})${over}.`;
+      }
+      return `${f.name}님을 ${f.prj.prjNm}에 배정했습니다 (${f.allocRate}%, ${f.startDt} ~ ${f.endDt})${over}.${note}`;
+    });
   };
 
   /** 프로젝트 상태 변경: 기간과 무관하게 완료 처리 / 다시 진행으로 */
@@ -194,16 +214,12 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
     const d = readDrag(e);
     if (!d || busy) return;
     if (!canManage(p)) return toast('담당 프로젝트에만 배정할 수 있습니다.', 'bad');
-    if (d.kind === 'emp') return run(() => assign(d.empId, p));
-    if (d.kind === 'partner') return run(() => assignPartner(d.partnerId, p));
+    if (d.kind === 'emp') return openAssign(p, { empId: d.empId });
+    if (d.kind === 'partner') return openAssign(p, { partnerId: d.partnerId });
     const a = asgs?.find((x) => x.asgId === d.asgId);
     if (!a || a.prjCd === p.prjCd || a.status === 'ENDED') return;
-    // 다른 프로젝트에서 옮기기 = 새 프로젝트에 배정 + 기존 프로젝트에서 빼기
-    run(async () => {
-      const msg = await assign(a.empId, p);
-      if (canManage(a)) await unassign(a);
-      return canManage(a) ? `${a.employee.name}님을 ${a.project.prjNm} → ${p.prjNm}(으)로 옮겼습니다.` : msg;
-    });
+    // 다른 프로젝트에서 옮기기 = 새 프로젝트에 배정(입력 폼) + 기존 프로젝트에서 빼기
+    openAssign(p, { empId: a.empId }, a);
   };
   const dropOnPool = (e: DragEvent) => {
     e.preventDefault();
@@ -389,8 +405,8 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                     aria-label={`${p.prjNm}에 인력 추가`}
                     onChange={(e) => {
                       const id = e.target.value;
-                      if (id.startsWith('partner:')) run(() => assignPartner(id.slice(8), p));
-                      else if (id) run(() => assign(id, p));
+                      if (id.startsWith('partner:')) openAssign(p, { partnerId: id.slice(8) });
+                      else if (id) openAssign(p, { empId: id });
                     }}
                   >
                     <option value="">+ 인력 추가 (목록에서 선택)</option>
@@ -431,6 +447,62 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
           );
         })}
       </div>
+      {pending && <AssignDialog f={pending} onChange={setPending} onCancel={() => setPending(null)} onConfirm={confirmAssign} busy={busy} />}
     </div>
+  );
+}
+
+interface PendingAssign {
+  prj: Prj;
+  who: { empId: string } | { partnerId: string };
+  name: string;
+  from?: BoardAsg; // 다른 프로젝트에서 옮기는 경우
+  startDt: string;
+  endDt: string;
+  allocRate: number;
+  roleCd: string;
+}
+
+/** 배정 입력 폼: 투입 시작일 · 철수일 · 투입률 · 역할 */
+function AssignDialog({ f, onChange, onCancel, onConfirm, busy }: { f: PendingAssign; onChange: (f: PendingAssign) => void; onCancel: () => void; onConfirm: (f: PendingAssign) => void; busy: boolean }) {
+  const set = (patch: Partial<PendingAssign>) => onChange({ ...f, ...patch });
+  return (
+    <Modal
+      title={f.from ? '투입 이동' : '투입 배정'}
+      onClose={onCancel}
+      footer={
+        <>
+          <button className="btn" onClick={onCancel}>
+            취소
+          </button>
+          <button className="btn primary" disabled={busy} onClick={() => onConfirm(f)}>
+            {f.from ? '이동' : '배정'}
+          </button>
+        </>
+      }
+    >
+      <p style={{ marginTop: 0 }}>
+        <strong>{f.name}</strong> → <strong>{f.prj.prjNm}</strong>
+        {f.from && <span className="muted small"> (기존 {f.from.project.prjNm} 배정은 빠짐)</span>}
+        <br />
+        <span className="small muted">
+          프로젝트 기간 {f.prj.startDt ?? '-'} ~ {f.prj.endDt ?? '-'}
+        </span>
+      </p>
+      <div className="form-grid">
+        <Field label="투입 시작일" required>
+          <input type="date" value={f.startDt} onChange={(e) => set({ startDt: e.target.value })} autoFocus />
+        </Field>
+        <Field label="철수일" required>
+          <input type="date" value={f.endDt} min={f.startDt || undefined} onChange={(e) => set({ endDt: e.target.value })} />
+        </Field>
+        <Field label="투입률 (%)" required hint="100 = 전일, 50 = 겸임">
+          <input type="number" min={1} max={100} value={f.allocRate} onChange={(e) => set({ allocRate: Number(e.target.value) })} />
+        </Field>
+        <Field label="투입 역할" required hint={f.roleCd === 'PM' ? 'PM으로 지정하면 이 프로젝트의 PM이 됩니다' : undefined}>
+          <Select value={f.roleCd} onChange={(roleCd) => set({ roleCd })} options={ASG_ROLE} />
+        </Field>
+      </div>
+    </Modal>
   );
 }
