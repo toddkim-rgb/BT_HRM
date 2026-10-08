@@ -306,9 +306,15 @@ weeklyWorksRouter.put('/:empId/:week', async (req, res) => {
   const body = parse(reportSchema, req.body);
   const cur = await prisma.weeklyWork.findUnique({ where: { empId_reportWeek: { empId, reportWeek: week } } });
   if (cur?.statusCd === 'SUBMITTED') throw new HttpError(409, '제출된 보고서는 임시저장할 수 없습니다. 수정 후 바로 제출하세요.');
-  await prisma.$transaction((tx) => writeReport(tx, empId, week, body, 'DRAFT'));
+  await prisma.$transaction((tx) => writeReport(tx, empId, week, body, 'DRAFT'), TX_OPTS);
   res.json({ ok: true, view: await buildView(empId, week) });
 });
+
+/**
+ * 저장·제출 트랜잭션 시간 한도: 운영 DB(Turso)는 원격이라 쿼리마다 왕복 시간이 있어
+ * Prisma 기본 5초를 넘길 수 있음 → 30초로 늘림 (대기 10초)
+ */
+const TX_OPTS = { timeout: 30_000, maxWait: 10_000 };
 
 class ValidationAbort extends Error {
   constructor(public result: { errors: string[]; warnings: string[] }) {
@@ -330,7 +336,7 @@ weeklyWorksRouter.post('/:empId/:week/submit', async (req, res) => {
       const id = await writeReport(tx, empId, week, body, 'SUBMITTED');
       const v = await validateForSubmit(tx, id, week);
       if (v.errors.length || (v.warnings.length && !body.confirmWarnings)) throw new ValidationAbort(v);
-    });
+    }, TX_OPTS);
   } catch (e) {
     if (!(e instanceof ValidationAbort)) throw e;
     const { errors, warnings } = e.result;
