@@ -181,7 +181,7 @@ function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
     return (
       <section
         key={p.prjCd}
-        className={`board-prj clickable ${ended ? 'ended' : ''}`}
+        className={`board-prj clickable ${ended ? 'ended' : groupOf(p) === 'planned' ? 'planned' : ''}`}
         tabIndex={0}
         role="link"
         aria-label={`${p.prjNm} 상세 보기`}
@@ -192,6 +192,7 @@ function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
           <span className="row" style={{ gap: 6 }}>
             <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
             <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
+            {p.statusCd === 'ACTIVE' && p.startDt && p.startDt > t && <Badge tone="warn">시작 전</Badge>}
           </span>
           <span className="small muted">
             {p.headcount}명 · {p.allocTotal}%

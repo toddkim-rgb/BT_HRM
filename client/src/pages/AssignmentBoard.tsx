@@ -318,6 +318,8 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
         {sorted.map((p) => {
           const ended = isEnded(p);
           const overdue = isOverdue(p);
+          // 예정: 제안 상태이거나 시작 전 (카드 배경으로 진행중과 구분)
+          const planned = !ended && (statusOf(p) === 'PROPOSAL' || (!!p.startDt && p.startDt > t));
           const pmd = md?.[p.prjCd];
           // 진행 중 프로젝트는 진행·예정 배정만, 종료(또는 기간 경과) 프로젝트는 지난 배정까지 표시
           const members = asgs.filter((a) => a.prjCd === p.prjCd && (ended || overdue || a.status !== 'ENDED'));
@@ -326,7 +328,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
           return (
             <section
               key={p.prjCd}
-              className={`board-prj ${over === p.prjCd ? 'drop-over' : ''} ${mine ? '' : 'readonly'} ${ended ? 'ended' : ''}`}
+              className={`board-prj ${over === p.prjCd ? 'drop-over' : ''} ${mine ? '' : 'readonly'} ${ended ? 'ended' : planned ? 'planned' : ''}`}
               onDragOver={(e) => mine && allowDrop(e, p.prjCd)}
               onDragLeave={() => setOver(null)}
               onDrop={(e) => dropOnProject(e, p)}
@@ -338,6 +340,7 @@ export function AssignmentBoard({ onEdit, refreshKey }: { onEdit: (a: BoardAsg) 
                   <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
                   <Badge code={statusOf(p)}>{label(PRJ_STATUS, statusOf(p))}</Badge>
                   {overdue && <Badge tone="warn">기간 경과</Badge>}
+                  {planned && statusOf(p) !== 'PROPOSAL' && <Badge tone="warn">시작 전</Badge>}
                 </span>
                 <span className="small muted">
                   {members.length}명 · {members.reduce((s, m) => s + m.allocRate, 0)}%

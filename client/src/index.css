@@ -541,3 +541,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .prj-group-head h3 { margin: 0; font-size: 15px; }
 .prj-group-head .btn { margin-left: auto; }
 .test-role-note { font-size: 10.5px; color: #f0b429; line-height: 1.35; }
+/* 예정 프로젝트 카드(제안·시작 전): 연한 노랑 배경으로 진행중(흰색)과 구분 */
+.board-prj.planned { background: #fff8e6; border-color: #f1dca3; }
+.board-prj.planned .board-chip { background: #fdf0cc; border-color: #f1dca3; }
+@media (hover: hover) {
+  .board-prj.planned:hover, .board-prj.planned:focus-within { background: #1f3b63; border-color: #1f3b63; }
+}
