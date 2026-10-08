@@ -165,69 +165,79 @@ function ByProject({ list, ym }: { list: Prj[]; ym: string }) {
   const nav = useNavigate();
   if (!list.length) return <Empty>진행중인 프로젝트가 없습니다.</Empty>;
   const month = Number(ym.slice(5));
+  // 투입 배정 화면과 같은 카드: 기본은 주요 정보만, 마우스를 올리면(포커스) 반전 + 상세 펼침, 누르면 상세 페이지
   return (
-    <div className="prj-cards">
+    <div className="board-projects">
       {list.map((p) => {
         const rate = p.planMd ? Math.round((p.actualMd / p.planMd) * 100) : null;
+        const ended = ['DONE', 'STOP'].includes(p.statusCd);
+        const go = () => nav(`/staffing/${p.prjCd}?ym=${ym}`);
         return (
-          <button type="button" className="prj-card" key={p.prjCd} onClick={() => nav(`/staffing/${p.prjCd}?ym=${ym}`)} aria-label={`${p.prjNm} 상세 보기`}>
+          <section
+            key={p.prjCd}
+            className={`board-prj clickable ${ended ? 'ended' : ''}`}
+            tabIndex={0}
+            role="link"
+            aria-label={`${p.prjNm} 상세 보기`}
+            onClick={go}
+            onKeyDown={(e) => e.key === 'Enter' && go()}
+          >
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <span className="row" style={{ gap: 6 }}>
                 <PrjTypeBadge type={p.prjType}>{label(PRJ_TYPE, p.prjType)}</PrjTypeBadge>
+                <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
               </span>
-              <Badge code={p.statusCd}>{label(PRJ_STATUS, p.statusCd)}</Badge>
+              <span className="small muted">
+                {p.headcount}명 · {p.allocTotal}%
+              </span>
             </div>
-            <div className="prj-card-title">{p.prjNm}</div>
-            <div className="small muted">
-              {p.customerNm ? `${p.customerNm} · ` : ''}PM {p.pmName ?? '-'}
+            <div className="board-prj-title" title={p.prjCd}>
+              {p.prjNm}
             </div>
-
-            <dl className="prj-card-facts">
-              <div>
-                <dt>시작일</dt>
-                <dd>{p.startDt ?? '-'}</dd>
-              </div>
-              <div>
-                <dt>종료일</dt>
-                <dd>{p.endDt ?? '-'}</dd>
-              </div>
-              <div>
-                <dt>투입인력</dt>
-                <dd>
-                  <strong>{p.headcount}명</strong>
-                </dd>
-              </div>
-              <div>
-                <dt>투입률 합계</dt>
-                <dd>
-                  <strong>{p.allocTotal}%</strong>
-                </dd>
-              </div>
-            </dl>
-
-            <div className="prj-card-members">
-              {p.members.slice(0, 6).map((m) => (
-                <span className="chip" key={m.asgId}>
-                  {m.name} <small>{m.allocRate}%</small>
-                </span>
+            <div className="board-members">
+              {p.members.map((m) => (
+                <div className="board-chip" key={m.asgId}>
+                  <span className="board-chip-main">
+                    <strong>
+                      <span className="muted">{m.gradeCd}</span> {m.name}
+                      {m.roleCd === 'PM' && <span className="board-pm">PM</span>}
+                    </strong>
+                  </span>
+                </div>
               ))}
-              {p.members.length > 6 && <span className="chip">+{p.members.length - 6}</span>}
-              {!p.members.length && <span className="small warn-text">이 달에 배정된 인력이 없습니다</span>}
+              {!p.members.length && <div className="board-drop-hint">{month}월에 배정된 인력 없음</div>}
             </div>
-
-            <div className="prj-card-md">
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <span className="small muted">{month}월 소요 MD</span>
-                <span className="small">
-                  <strong>{num(p.actualMd)}</strong> / 계획 {num(p.planMd)}
-                </span>
+            <div className="board-prj-detail">
+              <div className="board-detail-meta">
+                {p.customerNm ? `${p.customerNm} · ` : ''}PM {p.pmName ?? '-'} · {p.startDt ?? '-'} ~ {p.endDt ?? '-'}
               </div>
-              <ProgressBar value={rate} tone={rate != null && rate > 100 ? 'bad' : 'good'} />
-              <div className="small muted" style={{ marginTop: 4 }}>
-                누적 소요 {num(p.cumMd)} MD
+              {p.members.length > 0 && (
+                <ul className="board-detail-members">
+                  {p.members.map((m) => (
+                    <li key={m.asgId}>
+                      <span>
+                        {m.gradeCd} {m.name}
+                      </span>
+                      <span>
+                        {m.allocRate}% · {label(ASG_ROLE, m.roleCd)} · {month}월 {num(m.actualMd)}/{num(m.planMd)} MD
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="board-final-md">
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <strong>{month}월 소요 MD</strong>
+                  <span>
+                    {num(p.actualMd)} / 계획 {num(p.planMd)}
+                  </span>
+                </div>
+                <ProgressBar value={rate} tone={rate != null && rate > 100 ? 'bad' : 'good'} />
+                <div style={{ marginTop: 4 }}>누적 소요 {num(p.cumMd)} MD</div>
               </div>
+              <div className="board-status-actions small">상세 보기 →</div>
             </div>
-          </button>
+          </section>
         );
       })}
     </div>

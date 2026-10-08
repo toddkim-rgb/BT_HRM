@@ -536,3 +536,4 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 @media (hover: none) {
   .board-prj-detail { display: flex; }
 }
+.board-prj.clickable { cursor: pointer; }
