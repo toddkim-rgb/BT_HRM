@@ -87,6 +87,16 @@ export default function ProjectWeekly() {
   const go = (p: string, w: string) => nav(`/project-weekly/${p}/${w}`);
   // 편집: 프로젝트 주간보고 '편집' 권한 + PM 역할은 담당 프로젝트만
   const canManage = !!data && can('projectWeekly', 'EDIT') && (!pmScoped(user) || isPmOf(user, data.project.prjCd));
+  // 프로젝트 작업 기준으로 모음 (제출된 보고서만): 금주 실적은 지연 → 진행 → 완료 순, 같은 작업 항목끼리
+  const submittedMembers = (data?.members ?? []).filter((m) => m.statusCd === 'SUBMITTED');
+  const STATUS_ORDER: Record<string, number> = { DELAY: 0, NORMAL: 1, DONE: 2 };
+  const actualRows = submittedMembers
+    .flatMap((m) => m.actual.map((a) => ({ a, m })))
+    .sort((x, y) => (STATUS_ORDER[x.a.statusCd ?? ''] ?? 1) - (STATUS_ORDER[y.a.statusCd ?? ''] ?? 1) || x.a.workNm.localeCompare(y.a.workNm));
+  const planRows = submittedMembers
+    .flatMap((m) => m.plan.map((p) => ({ p, m })))
+    .sort((x, y) => (x.p.dueDt ?? '9999').localeCompare(y.p.dueDt ?? '9999') || x.p.workNm.localeCompare(y.p.workNm));
+  const isSmPrj = data?.project.prjType === 'SM';
   const editable = canManage && !data?.confirmedYn;
 
   const saveComment = async (confirm?: boolean) => {
@@ -174,90 +184,166 @@ export default function ProjectWeekly() {
               <MilestoneTrack list={data.milestones} progress={data.kpi.progress} />
             </Card>
 
+            {/* ② 금주 실적: 프로젝트 작업 기준 (제출된 주간 업무보고를 작업 항목별로 모음, 지연 먼저) */}
             <Card
               title={
                 <>
-                  <span className="section-no">2</span>인력별 실적 / 계획
+                  <span className="section-no">2</span>금주 실적
+                </>
+              }
+              actions={<span className="small muted">제출된 주간 업무보고 기준 · {actualRows.length}건</span>}
+            >
+              {!actualRows.length ? (
+                <Empty>제출된 금주 실적이 없습니다.</Empty>
+              ) : (
+                <div className="table-wrap">
+                  <table className="tbl responsive">
+                    <thead>
+                      <tr>
+                        <th>상태</th>
+                        <th>작업 항목</th>
+                        <th>{isSmPrj ? '업무유형 · 처리' : '진척 (전주 → 금주)'}</th>
+                        <th>담당</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {actualRows.map(({ a, m }, i) => (
+                        <tr key={i}>
+                          <td data-label="상태">{a.statusCd ? <Badge code={a.statusCd}>{ITEM_STATUS[a.statusCd]}</Badge> : <span className="muted">-</span>}</td>
+                          <td data-label="작업 항목">
+                            <strong>{a.workNm}</strong>
+                            {a.content && <div className="small muted">{a.content}</div>}
+                            {a.delayReason && <div className="small bad-text">지연 사유: {a.delayReason}</div>}
+                          </td>
+                          <td data-label={isSmPrj ? '업무유형 · 처리' : '진척'} className="nowrap">
+                            {a.smWorkType ? (
+                              <>
+                                {label(SM_WORK_TYPE, a.smWorkType)} · {a.smCount ?? 0}건
+                              </>
+                            ) : (
+                              <>
+                                {a.progressBefore ?? 0}% → <strong>{a.progressAfter ?? '-'}%</strong>
+                                {a.targetProgress != null && <span className="small muted"> (목표 {a.targetProgress}%)</span>}
+                              </>
+                            )}
+                          </td>
+                          <td data-label="담당" className="nowrap">
+                            <span className="small muted">{m.gradeCd}</span> {m.name}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+
+            {/* ③ 차주 계획: 프로젝트 작업 기준 */}
+            <Card
+              title={
+                <>
+                  <span className="section-no">3</span>차주 계획
+                </>
+              }
+              actions={<span className="small muted">{planRows.length}건</span>}
+            >
+              {!planRows.length ? (
+                <Empty>제출된 차주 계획이 없습니다.</Empty>
+              ) : (
+                <div className="table-wrap">
+                  <table className="tbl responsive">
+                    <thead>
+                      <tr>
+                        <th>작업 항목</th>
+                        <th>{isSmPrj ? '업무유형' : '목표'}</th>
+                        <th>완료 예정</th>
+                        <th>담당</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {planRows.map(({ p, m }, i) => (
+                        <tr key={i}>
+                          <td data-label="작업 항목">
+                            <strong>{p.workNm}</strong>
+                            {p.content && <div className="small muted">{p.content}</div>}
+                          </td>
+                          <td data-label={isSmPrj ? '업무유형' : '목표'} className="nowrap">
+                            {p.smWorkType ? label(SM_WORK_TYPE, p.smWorkType) : p.targetProgress != null ? `${p.targetProgress}%` : '-'}
+                          </td>
+                          <td data-label="완료 예정" className="nowrap">
+                            {p.dueDt ?? '-'}
+                          </td>
+                          <td data-label="담당" className="nowrap">
+                            <span className="small muted">{m.gradeCd}</span> {m.name}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+
+            {/* ④ 인력별 투입: 제출 현황·MD (보조) */}
+            <Card
+              title={
+                <>
+                  <span className="section-no">4</span>인력별 투입
                 </>
               }
             >
               {!data.members.length ? (
                 <Empty>이번 주 배정된 인력이 없습니다.</Empty>
               ) : (
-                data.members.map((m) => (
-                  <div className="item-card" key={m.empId}>
-                    <div className="item-head">
-                      <div className="row">
-                        <span className="muted small">{m.gradeCd}</span> <strong>{m.name}</strong>
-                        <span className="muted small">
-                          {label(ASG_ROLE, m.roleCd)} · {m.allocRate}%
-                        </span>
-                        <Badge code={m.statusCd}>{label(WW_STATUS, m.statusCd)}</Badge>
-                      </div>
-                      <div className="row">
-                        <span className="small">
-                          <strong>{num(m.md)}</strong> / 계획 {num(m.plannedMd)} MD
-                        </span>
-                        {m.statusCd !== 'NONE' && (
-                          <Link className="btn sm" to={`/weekly/${m.empId}/${week}`}>
-                            보고서
-                          </Link>
-                        )}
-                      </div>
-                    </div>
-                    {m.statusCd !== 'SUBMITTED' ? (
-                      <div className="muted small">아직 제출하지 않았습니다.</div>
-                    ) : (
-                      <div className="grid cols-2" style={{ gap: 12 }}>
-                        <div>
-                          <div className="field-label" style={{ marginBottom: 4 }}>
-                            금주 실적
-                          </div>
-                          {!m.actual.length && <div className="muted small">입력 없음</div>}
-                          {m.actual.map((a, i) => (
-                            <div key={i} className="small" style={{ marginBottom: 6 }}>
-                              {a.statusCd && <Badge code={a.statusCd}>{ITEM_STATUS[a.statusCd]}</Badge>} <strong>{a.workNm}</strong>{' '}
-                              {a.smWorkType ? (
-                                <span className="muted">
-                                  {label(SM_WORK_TYPE, a.smWorkType)} {a.smCount ?? 0}건
-                                </span>
-                              ) : (
-                                <span className="muted">
-                                  {a.progressBefore ?? 0}% → {a.progressAfter ?? '-'}%{a.targetProgress != null && ` (목표 ${a.targetProgress}%)`}
-                                </span>
-                              )}
-                              {a.content && <div className="muted">{a.content}</div>}
-                              {a.delayReason && <div className="bad-text">지연 사유: {a.delayReason}</div>}
-                            </div>
-                          ))}
-                        </div>
-                        <div>
-                          <div className="field-label" style={{ marginBottom: 4 }}>
-                            차주 계획
-                          </div>
-                          {!m.plan.length && <div className="muted small">입력 없음</div>}
-                          {m.plan.map((p, i) => (
-                            <div key={i} className="small" style={{ marginBottom: 6 }}>
-                              <strong>{p.workNm}</strong>{' '}
-                              <span className="muted">
-                                {p.smWorkType ? label(SM_WORK_TYPE, p.smWorkType) : p.targetProgress != null ? `목표 ${p.targetProgress}%` : ''}
-                                {p.dueDt && ` · ~${p.dueDt}`}
-                              </span>
-                              {p.content && <div className="muted">{p.content}</div>}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))
+                <div className="table-wrap">
+                  <table className="tbl responsive">
+                    <thead>
+                      <tr>
+                        <th>인력</th>
+                        <th>역할 · 배정률</th>
+                        <th>제출</th>
+                        <th className="num">금주 MD / 계획</th>
+                        <th className="num">실적 · 계획 건수</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.members.map((m) => (
+                        <tr key={m.empId}>
+                          <td data-label="인력">
+                            <span className="small muted">{m.gradeCd}</span> <strong>{m.name}</strong>
+                          </td>
+                          <td data-label="역할 · 배정률">
+                            {label(ASG_ROLE, m.roleCd)} · {m.allocRate}%
+                          </td>
+                          <td data-label="제출">
+                            <Badge code={m.statusCd}>{label(WW_STATUS, m.statusCd)}</Badge>
+                          </td>
+                          <td data-label="금주 MD / 계획" className="num">
+                            <strong>{num(m.md)}</strong> / {num(m.plannedMd)}
+                          </td>
+                          <td data-label="실적 · 계획 건수" className="num">
+                            {m.statusCd === 'SUBMITTED' ? `${m.actual.length} · ${m.plan.length}` : '-'}
+                          </td>
+                          <td data-label="">
+                            {m.statusCd !== 'NONE' && (
+                              <Link className="btn sm" to={`/weekly/${m.empId}/${week}`}>
+                                보고서
+                              </Link>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Card>
 
             <Card
               title={
                 <>
-                  <span className="section-no">3</span>금주 이슈 / 리스크
+                  <span className="section-no">5</span>금주 이슈 / 리스크
                 </>
               }
               actions={<span className="muted small">체크한 이슈는 전사 One-Page에 올라갑니다</span>}
@@ -303,7 +389,7 @@ export default function ProjectWeekly() {
             <Card
               title={
                 <>
-                  <span className="section-no">4</span>PM 종합 의견
+                  <span className="section-no">6</span>PM 종합 의견
                 </>
               }
             >
