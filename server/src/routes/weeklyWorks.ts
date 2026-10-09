@@ -322,7 +322,11 @@ async function writeReport(tx: Tx, empId: string, week: string, body: ReportInpu
 }
 
 /** 제출 검증 (10.3): errors = 제출 불가, warnings = 확인 후 제출 */
-async function validateForSubmit(tx: Tx, wwId: number, week: string) {
+/**
+ * 제출 검증 (트랜잭션 안에서 실행) — 트랜잭션 밖 쿼리(prisma.*)를 부르면 안 됨:
+ * 운영 DB 어댑터(libSQL)는 트랜잭션 동안 다른 쿼리를 잠가 두므로 서로 기다리다 시간 초과됨 → 공휴일은 밖에서 받아 옴
+ */
+async function validateForSubmit(tx: Tx, wwId: number, week: string, holidays: Set<string>) {
   const ww = await tx.weeklyWork.findUniqueOrThrow({
     where: { wwId },
     include: { timesheets: true, workItems: { include: { project: { select: { prjType: true } } } } },
@@ -334,7 +338,7 @@ async function validateForSubmit(tx: Tx, wwId: number, week: string) {
     if (it.itemType === 'ACTUAL' && it.project.prjType !== 'SM' && it.progressAfter == null) errors.push(`금주 진척률을 입력하세요: ${it.workNm}`);
   }
   const days = weekDays(week);
-  const bdays = businessDays(days[0], days[6], await holidaySet());
+  const bdays = businessDays(days[0], days[6], holidays);
   const total = ww.timesheets.reduce((s, t) => s + t.md, 0);
   if (Math.abs(total - bdays.length) > 0.001) warnings.push(`투입 MD 합계(휴가 포함) ${total}MD가 해당 주 영업일 ${bdays.length}일과 다릅니다.`);
   if (!ww.workItems.some((w) => w.itemType === 'PLAN')) warnings.push('차주 계획이 없습니다. (차주 전일 휴가인 경우만 생략 가능)');
@@ -377,9 +381,10 @@ weeklyWorksRouter.post('/:empId/:week/submit', async (req, res) => {
   const body = parse(reportSchema.extend({ confirmWarnings: z.boolean().default(false) }), req.body);
   try {
     // 저장·검증을 한 트랜잭션으로: 검증에 걸리면 기존(제출된) 내용이 그대로 유지됨
+    const holidays = await holidaySet(); // 트랜잭션 시작 전에 조회 (위 validateForSubmit 설명 참고)
     await prisma.$transaction(async (tx) => {
       const id = await writeReport(tx, empId, week, body, 'SUBMITTED');
-      const v = await validateForSubmit(tx, id, week);
+      const v = await validateForSubmit(tx, id, week, holidays);
       if (v.errors.length || (v.warnings.length && !body.confirmWarnings)) throw new ValidationAbort(v);
     }, TX_OPTS);
   } catch (e) {
