@@ -570,3 +570,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .board-prj:hover .rate-mark, .board-prj:focus-within .rate-mark { background: #fff; }
   .board-prj:hover .rate-elapsed, .board-prj:focus-within .rate-elapsed { color: rgba(255, 255, 255, 0.75); }
 }
+/* 프로젝트 주간보고 금주 실적: 담당자 1 : 작업 항목 n 묶음 */
+.tbl td.grp-owner { vertical-align: top; background: var(--surface-2); border-right: 1px solid var(--border); }
+.tbl tr.grp-rest td { border-top-color: transparent; }

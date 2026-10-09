@@ -90,9 +90,10 @@ export default function ProjectWeekly() {
   // 프로젝트 작업 기준으로 모음 (제출된 보고서만): 금주 실적은 지연 → 진행 → 완료 순, 같은 작업 항목끼리
   const submittedMembers = (data?.members ?? []).filter((m) => m.statusCd === 'SUBMITTED');
   const STATUS_ORDER: Record<string, number> = { DELAY: 0, NORMAL: 1, DONE: 2 };
-  const actualRows = submittedMembers
-    .flatMap((m) => m.actual.map((a) => ({ a, m })))
-    .sort((x, y) => (STATUS_ORDER[x.a.statusCd ?? ''] ?? 1) - (STATUS_ORDER[y.a.statusCd ?? ''] ?? 1) || x.a.workNm.localeCompare(y.a.workNm));
+  const actualGroups = submittedMembers
+    .filter((m) => m.actual.length)
+    .map((m) => ({ m, items: [...m.actual].sort((x, y) => (STATUS_ORDER[x.statusCd ?? ''] ?? 1) - (STATUS_ORDER[y.statusCd ?? ''] ?? 1) || x.workNm.localeCompare(y.workNm)) }));
+  const actualCount = actualGroups.reduce((n, g) => n + g.items.length, 0);
   const planRows = submittedMembers
     .flatMap((m) => m.plan.map((p) => ({ p, m })))
     .sort((x, y) => (x.p.dueDt ?? '9999').localeCompare(y.p.dueDt ?? '9999') || x.p.workNm.localeCompare(y.p.workNm));
@@ -191,25 +192,31 @@ export default function ProjectWeekly() {
                   <span className="section-no">2</span>금주 실적
                 </>
               }
-              actions={<span className="small muted">제출된 주간 업무보고 기준 · {actualRows.length}건</span>}
+              actions={<span className="small muted">제출된 주간 업무보고 기준 · {actualGroups.length}명 · {actualCount}건</span>}
             >
-              {!actualRows.length ? (
+              {!actualCount ? (
                 <Empty>제출된 금주 실적이 없습니다.</Empty>
               ) : (
                 <div className="table-wrap">
                   <table className="tbl responsive">
                     <thead>
                       <tr>
-                        <th>상태</th>
+                        <th>담당</th>
                         <th>작업 항목</th>
                         <th>{isSmPrj ? '업무유형 · 처리' : '진척 (전주 → 금주)'}</th>
-                        <th>담당</th>
+                        <th>상태</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {actualRows.map(({ a, m }, i) => (
-                        <tr key={i}>
-                          <td data-label="상태">{a.statusCd ? <Badge code={a.statusCd}>{ITEM_STATUS[a.statusCd]}</Badge> : <span className="muted">-</span>}</td>
+                      {actualGroups.flatMap(({ m, items }) =>
+                        items.map((a, i) => (
+                        <tr key={`${m.empId}-${i}`} className={i === 0 ? 'grp-first' : 'grp-rest'}>
+                          {i === 0 && (
+                            <td data-label="담당" rowSpan={items.length} className="nowrap grp-owner">
+                              <span className="small muted">{m.gradeCd}</span> <strong>{m.name}</strong>
+                              <div className="small muted">{items.length}건</div>
+                            </td>
+                          )}
                           <td data-label="작업 항목">
                             <strong>{a.workNm}</strong>
                             {a.content && <div className="small muted">{a.content}</div>}
@@ -227,11 +234,10 @@ export default function ProjectWeekly() {
                               </>
                             )}
                           </td>
-                          <td data-label="담당" className="nowrap">
-                            <span className="small muted">{m.gradeCd}</span> {m.name}
-                          </td>
+                          <td data-label="상태">{a.statusCd ? <Badge code={a.statusCd}>{ITEM_STATUS[a.statusCd]}</Badge> : <span className="muted">-</span>}</td>
                         </tr>
-                      ))}
+                        )),
+                      )}
                     </tbody>
                   </table>
                 </div>
