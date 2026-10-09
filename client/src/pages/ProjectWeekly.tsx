@@ -94,7 +94,22 @@ interface WeeklyCard {
   highIssueCount: number;
   confirmedYn: boolean;
   pr: ProjectRate | null;
+  actual: CardItem[]; // 제출된 금주 실적 (지연 먼저)
+  plan: CardItem[]; // 제출된 차주 계획
 }
+interface CardItem {
+  workNm: string;
+  owner: string;
+  progressBefore: number | null;
+  progressAfter: number | null;
+  targetProgress: number | null;
+  dueDt: string | null;
+  statusCd: string | null;
+  smWorkType: string | null;
+  smCount: number | null;
+}
+/** 실적 한 줄: SM은 업무유형·건수, 그 외는 전주 → 금주 */
+const actualText = (i: CardItem) => (i.smWorkType ? `${label(SM_WORK_TYPE, i.smWorkType)} ${i.smCount ?? 0}건` : `${i.progressBefore ?? 0}→${i.progressAfter ?? '-'}%`);
 
 function ProjectWeeklyCards() {
   const [sp, setSp] = useSearchParams();
@@ -163,10 +178,60 @@ function ProjectWeeklyCards() {
                       <Badge tone="neutral">이슈 0</Badge>
                     )}
                   </div>
+                  {/* 제출된 금주 실적 (기본 3건) */}
+                  {c.actual.length > 0 ? (
+                    <ul className="wk-items">
+                      {c.actual.slice(0, 3).map((i, k) => (
+                        <li key={k}>
+                          {i.statusCd && i.statusCd !== 'NORMAL' && <Badge code={i.statusCd}>{ITEM_STATUS[i.statusCd]}</Badge>}
+                          <span className="wk-name">{i.workNm}</span>
+                          <span className="wk-val">{actualText(i)}</span>
+                          <span className="wk-owner">{i.owner.split(' ').pop()}</span>
+                        </li>
+                      ))}
+                      {c.actual.length > 3 && <li className="muted small">외 {c.actual.length - 3}건</li>}
+                    </ul>
+                  ) : (
+                    <div className="board-drop-hint">제출된 금주 실적 없음</div>
+                  )}
                   <div className="board-prj-detail">
                     <div className="board-detail-meta">
                       {c.customerNm ? `${c.customerNm} · ` : ''}PM {c.pmName ?? '-'} · {c.startDt ?? '-'} ~ {c.endDt ?? '-'}
                     </div>
+                    {c.actual.length > 3 && (
+                      <>
+                        <div className="wk-sub">금주 실적 전체 ({c.actual.length})</div>
+                        <ul className="board-detail-members">
+                          {c.actual.map((i, k) => (
+                            <li key={k}>
+                              <span>
+                                {i.statusCd === 'DELAY' ? '⚠ ' : ''}
+                                {i.workNm}
+                              </span>
+                              <span>
+                                {actualText(i)} · {i.owner}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    <div className="wk-sub">차주 계획 ({c.plan.length})</div>
+                    {c.plan.length ? (
+                      <ul className="board-detail-members">
+                        {c.plan.map((i, k) => (
+                          <li key={k}>
+                            <span>{i.workNm}</span>
+                            <span>
+                              {i.smWorkType ? label(SM_WORK_TYPE, i.smWorkType) : i.targetProgress != null ? `목표 ${i.targetProgress}%` : ''}
+                              {i.dueDt ? ` · ~${i.dueDt.slice(5)}` : ''} · {i.owner}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="board-detail-meta">제출된 차주 계획 없음</div>
+                    )}
                     <div className="board-detail-meta">{c.notSubmitted.length ? `미제출: ${c.notSubmitted.join(', ')}` : c.headcount ? '전원 제출' : '이 주 배정 인력 없음'}</div>
                     {c.pr && c.pr.status !== 'NO_BASE' && <RateBar pr={c.pr} compact />}
                     <div className="board-status-actions small">주간보고 열기 →</div>

@@ -173,6 +173,24 @@ projectWeeklyRouter.get('/weekly-cards', requireMenu('projectWeekly'), async (re
   const delays = await prisma.workItem.groupBy({ by: ['prjCd'], where: { prjCd: { in: codes }, itemType: 'ACTUAL', statusCd: 'DELAY', ...sub }, _count: { _all: true } });
   const issues = await prisma.weeklyIssue.findMany({ where: { prjCd: { in: codes }, ...sub }, select: { prjCd: true, severity: true } });
   const comments = await prisma.weeklyComment.findMany({ where: { reportWeek: week, prjCd: { in: codes } }, select: { prjCd: true, confirmedYn: true } });
+  // 제출된 주간보고 내용: 금주 실적·차주 계획 (카드 표시용)
+  const items = await prisma.workItem.findMany({
+    where: { prjCd: { in: codes }, ...sub },
+    select: { prjCd: true, itemType: true, workNm: true, progressBefore: true, progressAfter: true, targetProgress: true, dueDt: true, statusCd: true, smWorkType: true, smCount: true, weeklyWork: { select: { employee: { select: { name: true, gradeCd: true } } } } },
+    orderBy: [{ seq: 'asc' }],
+  });
+  const ST: Record<string, number> = { DELAY: 0, NORMAL: 1, DONE: 2 };
+  const itemOut = (i: (typeof items)[number]) => ({
+    workNm: i.workNm,
+    owner: [i.weeklyWork.employee.gradeCd, i.weeklyWork.employee.name].filter((x) => x && x !== '-').join(' '),
+    progressBefore: i.progressBefore,
+    progressAfter: i.progressAfter,
+    targetProgress: i.targetProgress,
+    dueDt: i.dueDt,
+    statusCd: i.statusCd,
+    smWorkType: i.smWorkType,
+    smCount: i.smCount,
+  });
   const rates = await projectRates(codes);
   res.json(
     prjs.map((p) => {
@@ -198,6 +216,11 @@ projectWeeklyRouter.get('/weekly-cards', requireMenu('projectWeekly'), async (re
         highIssueCount: pi.filter((i) => i.severity === 'H').length,
         confirmedYn: comments.find((c) => c.prjCd === p.prjCd)?.confirmedYn ?? false,
         pr: rates.get(p.prjCd) ?? null,
+        actual: items
+          .filter((i) => i.prjCd === p.prjCd && i.itemType === 'ACTUAL')
+          .map(itemOut)
+          .sort((a, b) => (ST[a.statusCd ?? ''] ?? 1) - (ST[b.statusCd ?? ''] ?? 1)),
+        plan: items.filter((i) => i.prjCd === p.prjCd && i.itemType === 'PLAN').map(itemOut),
       };
     }),
   );
