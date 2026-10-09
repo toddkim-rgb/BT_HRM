@@ -51,7 +51,8 @@ interface View {
   plan: (WeekPlan & { roles: string[] })[];
   dayAlloc: Record<string, number>;
   actualItems: Item[];
-  prevProgress?: Record<string, number>; // 작업 항목(프로젝트|작업명)별 전주(%) — 이전 보고서 기준
+  prevProgress?: Record<string, number>;
+  prevTarget?: Record<string, number>; // 작업 항목별 목표(%) — 지난주 차주 계획 // 작업 항목(프로젝트|작업명)별 전주(%) — 이전 보고서 기준
   planItems: Item[];
   issues: Issue[];
 }
@@ -253,10 +254,13 @@ export default function WeeklyWork() {
     toast(`주간 업무 ${r.added}건을 차주 계획으로 가져왔습니다.${r.skipped ? ` (이미 있는 항목 ${r.skipped}건 제외)` : ''}${done ? ` 완료(100%) ${done}건은 제외했습니다.` : ''} 목표 진척률·완료 예정일을 입력하세요.`, 'info');
   };
 
+  // 목표(%) = 지난주 차주 계획의 목표 진척률 (서버가 보내준 값, 작업 항목명 기준)
+  const targetOf = (it: Item) => v?.prevTarget?.[`${it.prjCd}|${it.workNm.trim()}`] ?? null;
   const statusOf = (it: Item) => {
     if (isSm(it.prjCd)) return null;
     if (it.progressAfter === 100) return 'DONE';
-    if (it.targetProgress != null && it.progressAfter != null && it.progressAfter < it.targetProgress) return 'DELAY';
+    const target = targetOf(it);
+    if (target != null && it.progressAfter != null && it.progressAfter < target) return 'DELAY';
     return it.progressAfter == null ? null : 'NORMAL';
   };
 
@@ -536,8 +540,8 @@ export default function WeeklyWork() {
                             <Field label="전주(%)" hint="이전 보고서 자동">
                               <input type="number" value={v.prevProgress?.[`${it.prjCd}|${it.workNm.trim()}`] ?? 0} readOnly disabled title="이전 보고서에서 같은 작업 항목의 금주(%)를 자동으로 가져옵니다" />
                             </Field>
-                            <Field label="목표(%)">
-                              <input type="number" min={0} max={100} value={it.targetProgress ?? ''} disabled={!editable} onChange={(e) => set({ targetProgress: e.target.value === '' ? null : Number(e.target.value) })} />
+                            <Field label="목표(%)" hint="지난주 차주 계획">
+                              <input value={targetOf(it) ?? '-'} readOnly disabled title="지난주 '차주 계획'의 목표 진척률을 자동으로 가져옵니다. 없으면 지연 판정을 하지 않습니다." />
                             </Field>
                             <Field label="금주(%)" required>
                               <input type="number" min={0} max={100} value={it.progressAfter ?? ''} disabled={!editable} onChange={(e) => set({ progressAfter: e.target.value === '' ? null : Number(e.target.value) })} />
