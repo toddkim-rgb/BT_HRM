@@ -72,6 +72,25 @@ async function assertCanView(u: AuthUser, empId: string, week: string) {
 }
 
 /** 전주 '차주 계획' → 금주 실적 이월 (F-005) */
+/**
+ * 전주(%) 자동 입력: 이전 보고서 중 같은 프로젝트·같은 작업 항목의 가장 최근 '금주(%)'
+ * (한 주 건너뛰어도 마지막으로 적은 보고서 기준, 없으면 0) — 화면에서는 읽기 전용, 저장 시에도 이 값으로 덮어씀
+ */
+const progressKey = (prjCd: string, workNm: string) => `${prjCd}|${workNm.trim()}`;
+async function prevProgressMap(db: Pick<Tx, 'workItem'>, empId: string, week: string): Promise<Record<string, number>> {
+  const rows = await db.workItem.findMany({
+    where: { itemType: 'ACTUAL', progressAfter: { not: null }, weeklyWork: { empId, reportWeek: { lt: week } } },
+    select: { prjCd: true, workNm: true, progressAfter: true, weeklyWork: { select: { reportWeek: true } } },
+    orderBy: { weeklyWork: { reportWeek: 'desc' } },
+  });
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    const k = progressKey(r.prjCd, r.workNm);
+    if (!(k in out)) out[k] = r.progressAfter!;
+  }
+  return out;
+}
+
 async function carryOver(empId: string, week: string) {
   const prev = await prisma.weeklyWork.findUnique({
     where: { empId_reportWeek: { empId, reportWeek: shiftWeek(week, -1) } },
@@ -162,6 +181,8 @@ async function buildView(empId: string, week: string) {
     planItems = [];
     issues = [];
   }
+  const prevProgress = await prevProgressMap(prisma, empId, week);
+  actualItems = (actualItems as { prjCd: string; workNm: string; progressBefore?: number | null }[]).map((it) => ({ ...it, progressBefore: prevProgress[progressKey(it.prjCd, it.workNm)] ?? 0 }));
   // 배정된 프로젝트(해당 주 배정기간 내) 행 자동 생성 — 배정률 높은 순
   for (const p of plan) if (!tsRows.some((r) => r.prjCd === p.prjCd)) tsRows.push({ prjCd: p.prjCd, md: {} });
 
@@ -183,6 +204,7 @@ async function buildView(empId: string, week: string) {
     actualItems,
     planItems,
     issues,
+    prevProgress, // 작업 항목별 전주(%) — 화면에서 새로 입력한 항목도 바로 표시
   };
 }
 
@@ -243,6 +265,7 @@ async function writeReport(tx: Tx, empId: string, week: string, body: ReportInpu
     }
   }
 
+  const prevProgress = await prevProgressMap(tx, empId, week);
   const toItem = (it: ItemInput, itemType: 'ACTUAL' | 'PLAN', seq: number) => {
     const isSm = pm.get(it.prjCd)?.prjType === 'SM';
     return {
@@ -252,7 +275,7 @@ async function writeReport(tx: Tx, empId: string, week: string, body: ReportInpu
       seq,
       workNm: it.workNm,
       content: it.content ?? null,
-      progressBefore: isSm || itemType === 'PLAN' ? null : it.progressBefore ?? 0,
+      progressBefore: isSm || itemType === 'PLAN' ? null : prevProgress[progressKey(it.prjCd, it.workNm)] ?? 0, // 전주(%) = 이전 보고서 값 (입력값 무시)
       progressAfter: isSm || itemType === 'PLAN' ? null : it.progressAfter ?? null,
       targetProgress: isSm ? null : it.targetProgress ?? null,
       dueDt: it.dueDt ?? null,

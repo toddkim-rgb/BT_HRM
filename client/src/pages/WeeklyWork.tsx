@@ -51,6 +51,7 @@ interface View {
   plan: (WeekPlan & { roles: string[] })[];
   dayAlloc: Record<string, number>;
   actualItems: Item[];
+  prevProgress?: Record<string, number>; // 작업 항목(프로젝트|작업명)별 전주(%) — 이전 보고서 기준
   planItems: Item[];
   issues: Issue[];
 }
@@ -532,8 +533,8 @@ export default function WeeklyWork() {
                             <Field label="작업 항목">
                               <input value={it.workNm} disabled={!editable} onChange={(e) => set({ workNm: e.target.value })} />
                             </Field>
-                            <Field label="전주(%)">
-                              <input type="number" min={0} max={100} value={it.progressBefore ?? 0} disabled={!editable} onChange={(e) => set({ progressBefore: Number(e.target.value) })} />
+                            <Field label="전주(%)" hint="이전 보고서 자동">
+                              <input type="number" value={v.prevProgress?.[`${it.prjCd}|${it.workNm.trim()}`] ?? 0} readOnly disabled title="이전 보고서에서 같은 작업 항목의 금주(%)를 자동으로 가져옵니다" />
                             </Field>
                             <Field label="목표(%)">
                               <input type="number" min={0} max={100} value={it.targetProgress ?? ''} disabled={!editable} onChange={(e) => set({ targetProgress: e.target.value === '' ? null : Number(e.target.value) })} />
