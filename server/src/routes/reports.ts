@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { assertProjectManager, isPmOf, me, pmScoped } from '../auth.js';
+import { assertProjectManager, isPmOf, me, pmProjectCodes, pmScoped } from '../auth.js';
+import { projectRates } from '../lib/projectRate.js';
 import { assertMenu, requireMenu } from '../lib/permissions.js';
 import { HttpError, forbidden, notFound, prisma } from '../db.js';
 import { addDays, businessDays, isValidWeek, shiftWeek, today, weekDays } from '../lib/dates.js';
@@ -145,6 +146,62 @@ async function assertCanViewProject(u: ReturnType<typeof me>, prjCd: string) {
   if (!p) throw notFound('프로젝트');
   if (pmScoped(u) && !isPmOf(u, prjCd)) throw forbidden();
 }
+
+/**
+ * 프로젝트 주간보고 카드 목록 (주차별): 진행중 프로젝트 + 그 주 배정이 있는 프로젝트
+ * 제출 현황 · 금주 MD(제출분) · 지연 작업 · 이슈 · 확정 여부 · 투입률 — PM은 담당 프로젝트만
+ */
+projectWeeklyRouter.get('/weekly-cards', requireMenu('projectWeekly'), async (req, res) => {
+  const u = me(req);
+  const week = String(req.query.week ?? '');
+  checkWeek(week);
+  const days = weekDays(week);
+  const scope = pmScoped(u) ? pmProjectCodes(u) : null;
+  const asg = await prisma.assignment.findMany({
+    where: { canceled: false, startDt: { lte: days[6] }, endDt: { gte: days[0] }, project: { prjType: { not: 'NP' } }, ...(scope ? { prjCd: { in: scope } } : {}) },
+    select: { prjCd: true, empId: true, employee: { select: { name: true, gradeCd: true } } },
+  });
+  const prjs = await prisma.project.findMany({
+    where: { prjType: { not: 'NP' }, OR: [{ statusCd: 'ACTIVE' }, { prjCd: { in: [...new Set(asg.map((a) => a.prjCd))] } }], ...(scope ? { prjCd: { in: scope } } : {}) },
+    select: { prjCd: true, prjNm: true, prjType: true, customerNm: true, statusCd: true, startDt: true, endDt: true, pm: { select: { name: true } } },
+    orderBy: { prjNm: 'asc' },
+  });
+  const codes = prjs.map((p) => p.prjCd);
+  const wws = await prisma.weeklyWork.findMany({ where: { reportWeek: week, empId: { in: [...new Set(asg.map((a) => a.empId))] } }, select: { empId: true, statusCd: true } });
+  const sub = { weeklyWork: { reportWeek: week, statusCd: 'SUBMITTED' } };
+  const ts = await prisma.timesheet.groupBy({ by: ['prjCd'], where: { prjCd: { in: codes }, ...sub }, _sum: { md: true } });
+  const delays = await prisma.workItem.groupBy({ by: ['prjCd'], where: { prjCd: { in: codes }, itemType: 'ACTUAL', statusCd: 'DELAY', ...sub }, _count: { _all: true } });
+  const issues = await prisma.weeklyIssue.findMany({ where: { prjCd: { in: codes }, ...sub }, select: { prjCd: true, severity: true } });
+  const comments = await prisma.weeklyComment.findMany({ where: { reportWeek: week, prjCd: { in: codes } }, select: { prjCd: true, confirmedYn: true } });
+  const rates = await projectRates(codes);
+  res.json(
+    prjs.map((p) => {
+      const members = [...new Map(asg.filter((a) => a.prjCd === p.prjCd).map((a) => [a.empId, a])).values()];
+      const statusOf = (empId: string) => wws.find((w) => w.empId === empId)?.statusCd ?? 'NONE';
+      const submitted = members.filter((m) => statusOf(m.empId) === 'SUBMITTED');
+      const pi = issues.filter((i) => i.prjCd === p.prjCd);
+      return {
+        prjCd: p.prjCd,
+        prjNm: p.prjNm,
+        prjType: p.prjType,
+        customerNm: p.customerNm,
+        statusCd: p.statusCd,
+        startDt: p.startDt,
+        endDt: p.endDt,
+        pmName: p.pm?.name ?? null,
+        headcount: members.length,
+        submitted: submitted.length,
+        notSubmitted: members.filter((m) => statusOf(m.empId) !== 'SUBMITTED').map((m) => `${m.employee.gradeCd} ${m.employee.name}`),
+        weekMd: ts.find((t) => t.prjCd === p.prjCd)?._sum.md ?? 0,
+        delayItems: delays.find((d) => d.prjCd === p.prjCd)?._count._all ?? 0,
+        issueCount: pi.length,
+        highIssueCount: pi.filter((i) => i.severity === 'H').length,
+        confirmedYn: comments.find((c) => c.prjCd === p.prjCd)?.confirmedYn ?? false,
+        pr: rates.get(p.prjCd) ?? null,
+      };
+    }),
+  );
+});
 
 projectWeeklyRouter.get('/:prjCd/weekly/:week', async (req, res) => {
   const u = me(req);

@@ -573,3 +573,5 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 /* 프로젝트 주간보고 금주 실적: 담당자 1 : 작업 항목 n 묶음 */
 .tbl td.grp-owner { vertical-align: top; background: var(--surface-2); border-right: 1px solid var(--border); }
 .tbl tr.grp-rest td { border-top-color: transparent; }
+/* 프로젝트 주간보고 카드: 확정된 주간보고 */
+.board-prj.confirmed { border-color: #bfe3cf; }

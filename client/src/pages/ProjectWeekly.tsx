@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Badge, Card, Empty, ErrorBox, Field, Kpi, Loading, Modal, PageHeader, ProgressBar, Select, useToast } from '../components/ui';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Badge, Card, Empty, ErrorBox, Field, Kpi, Loading, Modal, PageHeader, PrjTypeBadge, ProgressBar, useToast } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { isPmOf, pmScoped, useAuth } from '../lib/auth';
-import { ASG_ROLE, ISSUE_TYPE, ITEM_STATUS, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
+import { ASG_ROLE, ISSUE_TYPE, ITEM_STATUS, PRJ_TYPE, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
 import { dateTime, label, num, pct } from '../lib/format';
 import { isoWeek, shiftWeek, today, weekLabel } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
+import { RateBar, type ProjectRate } from '../components/ProjectRate';
 
 export interface Milestone {
   msId: number;
@@ -69,14 +70,124 @@ interface View {
 export const MS_STATUS: Record<string, string> = { DONE: '완료', DELAY: '지연', PLANNED: '예정' };
 
 /** 프로젝트 주간보고: 인력별 주간 업무보고를 자동 취합 + PM 종합 의견 */
+/** 프로젝트 주간보고: 목록(주차별 프로젝트 카드) → 카드를 누르면 프로젝트 상세 */
 export default function ProjectWeekly() {
+  const params = useParams();
+  return params.prjCd ? <ProjectWeeklyDetail /> : <ProjectWeeklyCards />;
+}
+
+interface WeeklyCard {
+  prjCd: string;
+  prjNm: string;
+  prjType: string;
+  customerNm: string | null;
+  statusCd: string;
+  startDt: string | null;
+  endDt: string | null;
+  pmName: string | null;
+  headcount: number;
+  submitted: number;
+  notSubmitted: string[];
+  weekMd: number;
+  delayItems: number;
+  issueCount: number;
+  highIssueCount: number;
+  confirmedYn: boolean;
+  pr: ProjectRate | null;
+}
+
+function ProjectWeeklyCards() {
+  const [sp, setSp] = useSearchParams();
+  const week = sp.get('week') ?? isoWeek(today());
+  const setWeek = (w: string) => setSp({ week: w });
+  const nav = useNavigate();
+  const { data, error, loading } = useFetch<WeeklyCard[]>(`/projects/weekly-cards${qs({ week })}`);
+  const list = [...(data ?? [])].sort((a, b) => Number(a.confirmedYn) - Number(b.confirmedYn) || a.prjNm.localeCompare(b.prjNm));
+  const confirmed = list.filter((c) => c.confirmedYn).length;
+  return (
+    <div>
+      <PageHeader
+        title="프로젝트 주간보고"
+        desc="프로젝트별로 인력 주간 업무보고(제출분)를 자동으로 모읍니다. 카드를 누르면 프로젝트 주간보고를 열고, PM은 종합 의견을 적어 확정합니다."
+        actions={
+          <div className="week-nav">
+            <button className="btn sm" onClick={() => setWeek(shiftWeek(week, -1))} aria-label="이전 주">
+              ◀
+            </button>
+            <strong>{weekLabel(week)}</strong>
+            <button className="btn sm" onClick={() => setWeek(shiftWeek(week, 1))} aria-label="다음 주">
+              ▶
+            </button>
+          </div>
+        }
+      />
+      <ErrorBox error={error} />
+      {loading && !data ? (
+        <Loading />
+      ) : !list.length ? (
+        <Empty>이 주에 해당하는 프로젝트가 없습니다.</Empty>
+      ) : (
+        <>
+          <div className="small muted" style={{ marginBottom: 8 }}>
+            {list.length}개 프로젝트 · 확정 {confirmed} · 작성 중 {list.length - confirmed}
+          </div>
+          <div className="board-projects">
+            {list.map((c) => {
+              const go = () => nav(`/project-weekly/${c.prjCd}/${week}`);
+              const allIn = c.headcount > 0 && c.submitted === c.headcount;
+              return (
+                <section key={c.prjCd} className={`board-prj clickable ${c.confirmedYn ? 'confirmed' : ''}`} tabIndex={0} role="link" aria-label={`${c.prjNm} 주간보고 열기`} onClick={go} onKeyDown={(e) => e.key === 'Enter' && go()}>
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <span className="row" style={{ gap: 6 }}>
+                      <PrjTypeBadge type={c.prjType}>{label(PRJ_TYPE, c.prjType)}</PrjTypeBadge>
+                      {c.confirmedYn ? <Badge tone="good">확정</Badge> : <Badge tone="neutral">작성 중</Badge>}
+                    </span>
+                    <span className={`small ${allIn ? 'good-text' : 'muted'}`}>
+                      제출 {c.submitted}/{c.headcount}명
+                    </span>
+                  </div>
+                  <div className="board-prj-title" title={c.prjCd}>
+                    {c.prjNm}
+                  </div>
+                  <div className="row small" style={{ gap: 6, flexWrap: 'wrap' }}>
+                    <span>
+                      금주 <strong>{num(c.weekMd)}</strong> MD
+                    </span>
+                    {c.delayItems > 0 ? <Badge tone="bad">지연 {c.delayItems}</Badge> : <Badge tone="neutral">지연 0</Badge>}
+                    {c.issueCount > 0 ? (
+                      <Badge tone={c.highIssueCount ? 'bad' : 'warn'}>
+                        이슈 {c.issueCount}
+                        {c.highIssueCount ? ` (상 ${c.highIssueCount})` : ''}
+                      </Badge>
+                    ) : (
+                      <Badge tone="neutral">이슈 0</Badge>
+                    )}
+                  </div>
+                  <div className="board-prj-detail">
+                    <div className="board-detail-meta">
+                      {c.customerNm ? `${c.customerNm} · ` : ''}PM {c.pmName ?? '-'} · {c.startDt ?? '-'} ~ {c.endDt ?? '-'}
+                    </div>
+                    <div className="board-detail-meta">{c.notSubmitted.length ? `미제출: ${c.notSubmitted.join(', ')}` : c.headcount ? '전원 제출' : '이 주 배정 인력 없음'}</div>
+                    {c.pr && c.pr.status !== 'NO_BASE' && <RateBar pr={c.pr} compact />}
+                    <div className="board-status-actions small">주간보고 열기 →</div>
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ProjectWeeklyDetail() {
   const { user, can } = useAuth();
   const params = useParams();
   const nav = useNavigate();
   const toast = useToast();
   const week = params.week ?? isoWeek(today());
-  const { data: projects } = useFetch<{ prjCd: string; prjNm: string; pmEmpId: string | null }[]>(`/projects${qs({ status: 'ACTIVE', mine: pmScoped(user) ? 'Y' : undefined })}`);
-  const prjCd = params.prjCd ?? projects?.[0]?.prjCd ?? '';
+  const prjCd = params.prjCd ?? '';
   const { data, error, loading, reload, setData } = useFetch<View>(prjCd ? `/projects/${prjCd}/weekly/${week}` : null);
   const [opinion, setOpinion] = useState('');
   const [busy, setBusy] = useState(false);
@@ -125,10 +236,12 @@ export default function ProjectWeekly() {
     <div>
       <PageHeader
         title="프로젝트 주간보고"
-        desc="인력별 주간 업무보고(제출분)를 자동으로 모읍니다. PM은 종합 의견만 적고 확정하면 됩니다."
+        desc="프로젝트 실적 중심으로 인력별 주간 업무보고(제출분)를 자동으로 모읍니다. PM은 종합 의견만 적고 확정하면 됩니다."
         actions={
           <>
-            <Select value={prjCd} onChange={(v) => go(v, week)} options={(projects ?? []).map((p) => [p.prjCd, p.prjNm] as [string, string])} />
+            <Link className="btn" to={`/project-weekly?week=${week}`}>
+              ← 목록
+            </Link>
             <div className="week-nav">
               <button className="btn sm" onClick={() => go(prjCd, shiftWeek(week, -1))} aria-label="이전 주">
                 ◀
@@ -142,9 +255,7 @@ export default function ProjectWeekly() {
         }
       />
       <ErrorBox error={error} />
-      {!prjCd && projects ? (
-        <Empty>진행 중인 담당 프로젝트가 없습니다.</Empty>
-      ) : loading && !data ? (
+      {loading && !data ? (
         <Loading />
       ) : data ? (
         <>
