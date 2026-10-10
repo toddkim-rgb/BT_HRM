@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Badge, Card, Empty, ErrorBox, Field, Kpi, Loading, Modal, PageHeader, PrjTypeBadge, ProgressBar, useToast } from '../components/ui';
+import { WeekPicker } from '../components/WeekPicker';
 import { api, qs } from '../lib/api';
 import { isPmOf, pmScoped, useAuth } from '../lib/auth';
 import { ASG_ROLE, ISSUE_TYPE, ITEM_STATUS, PRJ_TYPE, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
 import { dateTime, label, num, pct } from '../lib/format';
-import { isoWeek, shiftWeek, today, weekLabel } from '../lib/dates';
+import { isoWeek, today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
 import { useCardOrder } from '../lib/cardOrder';
 import { RateBar, type ProjectRate } from '../components/ProjectRate';
@@ -132,15 +133,7 @@ function ProjectWeeklyCards() {
         title="프로젝트 주간보고"
         desc="프로젝트별로 인력 주간 업무보고(제출분)를 자동으로 모읍니다. 카드를 누르면 프로젝트 주간보고를 열고, PM은 종합 의견을 적어 확정합니다."
         actions={
-          <div className="week-nav">
-            <button className="btn sm" onClick={() => setWeek(shiftWeek(week, -1))} aria-label="이전 주">
-              ◀
-            </button>
-            <strong>{weekLabel(week)}</strong>
-            <button className="btn sm" onClick={() => setWeek(shiftWeek(week, 1))} aria-label="다음 주">
-              ▶
-            </button>
-          </div>
+          <WeekPicker week={week} onChange={setWeek} />
         }
       />
       <ErrorBox error={error} />
@@ -322,15 +315,7 @@ function ProjectWeeklyDetail() {
             <Link className="btn" to={`/project-weekly?week=${week}`}>
               ← 목록
             </Link>
-            <div className="week-nav">
-              <button className="btn sm" onClick={() => go(prjCd, shiftWeek(week, -1))} aria-label="이전 주">
-                ◀
-              </button>
-              <strong>{weekLabel(week)}</strong>
-              <button className="btn sm" onClick={() => go(prjCd, shiftWeek(week, 1))} aria-label="다음 주">
-                ▶
-              </button>
-            </div>
+            <WeekPicker week={week} onChange={(w) => go(prjCd, w)} />
           </>
         }
       />

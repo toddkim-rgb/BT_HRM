@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Badge, ErrorBox, Loading, useToast } from '../components/ui';
+import { WeekPicker } from '../components/WeekPicker';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ISSUE_TYPE, SEVERITY } from '../lib/codes';
@@ -105,15 +106,7 @@ export default function OnePage() {
           <p className="muted">제출된 주간 업무보고로 자동 생성됩니다. 확정하면 그 시점 수치로 고정됩니다.</p>
         </div>
         <div className="page-actions">
-          <div className="week-nav">
-            <button className="btn sm" onClick={() => nav(`/onepage/${shiftWeek(week, -1)}`)} aria-label="이전 주">
-              ◀
-            </button>
-            <strong>{week}</strong>
-            <button className="btn sm" onClick={() => nav(`/onepage/${shiftWeek(week, 1)}`)} aria-label="다음 주">
-              ▶
-            </button>
-          </div>
+          <WeekPicker week={week} onChange={(w) => nav(`/onepage/${w}`)} />
           <button className="btn" onClick={() => window.print()}>
             인쇄 / PDF 저장
           </button>

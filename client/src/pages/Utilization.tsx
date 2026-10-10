@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Kpi, Loading, Modal, PageHeader, ProgressBar, useToast } from '../components/ui';
+import { WeekPicker } from '../components/WeekPicker';
 import { api, qs } from '../lib/api';
 import { useAuth, useShowHr } from '../lib/auth';
 import { EMPLOY_TYPE } from '../lib/codes';
@@ -96,16 +97,8 @@ export default function Utilization() {
         }
         actions={
           <div className="week-nav">
-            <button className="btn sm" onClick={() => setWeek(shiftWeek(week, -1))} aria-label="이전 주">
-              ◀
-            </button>
-            <span style={{ minWidth: 150, textAlign: 'center' }}>
-              <strong>{weekLabel(week)}</strong>
-              {data && (data.confirmedAt ? <Badge tone="good">확정</Badge> : <Badge tone="neutral">예상</Badge>)}
-            </span>
-            <button className="btn sm" onClick={() => setWeek(shiftWeek(week, 1))} aria-label="다음 주">
-              ▶
-            </button>
+            <WeekPicker week={week} onChange={setWeek} />
+            {data && (data.confirmedAt ? <Badge tone="good">확정</Badge> : <Badge tone="neutral">예상</Badge>)}
             {data?.confirmedAt && can('settings', 'EDIT') && (
               <button className="btn sm" onClick={reconfirm} title="배정을 정정했을 때 이 주 가동률을 다시 집계">
                 다시 확정

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Card, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast, PrjTypeBadge } from '../components/ui';
+import { WeekPicker } from '../components/WeekPicker';
 import { api, ApiError } from '../lib/api';
 import { useAuth, useShowHr } from '../lib/auth';
 import { ISSUE_TYPE, ITEM_STATUS, SEVERITY, SM_WORK_TYPE, WW_STATUS } from '../lib/codes';
 import { dateTime, label, num } from '../lib/format';
-import { dow, isoWeek, md as mdLabel, shiftWeek, today, weekLabel } from '../lib/dates';
+import { dow, isoWeek, md as mdLabel, today } from '../lib/dates';
 import { fillByAssignment, type WeekPlan } from '../lib/fill';
 import { useFetch } from '../lib/hooks';
 
@@ -103,9 +104,9 @@ export default function WeeklyWork() {
   const typeOf = (r: TsRow) => r.prjType ?? prjMap.get(r.prjCd)?.prjType ?? (r.prjCd.startsWith('NP-') ? 'NP' : undefined);
   const nameOf = (r: { prjCd: string; prjNm?: string }) => r.prjNm ?? prjMap.get(r.prjCd)?.prjNm ?? r.prjCd;
 
-  const goWeek = (n: number) => {
+  const goWeek = (w: string) => {
     if (dirty && !window.confirm('저장하지 않은 내용이 있습니다. 이동할까요?')) return;
-    nav(`/weekly/${empId}/${shiftWeek(week, n)}`);
+    nav(`/weekly/${empId}/${w}`);
   };
 
   const update = (fn: (draft: View) => void) => {
@@ -289,18 +290,7 @@ export default function WeeklyWork() {
         }
         actions={
           <div className="week-nav">
-            <button className="btn sm" onClick={() => goWeek(-1)} aria-label="이전 주">
-              ◀
-            </button>
-            <strong>{weekLabel(week)}</strong>
-            <button className="btn sm" onClick={() => goWeek(1)} aria-label="다음 주">
-              ▶
-            </button>
-            {week !== isoWeek(today()) && (
-              <button className="btn sm ghost" onClick={() => nav(`/weekly/${empId}/${isoWeek(today())}`)}>
-                이번 주
-              </button>
-            )}
+            <WeekPicker week={week} onChange={goWeek} />
           </div>
         }
       />

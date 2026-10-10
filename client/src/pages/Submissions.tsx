@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader } from '../components/ui';
+import { WeekPicker } from '../components/WeekPicker';
 import { qs } from '../lib/api';
 import { WW_STATUS } from '../lib/codes';
 import { dateTime, label, num } from '../lib/format';
-import { isoWeek, shiftWeek, today, weekLabel } from '../lib/dates';
+import { isoWeek, today } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
 
 interface Summary {
@@ -55,15 +56,7 @@ export default function Submissions() {
         title="주간보고 현황"
         desc="승인 절차 없이 제출하면 바로 확정되어 가동률·MM에 반영됩니다. 담당 프로젝트의 제출 현황과 보고 내용을 확인하세요."
         actions={
-          <div className="week-nav">
-            <button className="btn sm" onClick={() => setWeek(shiftWeek(week, -1))} aria-label="이전 주">
-              ◀
-            </button>
-            <strong>{weekLabel(week)}</strong>
-            <button className="btn sm" onClick={() => setWeek(shiftWeek(week, 1))} aria-label="다음 주">
-              ▶
-            </button>
-          </div>
+          <WeekPicker week={week} onChange={setWeek} />
         }
       />
       <div className="stack">
