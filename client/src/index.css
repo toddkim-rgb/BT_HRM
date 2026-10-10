@@ -695,3 +695,12 @@ span.pl-done, i.pl-done { background: #1f3b63; display: block; }
 span.pl-plan, i.pl-plan { background: #8fa8cc; display: block; border-radius: 3px 3px 0 0; }
 .pl-legend { display: flex; gap: 14px; margin-bottom: 8px; }
 .pl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
+/* 실적 손익: 인력 투입 지표 */
+.staff-kpis { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); margin-bottom: 12px; }
+.gmm-bars { display: flex; flex-direction: column; gap: 2px; }
+.gmm-bars span { display: block; height: 5px; border-radius: 3px; min-width: 1px; }
+.gmm-bars .b, .gmm-key.b { background: #b9c2cf; }
+.gmm-bars .p, .gmm-key.p { background: #8fa8cc; }
+.gmm-bars .f, .gmm-key.f { background: #1f3b63; }
+.gmm-key { display: inline-block; width: 10px; height: 6px; border-radius: 2px; vertical-align: middle; margin-left: 6px; }
+.people-pl tr.unplanned td { background: #fff8e6; }

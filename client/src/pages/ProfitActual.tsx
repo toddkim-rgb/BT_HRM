@@ -4,7 +4,7 @@ import { MoneyInput } from '../components/NumInputs';
 import { Badge, Card, Empty, ErrorBox, Field, Kpi, Loading, PageHeader, PrjTypeBadge, useToast } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
+import { ASG_ROLE, PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { label } from '../lib/format';
 import { useFetch } from '../lib/hooks';
 import { EXPENSE_TYPE, JUDGE, fullWon, krw, pctText, type Judge } from '../lib/profit';
@@ -27,11 +27,50 @@ interface Pl {
   burn: number | null;
   variance: number | null;
   status: PlStatus;
+  staffing: Staffing;
   warnings: string[];
+}
+interface Staffing {
+  cutoff: string;
+  baselineMm: number | null;
+  baselineHeadcount: number | null;
+  planMm: number;
+  planHeadcount: number;
+  planToDateMm: number;
+  actualToDateMm: number;
+  fulfillment: number | null;
+  actualMm: number;
+  actualHeadcount: number;
+  forecastMm: number;
+  forecastVsBaseline: number | null;
+  ownShare: { baseline: number | null; plan: number | null; actual: number | null };
+  missingWeeks: number;
+  unplanned: number;
+}
+interface Person {
+  empId: string;
+  name: string;
+  grade: string;
+  partner: boolean;
+  roles: string[];
+  startDt: string | null;
+  endDt: string | null;
+  allocRate: number | null;
+  planMd: number;
+  planToDateMd: number;
+  actualToDateMd: number;
+  fulfillment: number | null;
+  missingWeeks: number;
+  unplanned: boolean;
+  actualMd: number;
+  actualCost: number;
+  remainingMd: number;
+  remainingCost: number;
 }
 interface PlDetail extends Pl {
   monthly: { ym: string; baseline: number; actual: number; plan: number }[];
-  people: { empId: string; name: string; grade: string; partner: boolean; actualMd: number; actualCost: number; remainingMd: number; remainingCost: number }[];
+  people: Person[];
+  grades: { partner: boolean; grade: string; baselineMm: number; planMm: number; forecastMm: number }[];
   expenses: { exId: number; expenseYm: string; expenseType: string; amount: number; memo: string | null }[];
 }
 
@@ -53,6 +92,15 @@ export function ProfitTabs() {
     </nav>
   );
 }
+
+/** 투입 이행률: 90~110% 정상, 그 밖은 주의 */
+function Fulfill({ v }: { v: number | null }) {
+  if (v == null) return <span className="muted">-</span>;
+  const tone = v < 80 || v > 120 ? 'bad-text' : v < 90 || v > 110 ? 'warn-text' : 'good-text';
+  return <span className={tone}>{pctText(v)}</span>;
+}
+const mmT = (n: number | null | undefined) => (n == null ? '-' : `${n.toLocaleString('ko-KR')} MM`);
+const signedMm = (n: number | null) => (n == null ? '-' : `${n > 0 ? '+' : ''}${n.toLocaleString('ko-KR')} MM`);
 
 const signed = (n: number | null) => (n == null ? '-' : `${n > 0 ? '+' : ''}${krw(n)}`);
 
@@ -123,6 +171,7 @@ function ActualList() {
                       <th className="r">기준선 총원가</th>
                       <th className="r">실적 원가</th>
                       <th>소진 / 경과</th>
+                      <th className="r" title="지난주까지 배정 계획 MD 대비 실적 MD">투입 이행률</th>
                       <th className="r">예상 최종 원가</th>
                       <th className="r">기준선 대비</th>
                       <th className="r">예상 이익률</th>
@@ -151,6 +200,10 @@ function ActualList() {
                         <td className="r nowrap">{krw(p.actual.cost)}</td>
                         <td style={{ minWidth: 130 }}>
                           <BurnBar burn={p.burn} elapsed={p.elapsed} />
+                        </td>
+                        <td className="r nowrap">
+                          <Fulfill v={p.staffing.fulfillment} />
+                          {p.staffing.missingWeeks > 0 && <div className="small warn-text">미제출 {p.staffing.missingWeeks}주</div>}
                         </td>
                         <td className="r nowrap">{krw(p.forecast.cost)}</td>
                         <td className={`r nowrap ${p.variance != null && p.variance > 0 ? 'bad-text' : ''}`}>{signed(p.variance)}</td>
@@ -247,6 +300,7 @@ function ActualDetail({ prjCd }: { prjCd: string }) {
           <CompareCard d={d} />
           <ExpenseCard d={d} reload={reload} />
         </div>
+        <StaffingCard d={d} />
         <MonthlyPlCard d={d} />
         <PeopleCard d={d} />
       </div>
@@ -474,32 +528,122 @@ function MonthlyPlCard({ d }: { d: PlDetail }) {
   );
 }
 
+/** 인력 투입 지표: 기준선 · 배정 계획 · 실적 · 예상 */
+function StaffingCard({ d }: { d: PlDetail }) {
+  const st = d.staffing;
+  const items: { label: string; value: string; sub: string; tone?: string; node?: React.ReactNode }[] = [
+    { label: '기준선 계획', value: mmT(st.baselineMm), sub: st.baselineHeadcount != null ? `${st.baselineHeadcount}명 (시뮬레이션 인원)` : '실행예산 기준선 없음' },
+    { label: '배정 계획', value: mmT(st.planMm), sub: `${st.planHeadcount}명 배정${st.baselineMm != null ? ` · 기준선 대비 ${signedMm(Math.round((st.planMm - st.baselineMm) * 10) / 10)}` : ''}` },
+    { label: `투입 이행률 (${st.cutoff.slice(5).replace('-', '/')}까지)`, value: '', node: <Fulfill v={st.fulfillment} />, sub: `실적 ${mmT(st.actualToDateMm)} ÷ 계획 ${mmT(st.planToDateMm)}` },
+    { label: '실적 투입', value: mmT(st.actualMm), sub: `${st.actualHeadcount}명 투입${st.unplanned ? ` · 배정 외 ${st.unplanned}명` : ''}`, tone: st.unplanned ? 'warn' : undefined },
+    { label: '예상 최종 투입', value: mmT(st.forecastMm), sub: `실적 + 남은 배정${st.forecastVsBaseline != null ? ` · 기준선 대비 ${signedMm(st.forecastVsBaseline)}` : ''}`, tone: st.forecastVsBaseline != null && st.baselineMm ? (st.forecastVsBaseline > st.baselineMm * 0.1 ? 'bad' : st.forecastVsBaseline > 0 ? 'warn' : undefined) : undefined },
+    { label: '자사 비중', value: pctText(st.ownShare.actual ?? st.ownShare.plan), sub: `기준선 ${pctText(st.ownShare.baseline)} · 배정 ${pctText(st.ownShare.plan)} · 실적 ${pctText(st.ownShare.actual)}` },
+    { label: '주간보고 미제출', value: `${st.missingWeeks}주`, sub: st.missingWeeks ? '배정 기간 중 미제출 (실적에서 빠짐)' : '배정 기간 모두 제출', tone: st.missingWeeks ? 'warn' : undefined },
+  ];
+  const maxMm = Math.max(1, ...d.grades.map((g) => Math.max(g.baselineMm, g.planMm, g.forecastMm)));
+  return (
+    <Card title="인력 투입 지표 (계획 대비)">
+      <div className="kpis staff-kpis">
+        {items.map((i) => (
+          <Kpi key={i.label} label={i.label} value={i.node ?? i.value} sub={i.sub} tone={i.tone as 'warn' | 'bad' | undefined} />
+        ))}
+      </div>
+      {d.grades.length > 0 && (
+        <div className="table-wrap">
+          <table className="tbl grade-mm">
+            <thead>
+              <tr>
+                <th>직급 · 등급</th>
+                <th className="r">기준선</th>
+                <th className="r">배정 계획</th>
+                <th className="r">예상 (실적+남은)</th>
+                <th className="r">기준선 대비</th>
+                <th style={{ width: '32%' }} />
+              </tr>
+            </thead>
+            <tbody>
+              {d.grades.map((g) => {
+                const diff = Math.round((g.forecastMm - g.baselineMm) * 10) / 10;
+                return (
+                  <tr key={`${g.partner}-${g.grade}`}>
+                    <td>
+                      {g.partner && <Badge tone="neutral">협력사</Badge>} <strong>{g.grade}</strong>
+                    </td>
+                    <td className="r">{g.baselineMm || '-'}</td>
+                    <td className="r">{g.planMm || '-'}</td>
+                    <td className="r">{g.forecastMm || '-'}</td>
+                    <td className={`r ${d.baseline && diff > 0 ? 'bad-text' : ''}`}>{d.baseline ? signedMm(diff) : '-'}</td>
+                    <td>
+                      <div className="gmm-bars" title={`기준선 ${g.baselineMm} / 배정 ${g.planMm} / 예상 ${g.forecastMm} MM`}>
+                        <span className="b" style={{ width: `${(g.baselineMm / maxMm) * 100}%` }} />
+                        <span className="p" style={{ width: `${(g.planMm / maxMm) * 100}%` }} />
+                        <span className="f" style={{ width: `${(g.forecastMm / maxMm) * 100}%` }} />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="small muted" style={{ marginBottom: 0 }}>
+        배정 계획 MD = 배정 기간 영업일 × 배정률. 투입 이행률 = 지난주까지 실적 MD ÷ 같은 기간 배정 계획 MD (90~110% 정상). 막대: <span className="gmm-key b" /> 기준선 <span className="gmm-key p" /> 배정 계획 <span className="gmm-key f" /> 예상
+      </p>
+    </Card>
+  );
+}
+
 function PeopleCard({ d }: { d: PlDetail }) {
   if (!d.people.length) return null;
   return (
-    <Card title="인력별 원가 (실적 · 남은 배정)">
+    <Card title={`인력별 투입 · 원가 (${d.people.length}명)`}>
       <div className="table-wrap">
-        <table className="tbl">
+        <table className="tbl people-pl">
           <thead>
             <tr>
               <th>인력</th>
-              <th className="r">실적 MD</th>
+              <th>역할 · 배정 기간</th>
+              <th className="r">배정률</th>
+              <th className="r">계획 MD</th>
+              <th className="r" title={`${d.staffing.cutoff}까지`}>
+                계획 / 실적 (지난주까지)
+              </th>
+              <th className="r">이행률</th>
+              <th className="r">미제출</th>
               <th className="r">실적 원가</th>
-              <th className="r">남은 MD</th>
-              <th className="r">남은 원가</th>
+              <th className="r">남은 MD · 원가</th>
               <th className="r">합계</th>
             </tr>
           </thead>
           <tbody>
             {d.people.map((p) => (
-              <tr key={p.empId}>
-                <td>
+              <tr key={p.empId} className={p.unplanned ? 'unplanned' : ''}>
+                <td className="nowrap">
                   <span className="small muted">{p.grade}</span> <strong>{p.name}</strong> {p.partner && <Badge tone="neutral">협력사</Badge>}
                 </td>
-                <td className="r">{p.actualMd.toLocaleString('ko-KR')}</td>
+                <td className="small nowrap">
+                  {p.unplanned ? (
+                    <Badge tone="warn">배정 외 투입</Badge>
+                  ) : (
+                    <>
+                      {p.roles.map((r) => label(ASG_ROLE, r)).join('·')} · {p.startDt?.slice(2)} ~ {p.endDt?.slice(2)}
+                    </>
+                  )}
+                </td>
+                <td className="r">{p.allocRate != null ? `${p.allocRate}%` : '-'}</td>
+                <td className="r">{p.planMd ? p.planMd.toLocaleString('ko-KR') : '-'}</td>
+                <td className="r nowrap">
+                  {p.planToDateMd.toLocaleString('ko-KR')} / <strong>{p.actualToDateMd.toLocaleString('ko-KR')}</strong>
+                </td>
+                <td className="r">
+                  <Fulfill v={p.fulfillment} />
+                </td>
+                <td className={`r ${p.missingWeeks ? 'warn-text' : 'muted'}`}>{p.missingWeeks ? `${p.missingWeeks}주` : '-'}</td>
                 <td className="r">{krw(p.actualCost)}</td>
-                <td className="r">{p.remainingMd.toLocaleString('ko-KR')}</td>
-                <td className="r">{krw(p.remainingCost)}</td>
+                <td className="r nowrap">
+                  {p.remainingMd.toLocaleString('ko-KR')} · {krw(p.remainingCost)}
+                </td>
                 <td className="r">
                   <strong>{krw(p.actualCost + p.remainingCost)}</strong>
                 </td>
@@ -508,6 +652,9 @@ function PeopleCard({ d }: { d: PlDetail }) {
           </tbody>
         </table>
       </div>
+      <p className="small muted" style={{ marginBottom: 0 }}>
+        실적 원가는 제출된 주간보고 기준이며, 미제출 주는 실적에서 빠져 있어 이행률이 낮게 보일 수 있습니다.
+      </p>
     </Card>
   );
 }

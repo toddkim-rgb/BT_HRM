@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { plannedMd } from './alloc.js';
-import { addDays, addMonths, monthRange, today } from './dates.js';
+import { addDays, addMonths, isoWeek, monthRange, shiftWeek, today, weekDays } from './dates.js';
 import { holidaySet } from './settings.js';
 import { judgeOf, loadBasis, standardCost, type Basis, type Judge, type SimResult } from './simCalc.js';
 
@@ -14,6 +14,26 @@ import { judgeOf, loadBasis, standardCost, type Basis, type Judge, type SimResul
  * - 예상 이익률 = (사업비 − 예상 최종 원가) ÷ 사업비, 판정은 기준선(없으면 사업구분) 목표·최소 이익률
  */
 
+export interface PlPerson {
+  empId: string;
+  name: string;
+  grade: string;
+  partner: boolean;
+  roles: string[];
+  startDt: string | null;
+  endDt: string | null;
+  allocRate: number | null; // 배정률 (여러 배정이면 최대)
+  planMd: number;
+  planToDateMd: number;
+  actualToDateMd: number;
+  fulfillment: number | null;
+  missingWeeks: number;
+  unplanned: boolean; // 배정 없이 실적만 있음
+  actualMd: number;
+  actualCost: number;
+  remainingMd: number;
+  remainingCost: number;
+}
 export type PlStatus = 'OK' | 'RESERVE' | 'OVER' | 'NO_BASE';
 export interface ProjectPl {
   prjCd: string;
@@ -33,7 +53,27 @@ export interface ProjectPl {
   variance: number | null; // 예상 최종 원가 − 기준선 총원가 (양수 = 초과)
   status: PlStatus;
   monthly: { ym: string; baseline: number; actual: number; plan: number }[];
-  people: { empId: string; name: string; grade: string; partner: boolean; actualMd: number; actualCost: number; remainingMd: number; remainingCost: number }[];
+  people: PlPerson[];
+  /** 인력 투입 지표: 계획(기준선·배정) 대비 실적 */
+  staffing: {
+    cutoff: string; // 이행률 기준일 (지난주 일요일)
+    baselineMm: number | null;
+    baselineHeadcount: number | null;
+    planMm: number; // 배정 계획 전체
+    planHeadcount: number;
+    planToDateMm: number; // 기준일까지 배정 계획
+    actualToDateMm: number; // 기준일까지 실적
+    fulfillment: number | null; // 투입 이행률 = 실적 ÷ 계획 (기준일까지)
+    actualMm: number;
+    actualHeadcount: number;
+    forecastMm: number; // 실적 + 남은 배정
+    forecastVsBaseline: number | null; // 예상 MM − 기준선 MM
+    ownShare: { baseline: number | null; plan: number | null; actual: number | null }; // 자사 MM 비율 %
+    missingWeeks: number; // 배정됐는데 주간보고를 제출하지 않은 인력·주 수 (실적에서 빠짐)
+    unplanned: number; // 배정 없이 실적이 있는 인원
+  };
+  /** 직급(자사)·등급(협력사)별 기준선 vs 배정 계획 vs 예상 MM */
+  grades: { partner: boolean; grade: string; baselineMm: number; planMm: number; forecastMm: number }[];
   warnings: string[];
 }
 
@@ -55,14 +95,18 @@ export async function projectPl(prjCds?: string[]): Promise<ProjectPl[]> {
     prisma.simulation.findMany({ where: { prjCd: { in: codes }, statusCd: 'BASELINE' }, orderBy: { version: 'desc' } }),
     prisma.marginRule.findMany(),
     prisma.timesheet.findMany({ where: { prjCd: { in: codes }, weeklyWork: { statusCd: 'SUBMITTED' } }, select: { prjCd: true, empId: true, workDt: true, md: true } }),
-    prisma.assignment.findMany({ where: { prjCd: { in: codes }, canceled: false }, select: { prjCd: true, empId: true, startDt: true, endDt: true, allocRate: true } }),
+    prisma.assignment.findMany({ where: { prjCd: { in: codes }, canceled: false }, select: { prjCd: true, empId: true, roleCd: true, startDt: true, endDt: true, allocRate: true } }),
     prisma.projectExpense.findMany({ where: { prjCd: { in: codes } } }),
     prisma.partnerContract.findMany({ where: { statusCd: { not: 'ENDED' } }, select: { empId: true, prjCd: true, startDt: true, endDt: true, monthlyRate: true } }),
   ]);
   const empIds = [...new Set([...ts.map((x) => x.empId), ...asg.map((a) => a.empId)])];
-  const emps = new Map(
-    (await prisma.employee.findMany({ where: { empId: { in: empIds } }, select: { empId: true, name: true, gradeCd: true, employType: true, skillLevel: true } })).map((e) => [e.empId, e]),
-  );
+  const [empRows, submittedRows] = await Promise.all([
+    prisma.employee.findMany({ where: { empId: { in: empIds } }, select: { empId: true, name: true, gradeCd: true, employType: true, skillLevel: true } }),
+    prisma.weeklyWork.findMany({ where: { empId: { in: empIds }, statusCd: 'SUBMITTED' }, select: { empId: true, reportWeek: true } }),
+  ]);
+  const emps = new Map(empRows.map((e) => [e.empId, e]));
+  const submitted = new Set(submittedRows.map((w) => `${w.empId}|${w.reportWeek}`));
+  const cutoff = weekDays(shiftWeek(isoWeek(t), -1))[6]; // 지난주 일요일 — 이행률은 지난주까지로 비교
 
   return projects.map((p) => {
     const warnings = new Set<string>();
@@ -151,6 +195,28 @@ export async function projectPl(prjCds?: string[]): Promise<ProjectPl[]> {
         if (i != null) monthly[i].plan += c;
       }
     }
+    // 인력 투입 지표: 배정 계획(전체·기준일까지) vs 실적, 주간보고 미제출 주
+    type PlanAcc = { planMd: number; planToDateMd: number; actualToDateMd: number; roles: Set<string>; startDt: string | null; endDt: string | null; allocRate: number; missing: Set<string> };
+    const plan = new Map<string, PlanAcc>();
+    const planOf = (id: string) => plan.get(id) ?? (plan.set(id, { planMd: 0, planToDateMd: 0, actualToDateMd: 0, roles: new Set(), startDt: null, endDt: null, allocRate: 0, missing: new Set() }), plan.get(id)!);
+    for (const a of pas) {
+      const v = planOf(a.empId);
+      person(a.empId);
+      v.planMd += plannedMd(a, a.startDt, a.endDt, holidays);
+      v.roles.add(a.roleCd);
+      v.startDt = !v.startDt || a.startDt < v.startDt ? a.startDt : v.startDt;
+      v.endDt = !v.endDt || a.endDt > v.endDt ? a.endDt : v.endDt;
+      v.allocRate = Math.max(v.allocRate, a.allocRate);
+      if (a.startDt > cutoff) continue;
+      const until = a.endDt < cutoff ? a.endDt : cutoff;
+      v.planToDateMd += plannedMd(a, a.startDt, until, holidays);
+      for (let w = isoWeek(a.startDt); w <= isoWeek(until); w = shiftWeek(w, 1)) {
+        const days = weekDays(w);
+        if (plannedMd(a, days[0], days[6], holidays) > 0 && !submitted.has(`${a.empId}|${w}`)) v.missing.add(w);
+      }
+    }
+    for (const x of pts) if (x.workDt <= cutoff) planOf(x.empId).actualToDateMd += x.md;
+
     // 경비
     const actualExpense = pex.reduce((s, x) => s + x.amount, 0);
     for (const x of pex) {
@@ -170,6 +236,52 @@ export async function projectPl(prjCds?: string[]): Promise<ProjectPl[]> {
     if (blResult) status = fcCost > blResult.totals.totalCost ? 'OVER' : blDirect != null && fcCost > blDirect ? 'RESERVE' : 'OK';
     if (!revenue) warnings.add('계약금액(또는 기준선 제안가)이 없어 이익률을 계산하지 않았습니다.');
     if (!bl) warnings.add('실행예산 기준선이 없어 계획 대비 비교를 하지 않았습니다.');
+
+    const mm = (md: number) => md / basis.mdPerMm;
+    const isPartner = (id: string) => emps.get(id)?.employType === 'PARTNER';
+    const gradeOf = (id: string) => (isPartner(id) ? emps.get(id)?.skillLevel : emps.get(id)?.gradeCd) || '-';
+    const sumPlan = (f: (v: PlanAcc) => number, only?: (id: string) => boolean) => [...plan.entries()].filter(([id]) => !only || only(id)).reduce((acc, [, v]) => acc + f(v), 0);
+    const planMdAll = sumPlan((v) => v.planMd);
+    const planToDate = sumPlan((v) => v.planToDateMd);
+    const actualToDate = sumPlan((v) => v.actualToDateMd);
+    const blInput: { type: string; grade: string; headcount: number }[] = bl ? JSON.parse(bl.rows) : [];
+    const blMm = blResult?.totals.mm ?? null;
+    const ownPct = (own: number, all: number) => (all > 0 ? r1((own / all) * 100) : null);
+    const staffing = {
+      cutoff,
+      baselineMm: blMm,
+      baselineHeadcount: bl ? r1(blInput.reduce((acc, x) => acc + x.headcount, 0)) : null,
+      planMm: r1(mm(planMdAll)),
+      planHeadcount: [...plan.values()].filter((v) => v.roles.size > 0).length,
+      planToDateMm: r1(mm(planToDate)),
+      actualToDateMm: r1(mm(actualToDate)),
+      fulfillment: planToDate > 0 ? r1((actualToDate / planToDate) * 100) : null,
+      actualMm: r1(mm(actualMd)),
+      actualHeadcount: new Set(pts.filter((x) => x.md > 0).map((x) => x.empId)).size,
+      forecastMm: r1(mm(actualMd + remMd)),
+      forecastVsBaseline: blMm != null ? r1(mm(actualMd + remMd) - blMm) : null,
+      ownShare: {
+        baseline: blResult ? ownPct(blResult.totals.ownMm, blResult.totals.mm) : null,
+        plan: ownPct(sumPlan((v) => v.planMd, (id) => !isPartner(id)), planMdAll),
+        actual: ownPct(pts.filter((x) => !isPartner(x.empId)).reduce((acc, x) => acc + x.md, 0), actualMd),
+      },
+      missingWeeks: [...plan.values()].reduce((acc, v) => acc + v.missing.size, 0),
+      unplanned: [...plan.entries()].filter(([id, v]) => v.roles.size === 0 && (people.get(id)?.actualMd ?? 0) > 0).length,
+    };
+    if (staffing.missingWeeks > 0) warnings.add(`배정됐지만 주간보고를 제출하지 않은 주가 ${staffing.missingWeeks}건 있어 실적에서 빠져 있습니다 (지난주까지).`);
+    if (staffing.unplanned > 0) warnings.add(`배정 없이 실적이 있는 인력이 ${staffing.unplanned}명 있습니다 (배정 외 투입).`);
+    // 직급·등급별 MM
+    const gmap = new Map<string, { partner: boolean; grade: string; baselineMm: number; planMm: number; forecastMm: number }>();
+    const gOf = (partner: boolean, grade: string) => {
+      const k = `${partner ? 'P' : 'O'}|${grade}`;
+      return gmap.get(k) ?? (gmap.set(k, { partner, grade, baselineMm: 0, planMm: 0, forecastMm: 0 }), gmap.get(k)!);
+    };
+    blInput.forEach((row, i) => (gOf(row.type === 'PARTNER', row.grade).baselineMm += blResult?.rows[i]?.mm ?? 0));
+    for (const [id, v] of plan) gOf(isPartner(id), gradeOf(id)).planMm += mm(v.planMd);
+    for (const [id, v] of people) gOf(isPartner(id), gradeOf(id)).forecastMm += mm(v.actualMd + v.remainingMd);
+    const grades = [...gmap.values()]
+      .map((x) => ({ ...x, baselineMm: r1(x.baselineMm), planMm: r1(x.planMm), forecastMm: r1(x.forecastMm) }))
+      .sort((a, b) => Number(a.partner) - Number(b.partner) || b.baselineMm + b.forecastMm - (a.baselineMm + a.forecastMm));
 
     let elapsed: number | null = null;
     if (p.startDt && p.endDt && p.endDt >= p.startDt) elapsed = r1(Math.min(100, Math.max(0, ((dayNo(t) - dayNo(p.startDt) + 1) / (dayNo(p.endDt) - dayNo(p.startDt) + 1)) * 100)));
@@ -201,12 +313,34 @@ export async function projectPl(prjCds?: string[]): Promise<ProjectPl[]> {
       status,
       monthly: monthly.map((m) => ({ ym: m.ym, baseline: r0(m.baseline), actual: r0(m.actual), plan: r0(m.plan) })),
       people: [...people.entries()]
-        .map(([empId, v]) => {
+        .map(([empId, v]): PlPerson => {
           const e = emps.get(empId);
           const partner = e?.employType === 'PARTNER';
-          return { empId, name: e?.name ?? empId, grade: (partner ? e?.skillLevel : e?.gradeCd) ?? '', partner, actualMd: r1(v.actualMd), actualCost: r0(v.actualCost), remainingMd: r1(v.remainingMd), remainingCost: r0(v.remainingCost) };
+          const pl = plan.get(empId);
+          return {
+            empId,
+            name: e?.name ?? empId,
+            grade: (partner ? e?.skillLevel : e?.gradeCd) ?? '',
+            partner,
+            roles: pl ? [...pl.roles] : [],
+            startDt: pl?.startDt ?? null,
+            endDt: pl?.endDt ?? null,
+            allocRate: pl?.allocRate || null,
+            planMd: r1(pl?.planMd ?? 0),
+            planToDateMd: r1(pl?.planToDateMd ?? 0),
+            actualToDateMd: r1(pl?.actualToDateMd ?? 0),
+            fulfillment: pl && pl.planToDateMd > 0 ? r1((pl.actualToDateMd / pl.planToDateMd) * 100) : null,
+            missingWeeks: pl?.missing.size ?? 0,
+            unplanned: !pl || pl.roles.size === 0,
+            actualMd: r1(v.actualMd),
+            actualCost: r0(v.actualCost),
+            remainingMd: r1(v.remainingMd),
+            remainingCost: r0(v.remainingCost),
+          };
         })
-        .sort((a, b) => b.actualCost + b.remainingCost - (a.actualCost + a.remainingCost)),
+        .sort((a, b) => Number(a.unplanned) - Number(b.unplanned) || b.actualCost + b.remainingCost - (a.actualCost + a.remainingCost)),
+      staffing,
+      grades,
       warnings: [...warnings],
     };
   });

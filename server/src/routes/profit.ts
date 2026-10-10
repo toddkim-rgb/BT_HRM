@@ -296,7 +296,7 @@ profitRouter.get('/assignments/:prjCd', async (req, res) => {
 /** 프로젝트별 실적 손익 요약 (월별·인력별 상세 제외) */
 profitRouter.get('/actuals', async (_req, res) => {
   const list = await projectPl();
-  res.json(list.map(({ monthly: _m, people: _p, ...rest }) => rest));
+  res.json(list.map(({ monthly: _m, people: _p, grades: _g, ...rest }) => rest));
 });
 
 profitRouter.get('/actuals/:prjCd', async (req, res) => {
