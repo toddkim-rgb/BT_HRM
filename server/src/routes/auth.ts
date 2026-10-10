@@ -50,6 +50,38 @@ authRouter.get('/me/permissions', requireAuth, async (req, res) => {
 });
 
 /**
+ * 화면 개인화 (예: 카드 배치 순서) — 사용자별 DB 저장
+ * - 테스트 계정이 다른 인력으로 전환 중이면 실제 인력이 아닌 테스트 계정 기준으로 저장
+ */
+const PREF_KEY = /^[A-Za-z0-9:_-]{1,64}$/;
+const prefOwner = (req: Request) => {
+  const u = me(req);
+  return u.impersonator ?? u.empId;
+};
+const prefKeyOf = (req: Request) => {
+  const key = String(req.params.key);
+  if (!PREF_KEY.test(key)) throw new HttpError(400, '잘못된 설정 키입니다.');
+  return key;
+};
+authRouter.get('/me/prefs/:key', requireAuth, async (req, res) => {
+  const row = await prisma.userPref.findUnique({ where: { empId_prefKey: { empId: prefOwner(req), prefKey: prefKeyOf(req) } } });
+  res.json({ value: row ? JSON.parse(row.value) : null });
+});
+authRouter.put('/me/prefs/:key', requireAuth, async (req, res) => {
+  const empId = prefOwner(req);
+  const prefKey = prefKeyOf(req);
+  const value = req.body?.value;
+  if (value === null || value === undefined) {
+    await prisma.userPref.deleteMany({ where: { empId, prefKey } });
+    return res.json({ value: null });
+  }
+  const json = JSON.stringify(value);
+  if (json.length > 20_000) throw new HttpError(400, '설정 값이 너무 큽니다.');
+  await prisma.userPref.upsert({ where: { empId_prefKey: { empId, prefKey } }, create: { empId, prefKey, value: json }, update: { value: json } });
+  res.json({ value });
+});
+
+/**
  * 테스트 계정 역할 전환 (@bt-hrm.test 계정만): 실제 인력 계정으로 전환해 화면·권한 시험
  * - 시스템관리자·사업관리자 = 김석현(사업관리자는 권한만 좁힘), 프로젝트 PM = 정창원, 수행인력 = 신현석, SELF = 테스트 계정 본인
  * - 전환 중 작성·저장한 내용은 전환한 인력 이름으로 기록됨, 비밀번호 변경은 막음

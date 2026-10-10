@@ -352,3 +352,13 @@ model UtilSnapshot {
   data        String // 집계 결과 전체(JSON)
   confirmedAt DateTime @default(now())
 }
+
+// 사용자별 화면 개인화 (예: 카드 배치 순서). 테스트 계정이 다른 인력으로 전환 중이면 테스트 계정 기준으로 저장
+model UserPref {
+  empId     String
+  prefKey   String // 예: cardOrder:projectWeekly
+  value     String // JSON
+  updatedAt DateTime @updatedAt
+
+  @@id([empId, prefKey])
+}

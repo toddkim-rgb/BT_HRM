@@ -7,6 +7,7 @@ import { ASG_ROLE, ISSUE_TYPE, ITEM_STATUS, PRJ_TYPE, SEVERITY, SM_WORK_TYPE, WW
 import { dateTime, label, num, pct } from '../lib/format';
 import { isoWeek, shiftWeek, today, weekLabel } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
+import { useCardOrder } from '../lib/cardOrder';
 import { RateBar, type ProjectRate } from '../components/ProjectRate';
 
 export interface Milestone {
@@ -117,7 +118,13 @@ function ProjectWeeklyCards() {
   const setWeek = (w: string) => setSp({ week: w });
   const nav = useNavigate();
   const { data, error, loading } = useFetch<WeeklyCard[]>(`/projects/weekly-cards${qs({ week })}`);
-  const list = [...(data ?? [])].sort((a, b) => Number(a.confirmedYn) - Number(b.confirmedYn) || a.prjNm.localeCompare(b.prjNm));
+  const dnd = useCardOrder('projectWeekly');
+  // 기본: 미확정 먼저·이름순 → 사용자가 끌어서 바꾼 순서가 있으면 그 순서
+  const list = dnd.arrange(
+    [...(data ?? [])].sort((a, b) => Number(a.confirmedYn) - Number(b.confirmedYn) || a.prjNm.localeCompare(b.prjNm)),
+    (c) => c.prjCd,
+  );
+  const ids = list.map((c) => c.prjCd);
   const confirmed = list.filter((c) => c.confirmedYn).length;
   return (
     <div>
@@ -143,15 +150,23 @@ function ProjectWeeklyCards() {
         <Empty>이 주에 해당하는 프로젝트가 없습니다.</Empty>
       ) : (
         <>
-          <div className="small muted" style={{ marginBottom: 8 }}>
-            {list.length}개 프로젝트 · 확정 {confirmed} · 작성 중 {list.length - confirmed}
+          <div className="row small muted" style={{ marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+            <span>
+              {list.length}개 프로젝트 · 확정 {confirmed} · 작성 중 {list.length - confirmed}
+            </span>
+            <span className="dnd-hint">· 카드를 끌어서 원하는 순서로 배치할 수 있습니다 (내 화면에만 저장)</span>
+            {dnd.customized && (
+              <button className="btn sm" onClick={dnd.reset}>
+                기본 순서로
+              </button>
+            )}
           </div>
-          <div className="board-projects">
+          <div className={`board-projects ${dnd.dragging ? 'dnd-active' : ''}`}>
             {list.map((c) => {
               const go = () => nav(`/project-weekly/${c.prjCd}/${week}`);
               const allIn = c.headcount > 0 && c.submitted === c.headcount;
               return (
-                <section key={c.prjCd} className={`board-prj clickable ${c.confirmedYn ? 'confirmed' : ''}`} tabIndex={0} role="link" aria-label={`${c.prjNm} 주간보고 열기`} onClick={go} onKeyDown={(e) => e.key === 'Enter' && go()}>
+                <section key={c.prjCd} className={`board-prj clickable ${c.confirmedYn ? 'confirmed' : ''} ${dnd.dragClass(c.prjCd)}`} {...dnd.dragProps(c.prjCd, ids)} tabIndex={0} role="link" aria-label={`${c.prjNm} 주간보고 열기`} onClick={go} onKeyDown={(e) => e.key === 'Enter' && go()}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span className="row" style={{ gap: 6 }}>
                       <PrjTypeBadge type={c.prjType}>{label(PRJ_TYPE, c.prjType)}</PrjTypeBadge>

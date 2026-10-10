@@ -586,3 +586,11 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 @media (hover: hover) {
   .board-prj:hover .wk-items .wk-owner, .board-prj:focus-within .wk-items .wk-owner { color: rgba(255, 255, 255, 0.75); }
 }
+/* 카드 끌어서 놓기 (개인화 배치) */
+.board-prj[draggable='true'] { cursor: grab; }
+.board-prj.dnd-dragging { opacity: 0.4; }
+.board-prj.dnd-over { box-shadow: 0 0 0 3px #4c8bf5; }
+.board-projects.dnd-active .board-prj-detail { display: none !important; }
+@media (hover: none) {
+  .dnd-hint { display: none; }
+}
