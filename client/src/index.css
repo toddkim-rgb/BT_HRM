@@ -617,3 +617,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 @media (max-width: 480px) { .week-picker-btn strong { font-size: 13px; } }
 .week-nav .week-picker strong { min-width: 0; }
 .week-picker-pop.right { left: auto; right: 0; }
+/* 대시보드 인사말 */
+.greet-msgs { margin: -6px 0 16px; padding: 10px 14px; border-radius: 12px; background: linear-gradient(90deg, #eef4fc, #f7f9fc); border: 1px solid #dde7f5; display: flex; flex-direction: column; gap: 4px; }
+.greet-msgs p { margin: 0; font-size: 14px; line-height: 1.5; }
+.greet-msgs p + p { color: var(--muted); }
+.greet-weather { white-space: nowrap; }

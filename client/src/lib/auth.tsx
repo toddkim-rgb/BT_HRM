@@ -107,3 +107,6 @@ export const useShowHr = () => {
 
 /** 이 프로젝트의 PM인가 (투입 배정 지정, 테스트 계정은 시험 중인 프로젝트) */
 export const isPmOf = (u: User | null, prjCd: string) => !!u?.pmPrjCds?.includes(prjCd);
+
+/** 화면 표시용 이름: 성명 + 직급 (직급이 없거나 '-'이면 성명만) */
+export const displayName = (u: Pick<User, 'name' | 'gradeCd'> | null | undefined) => (u ? (u.gradeCd && u.gradeCd !== '-' ? `${u.name} ${u.gradeCd}` : u.name) : '');

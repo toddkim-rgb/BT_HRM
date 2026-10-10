@@ -36,6 +36,7 @@ authRouter.get('/me', requireAuth, async (req, res) => {
   const { passwordHash: _, ...rest } = emp;
   // 수행인력에게는 기술등급·고용형태를 내려보내지 않음
   const out: Record<string, unknown> = { ...rest, role: u.role, isPm: !!u.pm, pmPrjCds: u.pmPrjCds ?? [], tester: !!u.tester, testAs: u.testAs ?? null };
+  if (u.impersonator) out.mustChangePw = false; // 테스트 계정이 전환한 인력의 초기 비밀번호 상태는 무시 (비밀번호 변경은 전환 중 막힘)
   if (u.role === 'EMP') {
     delete out.skillLevel;
     delete out.employType;

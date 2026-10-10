@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth, type User } from '../lib/auth';
+import { useAuth, type User, displayName } from '../lib/auth';
 import { api } from '../lib/api';
 import { useFetch } from '../lib/hooks';
 import { ROLE_LABEL } from '../lib/codes';
@@ -75,7 +75,7 @@ export function Layout() {
           BT<span>·</span>HRM
         </div>
         <NavLink to="/me" className="topbar-user">
-          {user.name}
+          {displayName(user)}
         </NavLink>
       </header>
       <aside className="sidebar">
@@ -102,7 +102,7 @@ export function Layout() {
         {user.tester && <TestRoleSwitch user={user} onSwitched={(token, u) => { applySession(token, { ...u, tester: true }); reloadPerms(); navigate('/'); }} />}
         <div className="side-user">
           <NavLink to="/me" className="side-user-name">
-            <strong>{user.name}</strong>
+            <strong>{displayName(user)}</strong>
             <span>{ROLE_LABEL[user.role]}</span>
           </NavLink>
           <button className="btn ghost sm" onClick={logout}>

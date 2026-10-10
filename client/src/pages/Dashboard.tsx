@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
-import { Badge, Card, Empty, Kpi, Loading, PageHeader, ProgressBar } from '../components/ui';
+import { Badge, Card, Empty, Kpi, Loading, ProgressBar } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, WW_STATUS } from '../lib/codes';
 import { label, pct } from '../lib/format';
 import { isoWeek, shiftWeek, today, weekLabel } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
 import { RateBar, type ProjectRate } from '../components/ProjectRate';
+import { Greeting } from '../components/Greeting';
 
 interface Summary {
   totalHeadcount: number;
@@ -33,7 +34,7 @@ export default function Dashboard() {
   const isMgr = user?.role !== 'EMP' || !!user?.isPm; // 전사 요약은 일반 수행인력 제외 (프로젝트 PM은 표시)
   return (
     <div>
-      <PageHeader title={`안녕하세요, ${user?.name}${user?.gradeCd && user.gradeCd !== '-' ? ` ${user.gradeCd}` : ''}님`} desc={`${today()} · ${weekLabel(isoWeek(today()))}`} />
+      <Greeting />
       {isMgr && <CompanySummary />}
       <div className="grid cols-2">
         <MyWeekly />
