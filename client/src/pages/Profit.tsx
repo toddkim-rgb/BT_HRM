@@ -7,6 +7,7 @@ import { PRJ_STATUS, PRJ_TYPE } from '../lib/codes';
 import { dateTime, label } from '../lib/format';
 import { useFetch } from '../lib/hooks';
 import { JUDGE, krw, mmText, pctText, type Judge, type SimProject, type SimResult } from '../lib/profit';
+import { ProfitTabs } from './ProfitActual';
 
 interface SimSummary {
   simId: number;
@@ -65,6 +66,7 @@ export default function Profit() {
           </>
         }
       />
+      <ProfitTabs />
       <ErrorBox error={error} />
       {!data ? (
         <Loading />

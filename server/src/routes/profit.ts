@@ -5,7 +5,8 @@ import { HttpError, prisma } from '../db.js';
 import { addDays, addMonths, today } from '../lib/dates.js';
 import { requireMenu } from '../lib/permissions.js';
 import { calculate, loadBasis, standardCost, type Basis, type SimInput, type SimResult } from '../lib/simCalc.js';
-import { dateStr, parse } from '../lib/validate.js';
+import { dateStr, parse, ymStr } from '../lib/validate.js';
+import { projectPl } from '../lib/actualPl.js';
 
 /**
  * 수익성 분석 — 사업비 시뮬레이션 · 실행예산 기준선(VRB) (메뉴 'profit')
@@ -288,4 +289,33 @@ profitRouter.get('/assignments/:prjCd', async (req, res) => {
       };
     }),
   );
+});
+
+// ---- 2차: 실적 손익 (기준선 대비 실적·예상 최종 이익률) ----
+
+/** 프로젝트별 실적 손익 요약 (월별·인력별 상세 제외) */
+profitRouter.get('/actuals', async (_req, res) => {
+  const list = await projectPl();
+  res.json(list.map(({ monthly: _m, people: _p, ...rest }) => rest));
+});
+
+profitRouter.get('/actuals/:prjCd', async (req, res) => {
+  const [pl] = await projectPl([String(req.params.prjCd)]);
+  if (!pl) throw new HttpError(404, '프로젝트를 찾을 수 없습니다.');
+  const expenses = await prisma.projectExpense.findMany({ where: { prjCd: pl.prjCd }, orderBy: [{ expenseYm: 'desc' }, { exId: 'desc' }] });
+  res.json({ ...pl, expenses });
+});
+
+// 직접경비 실적 (월 단위 입력)
+profitRouter.post('/expenses', edit, async (req, res) => {
+  const body = parse(
+    z.object({ prjCd: z.string().min(1), expenseYm: ymStr, expenseType: expenseSchema.shape.category, amount: won.min(1), memo: z.string().max(100).nullish() }),
+    req.body,
+  );
+  if (!(await prisma.project.findUnique({ where: { prjCd: body.prjCd } }))) throw new HttpError(404, '프로젝트를 찾을 수 없습니다.');
+  res.status(201).json(await prisma.projectExpense.create({ data: { ...body, memo: body.memo ?? null } }));
+});
+profitRouter.delete('/expenses/:exId', edit, async (req, res) => {
+  await prisma.projectExpense.deleteMany({ where: { exId: Number(req.params.exId) || 0 } });
+  res.json({ ok: true });
 });

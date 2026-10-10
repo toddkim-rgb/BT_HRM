@@ -677,3 +677,21 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .sim-page input, .sim-page select, .sim-page textarea { border: 0; background: none; padding: 0; appearance: none; }
 }
 .th-sub { font-size: 11px; font-weight: 400; color: var(--muted); white-space: nowrap; }
+/* 수익성 분석: 탭 · 실적 손익 */
+.profit-tabs a { padding: 8px 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; text-decoration: none; }
+.profit-tabs a.active { color: var(--primary); border-bottom-color: var(--primary); }
+.pl-tbl td { vertical-align: middle; }
+.burn { display: flex; flex-direction: column; gap: 2px; }
+.burn-track { position: relative; height: 8px; background: var(--surface-2); border-radius: 4px; }
+.burn-fill { display: block; height: 100%; border-radius: 4px; }
+.burn-fill.good { background: #2e8b57; } .burn-fill.warn { background: #e0a23b; } .burn-fill.bad { background: #d64545; }
+.burn-track i { position: absolute; top: -3px; width: 2px; height: 14px; background: #1a1a19; transform: translateX(-1px); }
+.pl-chart { display: flex; align-items: flex-end; gap: 4px; height: 110px; margin-bottom: 6px; }
+.pl-col { flex: 1; height: 100%; display: flex; align-items: flex-end; gap: 1px; }
+.pl-col > span { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.pl-col .pl-base { height: auto; align-self: flex-end; }
+span.pl-base, i.pl-base { background: #c9d1dc; border-radius: 3px 3px 0 0; }
+span.pl-done, i.pl-done { background: #1f3b63; display: block; }
+span.pl-plan, i.pl-plan { background: #8fa8cc; display: block; border-radius: 3px 3px 0 0; }
+.pl-legend { display: flex; gap: 14px; margin-bottom: 8px; }
+.pl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
