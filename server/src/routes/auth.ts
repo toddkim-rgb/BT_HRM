@@ -10,9 +10,9 @@ import { optStr, parse } from '../lib/validate.js';
 
 export const authRouter = Router();
 
-type EmpLike = { empId: string; name: string; role: string; mustChangePw: boolean };
+type EmpLike = { empId: string; name: string; gradeCd: string; role: string; mustChangePw: boolean };
 const ip = (req: Request) => req.ip ?? 'unknown';
-const userOf = (emp: EmpLike) => ({ empId: emp.empId, name: emp.name, role: emp.role as Role, mustChangePw: emp.mustChangePw });
+const userOf = (emp: EmpLike) => ({ empId: emp.empId, name: emp.name, gradeCd: emp.gradeCd, role: emp.role as Role, mustChangePw: emp.mustChangePw });
 
 authRouter.post('/login', async (req, res) => {
   const body = parse(z.object({ email: z.string().trim().toLowerCase().min(1), password: z.string().min(1) }), req.body);

@@ -33,7 +33,7 @@ export default function Dashboard() {
   const isMgr = user?.role !== 'EMP' || !!user?.isPm; // 전사 요약은 일반 수행인력 제외 (프로젝트 PM은 표시)
   return (
     <div>
-      <PageHeader title={`안녕하세요, ${user?.name}님`} desc={`${today()} · ${weekLabel(isoWeek(today()))}`} />
+      <PageHeader title={`안녕하세요, ${user?.name}${user?.gradeCd && user.gradeCd !== '-' ? ` ${user.gradeCd}` : ''}님`} desc={`${today()} · ${weekLabel(isoWeek(today()))}`} />
       {isMgr && <CompanySummary />}
       <div className="grid cols-2">
         <MyWeekly />
