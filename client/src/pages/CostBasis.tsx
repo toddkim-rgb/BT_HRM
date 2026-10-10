@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, PageHeader, useToast } from '../components/ui';
+import { PageTabs, BASIS_TABS } from '../components/PageTabs';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ASG_ROLE, PRJ_TYPE, SKILL_LEVELS } from '../lib/codes';
@@ -65,10 +66,11 @@ export default function CostBasis() {
   return (
     <div>
       <PageHeader
-        title="원가 기준"
+        title="기준값 · 원가 기준"
         desc="수익성 분석(사업비 시뮬레이션·실행예산)에 쓰는 원가·단가 기준입니다. 개인 연봉은 저장하지 않고 직급 평균 인건비만 관리합니다."
         actions={!editable && <Badge tone="neutral">조회 전용</Badge>}
       />
+      <PageTabs tabs={BASIS_TABS} />
       <ErrorBox error={error} />
       {!data ? (
         <Loading />

@@ -33,11 +33,11 @@ export const MENUS: MenuDef[] = [
   { key: 'utilization', label: '가동률', group: '현황', editable: false },
   { key: 'projectMm', label: '프로젝트 투입률', group: '현황', editable: false },
   { key: 'profit', label: '수익성 분석', group: '수익성', editable: true, editDesc: '사업비 시뮬레이션 작성·수정·삭제, 실행예산 기준선 확정' },
-  { key: 'employees', label: '인력', group: '기준정보', editable: true, editDesc: '등록·수정·삭제·일괄 등록·비밀번호 초기화 (관리자 계정·권한은 시스템관리자만)' },
+  { key: 'employees', label: '인력 및 협력사 › 인력', group: '기준정보', editable: true, editDesc: '등록·수정·삭제·일괄 등록·비밀번호 초기화 (관리자 계정·권한은 시스템관리자만)' },
   { key: 'projects', label: '프로젝트', group: '기준정보', editable: true, editDesc: '등록·수정·삭제' },
-  { key: 'partners', label: '협력사', group: '기준정보', editable: true, editDesc: '등록·수정·삭제' },
-  { key: 'costBasis', label: '원가 기준', group: '기준정보', editable: true, editDesc: '직급 인건비·원가 비율·이익률 기준·협력사 단가·KOSA 단가 변경' },
-  { key: 'settings', label: '기준값 설정', group: '기준정보', editable: true, editDesc: '기준값·공휴일 변경' },
+  { key: 'partners', label: '인력 및 협력사 › 협력사', group: '기준정보', editable: true, editDesc: '등록·수정·삭제' },
+  { key: 'costBasis', label: '기준값 · 원가 기준 › 원가 기준', group: '기준정보', editable: true, editDesc: '직급 인건비·원가 비율·이익률 기준·협력사 단가·KOSA 단가 변경' },
+  { key: 'settings', label: '기준값 · 원가 기준 › 기준값', group: '기준정보', editable: true, editDesc: '기준값·공휴일 변경' },
   { key: 'accountRequests', label: '계정 요청', group: '기준정보', editable: true, editDesc: '비밀번호 초기화·요청 처리' },
 ];
 export type MenuKey = (typeof MENUS)[number]['key'];

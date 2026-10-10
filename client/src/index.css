@@ -704,3 +704,6 @@ span.pl-plan, i.pl-plan { background: #8fa8cc; display: block; border-radius: 3p
 .gmm-bars .f, .gmm-key.f { background: #1f3b63; }
 .gmm-key { display: inline-block; width: 10px; height: 6px; border-radius: 2px; vertical-align: middle; margin-left: 6px; }
 .people-pl tr.unplanned td { background: #fff8e6; }
+/* 합쳐진 메뉴 탭 (인력 및 협력사 · 기준값 · 원가 기준) */
+.page-tabs a { padding: 8px 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; text-decoration: none; }
+.page-tabs a.active { color: var(--primary); border-bottom-color: var(--primary); }

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { BASIS_TABS, PEOPLE_TABS, type PageTab } from './PageTabs';
 import { useAuth, type User, displayName } from '../lib/auth';
 import { api } from '../lib/api';
 import { useFetch } from '../lib/hooks';
@@ -10,7 +11,10 @@ interface NavItem {
   label: string;
   icon: string;
   menu: string; // 메뉴 권한 키 (관리자 '메뉴 권한' 화면에서 역할별 설정)
+  tabs?: PageTab[]; // 합쳐진 메뉴: 탭 중 권한 있는 첫 화면으로 이동, 어느 탭에 있어도 메뉴 강조
 }
+/** 메뉴를 눌렀을 때 갈 주소 (권한 없으면 null) */
+const navTarget = (i: NavItem, can: (menu: string) => boolean): string | null => (i.tabs ? (i.tabs.find((t) => can(t.menu))?.to ?? null) : can(i.menu) ? i.to : null);
 
 export const NAV: { group: string; items: NavItem[] }[] = [
   {
@@ -44,11 +48,9 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: '기준정보',
     items: [
-      { to: '/employees', label: '인력', icon: '☺', menu: 'employees' },
+      { to: '/employees', label: '인력 및 협력사', icon: '☺', menu: 'employees', tabs: PEOPLE_TABS },
       { to: '/projects', label: '프로젝트', icon: '▣', menu: 'projects' },
-      { to: '/partners', label: '협력사', icon: '⚑', menu: 'partners' },
-      { to: '/cost-basis', label: '원가 기준', icon: '¤', menu: 'costBasis' },
-      { to: '/settings', label: '기준값 설정', icon: '⚙', menu: 'settings' },
+      { to: '/settings', label: '기준값 · 원가 기준', icon: '⚙', menu: 'settings', tabs: BASIS_TABS },
       { to: '/account-requests', label: '계정 요청', icon: '✉', menu: 'accountRequests' },
       { to: '/permissions', label: '메뉴 권한', icon: '⚿', menu: 'permissions' },
     ],
@@ -68,7 +70,7 @@ export function Layout() {
   }, [loc.pathname, can, reloadCount]);
   if (!user) return null;
 
-  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => can(i.menu)) })).filter((g) => g.items.length);
+  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => navTarget(i, can)) })).filter((g) => g.items.length);
 
   return (
     <div className={`shell ${open ? 'nav-open' : ''}`}>
@@ -93,7 +95,12 @@ export function Layout() {
             <div key={g.group} className="nav-group">
               <div className="nav-group-title">{g.group}</div>
               {g.items.map((i) => (
-                <NavLink key={i.to} to={i.to} end={i.to === '/'} className="nav-link">
+                <NavLink
+                  key={i.to}
+                  to={navTarget(i, can)!}
+                  end={i.to === '/'}
+                  className={({ isActive }) => `nav-link ${isActive || i.tabs?.some((t) => loc.pathname.startsWith(t.to)) ? 'active' : ''}`}
+                >
                   <span className="nav-icon" aria-hidden>
                     {i.icon}
                   </span>
@@ -127,13 +134,13 @@ export function Layout() {
 export function Guard({ menu, children }: { menu: string; children: ReactNode }) {
   const { can } = useAuth();
   if (can(menu)) return <>{children}</>;
-  const first = NAV.flatMap((g) => g.items).find((i) => can(i.menu));
+  const first = NAV.flatMap((g) => g.items).find((i) => navTarget(i, can));
   return (
     <div className="card" style={{ maxWidth: 480, margin: '40px auto', textAlign: 'center' }}>
       <h2 style={{ marginTop: 0 }}>접근 권한이 없습니다</h2>
       <p className="muted">이 메뉴를 볼 수 있는 권한이 없습니다. 필요하면 시스템관리자에게 메뉴 권한을 요청하세요.</p>
       {first && (
-        <NavLink className="btn primary" to={first.to}>
+        <NavLink className="btn primary" to={navTarget(first, can)!}>
           {first.label}(으)로 이동
         </NavLink>
       )}
@@ -145,8 +152,8 @@ export function Guard({ menu, children }: { menu: string; children: ReactNode })
 export function Home({ children }: { children: ReactNode }) {
   const { can } = useAuth();
   if (can('dashboard')) return <>{children}</>;
-  const first = NAV.flatMap((g) => g.items).find((i) => can(i.menu));
-  return first ? <Navigate to={first.to} replace /> : <Guard menu="dashboard">{children}</Guard>;
+  const first = NAV.flatMap((g) => g.items).find((i) => navTarget(i, can));
+  return first ? <Navigate to={navTarget(first, can)!} replace /> : <Guard menu="dashboard">{children}</Guard>;
 }
 
 /** 테스트 계정 전용: 실제 인력 계정으로 전환해 역할별 화면·권한 시험 */

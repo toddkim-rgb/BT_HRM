@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
+import { PageTabs, PEOPLE_TABS } from '../components/PageTabs';
 import { api, qs } from '../lib/api';
 import { useAuth, useShowHr } from '../lib/auth';
 import { ASG_ROLE, ASG_STATUS, EMP_STATUS, EMPLOY_TYPE, ROLE_LABEL, SKILL_LEVELS } from '../lib/codes';
@@ -77,7 +78,7 @@ export default function Employees() {
   return (
     <div>
       <PageHeader
-        title="인력"
+        title="인력 및 협력사"
         desc="자사·협력사 인력 마스터. 배정률 합계는 오늘 기준이며 100% 초과분은 과투입으로 표시합니다."
         actions={
           isAdmin && (
@@ -92,6 +93,7 @@ export default function Employees() {
           )
         }
       />
+      <PageTabs tabs={PEOPLE_TABS} />
       <Card>
         {isAdmin && (
           <div className="tabs" role="tablist">

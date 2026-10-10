@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Badge, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, Select, useToast } from '../components/ui';
+import { PageTabs, PEOPLE_TABS } from '../components/PageTabs';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { PARTNER_STATUS } from '../lib/codes';
@@ -27,7 +28,7 @@ export default function Partners() {
   return (
     <div>
       <PageHeader
-        title="협력사"
+        title="인력 및 협력사"
         desc="협력사 마스터. 협력사·프리랜서 인력은 반드시 협력사에 연결됩니다. (인력별 계약·단가는 손익 단계에서 추가)"
         actions={
           isAdmin && (
@@ -37,6 +38,7 @@ export default function Partners() {
           )
         }
       />
+      <PageTabs tabs={PEOPLE_TABS} />
       <Card>
         <ErrorBox error={error} />
         {loading && !data ? (

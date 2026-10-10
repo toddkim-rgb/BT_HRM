@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, Empty, ErrorBox, Field, Loading, PageHeader, useToast } from '../components/ui';
+import { PageTabs, BASIS_TABS } from '../components/PageTabs';
 import { api, qs } from '../lib/api';
 import { SETTING_LABEL } from '../lib/codes';
 import { dow } from '../lib/dates';
@@ -9,7 +10,8 @@ import { useAuth } from '../lib/auth';
 export default function Settings() {
   return (
     <div>
-      <PageHeader title="기준값 설정" desc="MM 환산 기준, 알림 임계값, 공휴일 캘린더를 관리합니다. 공휴일은 가용 MD·영업일 계산에 사용됩니다." />
+      <PageHeader title="기준값 · 원가 기준" desc="MM 환산 기준, 알림 임계값, 공휴일 캘린더를 관리합니다. 공휴일은 가용 MD·영업일 계산에 사용됩니다." />
+      <PageTabs tabs={BASIS_TABS} />
       <div className="grid cols-2">
         <SettingsCard />
         <HolidaysCard />
