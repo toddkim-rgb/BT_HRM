@@ -617,8 +617,11 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 @media (max-width: 480px) { .week-picker-btn strong { font-size: 13px; } }
 .week-nav .week-picker strong { min-width: 0; }
 .week-picker-pop.right { left: auto; right: 0; }
-/* 대시보드 인사말 */
-.greet-msgs { margin: -6px 0 16px; padding: 10px 14px; border-radius: 12px; background: linear-gradient(90deg, #eef4fc, #f7f9fc); border: 1px solid #dde7f5; display: flex; flex-direction: column; gap: 4px; }
-.greet-msgs p { margin: 0; font-size: 14px; line-height: 1.5; }
-.greet-msgs p + p { color: var(--muted); }
+/* 대시보드 인사말: 이름과 같은 줄·같은 글꼴, 한마디는 번갈아 표시 */
+.greet-line { animation: greet-in 0.5s ease; }
+@keyframes greet-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .greet-line { animation: none; } }
 .greet-weather { white-space: nowrap; }
+.greet-dots { display: inline-flex; gap: 5px; margin-left: 10px; vertical-align: middle; }
+.greet-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 50%; background: var(--border); cursor: pointer; }
+.greet-dots button.on { background: #1f3b63; }

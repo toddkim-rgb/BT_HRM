@@ -1,12 +1,11 @@
-import { useState } from 'react';
-import { PageHeader } from './ui';
+import { useEffect, useMemo, useState } from 'react';
 import { displayName, useAuth } from '../lib/auth';
 import { dow, isoWeek, md, today, weekLabel } from '../lib/dates';
 import { useFetch } from '../lib/hooks';
 
 interface GreetingData {
   today: string;
-  weather: { temp: number; code: number; max: number | null; min: number | null; rainProb: number | null } | null;
+  weather: { temp: number; sky: Sky; max: number | null; min: number | null; rainProb: number | null } | null;
   report: { thisWeek: string; lastWeek: string; delayItems: number };
   projects: number;
   allocSum: number;
@@ -15,17 +14,9 @@ interface GreetingData {
   nextHoliday: { dt: string; name: string } | null;
 }
 
-/** WMO 날씨 코드 → 아이콘·종류 */
-function sky(code: number): { icon: string; kind: 'clear' | 'cloudy' | 'fog' | 'rain' | 'snow' | 'storm' } {
-  if (code === 0) return { icon: '☀️', kind: 'clear' };
-  if (code <= 2) return { icon: '🌤️', kind: 'clear' };
-  if (code === 3) return { icon: '☁️', kind: 'cloudy' };
-  if (code === 45 || code === 48) return { icon: '🌫️', kind: 'fog' };
-  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return { icon: '❄️', kind: 'snow' };
-  if (code >= 95) return { icon: '⛈️', kind: 'storm' };
-  if (code >= 51) return { icon: '🌧️', kind: 'rain' };
-  return { icon: '⛅', kind: 'cloudy' };
-}
+type Sky = 'clear' | 'partly' | 'cloudy' | 'rain' | 'snow' | 'sleet';
+/** 기상청 하늘상태·강수형태 → 아이콘 */
+const SKY_ICON: Record<Sky, string> = { clear: '☀️', partly: '⛅', cloudy: '☁️', rain: '🌧️', snow: '❄️', sleet: '🌨️' };
 
 const daysUntil = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000);
 
@@ -50,15 +41,15 @@ function moodLines(d: GreetingData): string[] {
   const out: string[] = [];
   const w = d.weather;
   if (w) {
-    const { kind } = sky(w.code);
-    if (kind === 'rain' || kind === 'storm') out.push('밖에 비가 내리고 있어요 ☔ 우산 꼭 챙기시고, 차분한 하루 보내세요.');
-    else if (kind === 'snow') out.push('눈이 내려요 ❄️ 길이 미끄러우니 이동할 때 조심하세요.');
+    const kind = w.sky;
+    if (kind === 'rain') out.push('밖에 비가 내리고 있어요 ☔ 우산 꼭 챙기시고, 차분한 하루 보내세요.');
+    else if (kind === 'snow' || kind === 'sleet') out.push('눈이 내려요 ❄️ 길이 미끄러우니 이동할 때 조심하세요.');
     else if (w.rainProb != null && w.rainProb >= 60) out.push(`오늘 비 소식이 있어요 (강수확률 ${w.rainProb}%). 퇴근길 우산 잊지 마세요 ☂️`);
     if (w.temp >= 30) out.push(`${w.temp}℃, 무더운 날이에요 🥵 시원한 물 자주 드세요.`);
     else if (w.temp <= 0) out.push(`${w.temp}℃, 꽤 쌀쌀해요 🧣 따뜻하게 챙겨 입으세요.`);
     else if (w.max != null && w.min != null && w.max - w.min >= 10) out.push(`일교차가 ${w.max - w.min}℃나 돼요. 겉옷 하나 챙기면 좋겠어요 🧥`);
-    if (kind === 'clear' && w.temp > 0 && w.temp < 30) out.push(`하늘이 맑아요 ${sky(w.code).icon} 상쾌한 ${w.temp}℃, 기분 좋은 하루 되세요.`);
-    if (kind === 'fog') out.push('안개가 짙어요 🌫️ 이동할 때 조심하세요.');
+    if (kind === 'clear' && w.temp > 0 && w.temp < 30) out.push(`하늘이 맑아요 ${SKY_ICON.clear} 상쾌한 ${w.temp}℃, 기분 좋은 하루 되세요.`);
+    if (kind === 'cloudy') out.push('하늘이 흐리네요 ☁️ 그래도 마음만은 맑게, 힘내세요!');
   }
   if (d.nextHoliday) {
     const n = daysUntil(d.today, d.nextHoliday.dt);
@@ -85,35 +76,63 @@ function moodLines(d: GreetingData): string[] {
   return out;
 }
 
-/** 대시보드 인사: 이름·직급 + 날씨·업무 상황에 맞춘 한두 마디 */
+/** 대시보드 인사: '안녕하세요, 이름 직급님!' 뒤에 같은 줄·같은 글꼴로 상황별 한마디 (여러 개면 번갈아 표시) */
 export function Greeting() {
   const { user } = useAuth();
   const { data } = useFetch<GreetingData>('/greeting');
   const [seed] = useState(() => Math.random());
+  const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
   const t = today();
   const w = data?.weather;
-  const desc = (
-    <>
-      {t} ({dow(t)}) · {weekLabel(isoWeek(t))}
-      {w && (
-        <span className="greet-weather" title="서울 기준 (Open-Meteo)">
-          {' '}
-          · {sky(w.code).icon} 서울 {w.temp}℃{w.min != null && w.max != null ? ` (${w.min}~${w.max}℃)` : ''}
-        </span>
-      )}
-    </>
-  );
-  const lines = data ? [workLine(data, user?.role ?? 'EMP'), (() => { const m = moodLines(data); return m[Math.floor(seed * m.length)]; })()].filter(Boolean) : [];
+
+  // 업무 한마디(있으면 먼저) + 분위기 한마디(들어올 때마다 순서를 섞음)
+  const lines = useMemo(() => {
+    if (!data) return [];
+    const moods = moodLines(data)
+      .map((m, i) => ({ m, k: (Math.sin((i + 1) * 9301 * (seed + 0.1)) + 1) % 1 }))
+      .sort((a, b) => a.k - b.k)
+      .map((x) => x.m);
+    return [workLine(data, user?.role ?? 'EMP'), ...moods].filter((l): l is string => !!l);
+  }, [data, seed, user?.role]);
+
+  useEffect(() => {
+    if (lines.length < 2 || paused) return;
+    const id = window.setInterval(() => setIdx((i) => (i + 1) % lines.length), 7000);
+    return () => window.clearInterval(id);
+  }, [lines.length, paused]);
+
+  const line = lines.length ? lines[idx % lines.length] : null;
   return (
-    <>
-      <PageHeader title={`안녕하세요, ${displayName(user)}님`} desc={desc} />
-      {lines.length > 0 && (
-        <div className="greet-msgs">
-          {lines.map((l) => (
-            <p key={l}>{l}</p>
-          ))}
-        </div>
-      )}
-    </>
+    <div className="page-header">
+      <div>
+        <h1 className="greet-title" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+          안녕하세요, {displayName(user)}님!
+          {line && (
+            <span key={line} className="greet-line">
+              {' '}
+              {line}
+            </span>
+          )}
+        </h1>
+        <p className="muted">
+          {t} ({dow(t)}) · {weekLabel(isoWeek(t))}
+          {w && (
+            <span className="greet-weather" title="서울 기준 (기상청 단기예보)">
+              {' '}
+              · {SKY_ICON[w.sky]} 서울 {w.temp}℃{w.min != null && w.max != null ? ` (${w.min}~${w.max}℃)` : ''}
+              {w.rainProb != null && w.rainProb >= 30 ? ` · 강수확률 ${w.rainProb}%` : ''}
+            </span>
+          )}
+          {lines.length > 1 && (
+            <span className="greet-dots" aria-hidden>
+              {lines.map((l, i) => (
+                <button key={l} type="button" className={i === idx % lines.length ? 'on' : ''} onClick={() => setIdx(i)} tabIndex={-1} />
+              ))}
+            </span>
+          )}
+        </p>
+      </div>
+    </div>
   );
 }

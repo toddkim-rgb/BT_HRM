@@ -111,6 +111,7 @@ client/
 - 화면: `client/dist` 정적 배포, API: `api/index.js` 서버리스 함수(빌드된 `server/dist/app.js`), DB: Turso(SQLite 호환, 도쿄)
 - 로컬 개발은 그대로 SQLite 파일(`server/prisma/dev.db`)을 씁니다. `TURSO_DATABASE_URL`이 있으면 Turso에 연결합니다 (`server/src/db.ts`).
 - Vercel 환경변수 `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`은 프로젝트 Storage의 Turso 연결로 자동 등록됩니다. 로그인 서명 키는 DB 토큰에서 파생합니다(`JWT_SECRET`을 넣으면 그 값을 우선 사용).
+- 대시보드 인사말의 서울 날씨는 기상청 단기예보 조회서비스(공공데이터포털)를 씁니다. 인증키를 Vercel 환경변수 `KMA_SERVICE_KEY`에 넣고 재배포하세요(Encoding·Decoding 키 모두 가능). 키가 없으면 날씨 없이 인사말만 표시됩니다.
 - DB 구조를 바꾸는 배포는 push 전에 Turso에 마이그레이션을 먼저 적용합니다.
   - `vercel env pull server/.env.turso --environment production` (git·Vercel 업로드 제외 파일)
   - `cd server && npx tsx --env-file=.env.turso scripts/turso.ts migrate`
