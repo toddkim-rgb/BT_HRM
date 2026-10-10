@@ -4,7 +4,6 @@ import { prisma } from '../db.js';
 export const DEFAULT_SETTINGS = {
   MD_PER_MM: '22',
   HOURS_PER_MD: '8',
-  OVERHEAD_RATE: '0.2', // 자사 원가단가 간접비율
   ALERT_RELEASE_DAYS: '30,7', // AL-01
   ALERT_MM_BURN: '80,100', // AL-03
   ALERT_PARTNER_END_DAYS: '30', // AL-04

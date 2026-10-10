@@ -35,6 +35,7 @@ export const MENUS: MenuDef[] = [
   { key: 'employees', label: '인력', group: '기준정보', editable: true, editDesc: '등록·수정·삭제·일괄 등록·비밀번호 초기화 (관리자 계정·권한은 시스템관리자만)' },
   { key: 'projects', label: '프로젝트', group: '기준정보', editable: true, editDesc: '등록·수정·삭제' },
   { key: 'partners', label: '협력사', group: '기준정보', editable: true, editDesc: '등록·수정·삭제' },
+  { key: 'costBasis', label: '원가 기준', group: '기준정보', editable: true, editDesc: '직급 인건비·원가 비율·이익률 기준·협력사 단가·KOSA 단가 변경' },
   { key: 'settings', label: '기준값 설정', group: '기준정보', editable: true, editDesc: '기준값·공휴일 변경' },
   { key: 'accountRequests', label: '계정 요청', group: '기준정보', editable: true, editDesc: '비밀번호 초기화·요청 처리' },
 ];
@@ -46,7 +47,7 @@ const E: Level = 'EDIT';
 export const DEFAULT_PERMISSIONS: Record<PermRole, Partial<Record<string, Level>>> = {
   EMP: { dashboard: V, weekly: E, utilization: V },
   PM: { dashboard: V, weekly: E, assignments: E, submissions: V, projectWeekly: E, onepage: V, staffing: V, utilization: V, projectMm: V, employees: V, projects: V },
-  EXEC: { dashboard: V, weekly: E, assignments: V, submissions: V, projectWeekly: V, onepage: E, staffing: V, utilization: V, projectMm: V, employees: V, projects: V, partners: V },
+  EXEC: { dashboard: V, weekly: E, assignments: V, submissions: V, projectWeekly: V, onepage: E, staffing: V, utilization: V, projectMm: V, employees: V, projects: V, partners: V, costBasis: V },
   ADMIN: Object.fromEntries(MENUS.map((m) => [m.key, m.editable ? E : V])),
 };
 

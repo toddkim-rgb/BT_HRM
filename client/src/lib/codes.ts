@@ -30,7 +30,6 @@ export const PARTNER_STATUS: Record<string, string> = { ACTIVE: '거래중', STO
 export const SETTING_LABEL: Record<string, string> = {
   MD_PER_MM: '1MM 환산 MD',
   HOURS_PER_MD: '1MD 시간',
-  OVERHEAD_RATE: '간접비율 (자사 원가단가)',
   ALERT_RELEASE_DAYS: '철수 임박 알림 (D-일, 쉼표 구분)',
   ALERT_MM_BURN: 'MM 소진 알림 (%, 쉼표 구분)',
   ALERT_PARTNER_END_DAYS: '협력사 계약 종료 알림 (D-일)',

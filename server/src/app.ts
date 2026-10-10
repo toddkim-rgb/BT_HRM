@@ -15,6 +15,7 @@ import { projectsRouter } from './routes/projects.js';
 import { projectWeeklyRouter, reportsRouter } from './routes/reports.js';
 import { statsRouter } from './routes/stats.js';
 import { greetingRouter } from './routes/greeting.js';
+import { costRouter } from './routes/cost.js';
 import { weeklyWorksRouter } from './routes/weeklyWorks.js';
 
 export const app = express();
@@ -65,6 +66,7 @@ api.use('/reports', reportsRouter);
 api.use('/assignments', assignmentsRouter);
 api.use('/weekly-works', weeklyWorksRouter);
 api.use('/stats', statsRouter);
+api.use('/cost', costRouter); // 원가 기준 (수익성 분석)
 api.use('/greeting', greetingRouter); // 대시보드 인사말 (날씨·내 업무 현황)
 api.use('/admin', adminRouter);
 app.use('/api/v1', api);

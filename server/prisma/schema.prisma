@@ -362,3 +362,52 @@ model UserPref {
 
   @@id([empId, prefKey])
 }
+
+// ---- 원가 기준 (수익성 분석) — 사업관리자 조회 · 시스템관리자 편집 ----
+
+// 직급별 월 인건비 (적용 시작일 기준 이력). 월 표준원가 = 월 인건비 × (1 + 법정부담률) × (1 + 간접비율)
+model CostGrade {
+  id            Int      @id @default(autoincrement())
+  gradeCd       String
+  monthlySalary Int
+  applyStartDt  String
+  updatedAt     DateTime @updatedAt
+
+  @@unique([gradeCd, applyStartDt])
+}
+
+// 원가 비율 (%): LEGAL_RATE 법정부담률, OVERHEAD_RATE 간접비율, RESERVE_RATE 기본 예비비율, KOSA_OVERHEAD_RATE 제경비율, KOSA_TECH_FEE_RATE 기술료율, KOSA_YEAR 적용 연도
+model CostConfig {
+  key   String @id
+  value Float
+}
+
+// 사업구분별 이익률 판정 기준 (%): 목표 이상 녹색, 최소~목표 노랑, 최소 미만 빨강
+model MarginRule {
+  prjType    String @id
+  targetRate Float
+  minRate    Float
+}
+
+// 협력사 등급별 기본 월단가 (초급·중급·고급·특급)
+model PartnerGradeRate {
+  gradeCd     String @id
+  monthlyRate Int
+}
+
+// KOSA SW기술자 평균임금 (연도 × 직무)
+model KosaWage {
+  year        Int
+  jobNm       String
+  dailyWage   Int
+  monthlyWage Int?
+  seq         Int    @default(0)
+
+  @@id([year, jobNm])
+}
+
+// 투입 역할 → KOSA 직무 기본 매핑
+model RoleJobMap {
+  roleCd String @id
+  jobNm  String
+}

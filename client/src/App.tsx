@@ -16,6 +16,7 @@ import ProjectMm from './pages/ProjectMm';
 import ProjectWeekly from './pages/ProjectWeekly';
 import Projects from './pages/Projects';
 import Settings from './pages/Settings';
+import CostBasis from './pages/CostBasis';
 import Staffing from './pages/Staffing';
 import StaffingDetail from './pages/StaffingDetail';
 import Submissions from './pages/Submissions';
@@ -48,6 +49,7 @@ function Routed() {
         <Route path="projects" element={<Guard menu="projects"><Projects /></Guard>} />
         <Route path="partners" element={<Guard menu="partners"><Partners /></Guard>} />
         <Route path="settings" element={<Guard menu="settings"><Settings /></Guard>} />
+        <Route path="cost-basis" element={<Guard menu="costBasis"><CostBasis /></Guard>} />
         <Route path="account-requests" element={<Guard menu="accountRequests"><AccountRequests /></Guard>} />
         <Route path="me" element={<MyInfo />} />
         <Route path="permissions" element={<Guard menu="permissions"><Permissions /></Guard>} />
