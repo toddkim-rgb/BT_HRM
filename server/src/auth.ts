@@ -27,6 +27,7 @@ export const TEST_PERSONAS: Record<string, { name: string; label: string; roleOv
   ADMIN: { name: '김석현', label: '시스템관리자' },
   EXEC: { name: '김석현', label: '사업관리자', roleOverride: 'EXEC' },
   PM: { name: '정창원', label: '프로젝트 PM' },
+  PM2: { name: '문정우', label: '프로젝트 PM' },
   EMP: { name: '신현석', label: '수행인력' },
 };
 

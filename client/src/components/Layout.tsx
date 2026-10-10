@@ -162,6 +162,7 @@ const PERSONAS: [string, string][] = [
   ['ADMIN', '시스템관리자 — 김석현'],
   ['EXEC', '사업관리자 — 김석현'],
   ['PM', '프로젝트 PM — 정창원'],
+  ['PM2', '프로젝트 PM — 문정우'],
   ['EMP', '수행인력 — 신현석'],
 ];
 function TestRoleSwitch({ user, onSwitched }: { user: User; onSwitched: (token: string, u: User) => void }) {

@@ -90,7 +90,7 @@ authRouter.put('/me/prefs/:key', requireAuth, async (req, res) => {
 authRouter.post('/test-role', requireAuth, async (req, res) => {
   const u = me(req);
   if (!u.tester) throw new HttpError(403, '테스트 계정만 역할을 전환할 수 있습니다.');
-  const body = parse(z.object({ as: z.enum(['SELF', 'ADMIN', 'EXEC', 'PM', 'EMP']) }), req.body);
+  const body = parse(z.object({ as: z.enum(['SELF', 'ADMIN', 'EXEC', 'PM', 'PM2', 'EMP']) }), req.body);
   const testerId = u.impersonator ?? u.empId;
   const tester = await prisma.employee.findUnique({ where: { empId: testerId } });
   if (!tester || !isTesterEmail(tester.email)) throw new HttpError(403, '테스트 계정만 역할을 전환할 수 있습니다.');

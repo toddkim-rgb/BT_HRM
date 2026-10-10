@@ -11,7 +11,7 @@ export interface User {
   isPm?: boolean; // 투입 배정에서 PM으로 지정된 프로젝트가 있음
   pmPrjCds?: string[]; // PM으로 지정된 프로젝트
   tester?: boolean; // 테스트 계정 (역할 전환 가능)
-  testAs?: string | null; // 테스트 계정이 전환한 역할 (ADMIN/EXEC/PM/EMP), 본인이면 없음
+  testAs?: string | null; // 테스트 계정이 전환한 역할 (ADMIN/EXEC/PM/PM2/EMP), 본인이면 없음
 }
 
 /** 메뉴 키 → 권한 단계 (서버 '메뉴 권한' 설정, DB) */
