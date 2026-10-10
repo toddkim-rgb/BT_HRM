@@ -5,7 +5,7 @@
  *   삭제:           npx tsx --env-file=.env.turso scripts/dummyWeekly.ts --delete --apply
  *   (로컬은 --env-file 대신 DATABASE_URL 사용)
  *
- * - 배정 시작 ~ 지난주, 배정된 평일(공휴일 제외)마다 1MD (같은 날 배정이 여러 개면 0.5MD씩, 하루 합계 1MD)
+ * - 배정 시작 ~ 오늘(이번 주 지난 평일 포함), 배정된 평일(공휴일 제외)마다 1MD (같은 날 배정이 여러 개면 0.5MD씩, 하루 합계 1MD)
  * - 금주 실적·차주 계획·간간이 이슈/리스크/요청(건의) — 제출 상태
  * - 이미 보고서가 있는 주는 건너뜀, 비고(remark)가 '[더미]'로 시작 → 삭제 시 이것만 지움
  */
@@ -72,7 +72,7 @@ async function remove() {
 }
 
 async function generate() {
-  const cutoff = weekDays(shiftWeek(isoWeek(today()), -1))[6]; // 지난주 일요일
+  const cutoff = today(); // 오늘까지 (화면 기본 주차인 이번 주도 보이도록, 지난 평일만)
   const lastWeek = isoWeek(cutoff);
   const holidays = new Set((await prisma.holiday.findMany()).map((h) => h.dt));
   const asg = await prisma.assignment.findMany({
@@ -172,7 +172,7 @@ async function generate() {
       });
     }
   }
-  console.log(`기준: 지난주(${lastWeek}, ~${cutoff})까지 · 배정 ${asg.length}건 · 인력 ${byEmp.size}명`);
+  console.log(`기준: ${lastWeek} (~${cutoff})까지 · 배정 ${asg.length}건 · 인력 ${byEmp.size}명`);
   console.log(`생성 ${reports}건 (투입 ${md} MD, 이슈·건의 ${issues}건) · 기존 보고서가 있어 건너뜀 ${skipped}건`);
   if (!APPLY) console.log('미리보기 — 실제로 넣으려면 --apply');
 }
