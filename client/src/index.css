@@ -595,7 +595,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .dnd-hint { display: none; }
 }
 /* 주차 선택: 달력 팝오버 (주 단위 한 줄 선택) */
-.week-picker { position: relative; }
+.week-picker { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.week-picker-step { padding-left: 10px; padding-right: 10px; font-size: 12px; }
 .week-picker-btn { display: inline-flex; align-items: center; gap: 8px; }
 .week-picker-btn.open { border-color: #1f3b63; }
 .week-picker-now { font-size: 11px; font-weight: 700; color: #1f3b63; background: #e6eef9; border-radius: 999px; padding: 1px 8px; }

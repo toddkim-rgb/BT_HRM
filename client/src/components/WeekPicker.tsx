@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { addDays, addMonths, isoWeek, today, weekDays, weekLabel } from '../lib/dates';
+import { addDays, addMonths, isoWeek, shiftWeek, today, weekDays, weekLabel } from '../lib/dates';
 
 /** 'YYYY-MM' 달력에 보일 주(월요일 시작) 목록: 그 달과 겹치는 ISO 주차 */
 function monthWeeks(ym: string): string[] {
@@ -47,11 +47,17 @@ export function WeekPicker({ week, onChange, label }: { week: string; onChange: 
 
   return (
     <div className="week-picker" ref={box}>
+      <button type="button" className="btn week-picker-step" onClick={() => onChange(shiftWeek(week, -1))} aria-label="이전 주" title="이전 주">
+        ◀
+      </button>
       <button type="button" className={`btn week-picker-btn ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} aria-haspopup="dialog" aria-expanded={open}>
         <span aria-hidden>📅</span>
         <strong>{label ?? weekLabel(week)}</strong>
         {week === thisWeek && <span className="week-picker-now">이번 주</span>}
         <span aria-hidden className="week-picker-caret">▾</span>
+      </button>
+      <button type="button" className="btn week-picker-step" onClick={() => onChange(shiftWeek(week, 1))} aria-label="다음 주" title="다음 주">
+        ▶
       </button>
       {open && (
         <div className={`week-picker-pop ${alignRight ? 'right' : ''}`} role="dialog" aria-label="주차 선택">
