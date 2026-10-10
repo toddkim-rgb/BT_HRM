@@ -134,7 +134,7 @@ profitRouter.get('/sims', async (_req, res) => {
 
 /** 새 시뮬레이션: 프로젝트 기간·사업구분별 판정 기준·기본 예비비율로 시작 */
 profitRouter.post('/sims', edit, async (req, res) => {
-  const body = parse(z.object({ prjCd: z.string().min(1), name: z.string().trim().min(1).max(40) }), req.body);
+  const body = parse(z.object({ prjCd: z.string().min(1), name: z.string().trim().min(1).max(40), fromAssignments: z.boolean().optional() }), req.body);
   const p = await prisma.project.findUnique({ where: { prjCd: body.prjCd } });
   if (!p) throw new HttpError(404, '프로젝트를 찾을 수 없습니다.');
   const [margin, reserve] = await Promise.all([prisma.marginRule.findUnique({ where: { prjType: p.prjType } }), prisma.costConfig.findUnique({ where: { key: 'RESERVE_RATE' } })]);
@@ -150,7 +150,7 @@ profitRouter.post('/sims', edit, async (req, res) => {
       targetRate: margin?.targetRate ?? 0,
       minRate: margin?.minRate ?? 0,
       proposedAmt: p.contractAmt ?? null,
-      rows: '[]',
+      rows: JSON.stringify(body.fromAssignments ? await assignmentRows(p.prjCd) : []), // 실적 손익에서 기준선을 만들 때는 현재 배정으로 시작
       expenses: '[]',
       createdBy: me(req).empId,
     },
@@ -262,33 +262,37 @@ profitRouter.post('/sims/:id/confirm', edit, async (req, res) => {
 });
 
 /** 현재 배정 불러오기: 프로젝트에 배정된 인력을 투입 행으로 (자사=직급, 협력사=기술등급) */
-profitRouter.get('/assignments/:prjCd', async (req, res) => {
+/** 프로젝트 배정 → 시뮬레이션 투입 행 (자사=직급, 협력사=기술등급) */
+async function assignmentRows(prjCd: string) {
   const [list, roleJobs] = await Promise.all([
     prisma.assignment.findMany({
-      where: { prjCd: String(req.params.prjCd), canceled: false },
+      where: { prjCd, canceled: false },
       include: { employee: { select: { name: true, gradeCd: true, employType: true, skillLevel: true } } },
       orderBy: [{ startDt: 'asc' }],
     }),
     prisma.roleJobMap.findMany(),
   ]);
   const job = Object.fromEntries(roleJobs.map((r) => [r.roleCd, r.jobNm]));
-  res.json(
-    list.map((a) => {
-      const partner = a.employee.employType === 'PARTNER';
-      return {
-        type: partner ? 'PARTNER' : 'OWN',
-        grade: partner ? a.employee.skillLevel || '중급' : a.employee.gradeCd,
-        roleCd: a.roleCd,
-        jobNm: job[a.roleCd] ?? null,
-        headcount: 1,
-        startDt: a.startDt,
-        endDt: a.endDt,
-        allocRate: a.allocRate,
-        monthlyRate: null,
-        note: a.employee.name,
-      };
-    }),
-  );
+  return list.map((a) => {
+    const partner = a.employee.employType === 'PARTNER';
+    return {
+      type: partner ? ('PARTNER' as const) : ('OWN' as const),
+      grade: partner ? a.employee.skillLevel || '중급' : a.employee.gradeCd,
+      roleCd: a.roleCd,
+      jobNm: job[a.roleCd] ?? null,
+      headcount: 1,
+      startDt: a.startDt,
+      endDt: a.endDt,
+      allocRate: a.allocRate,
+      monthlyRate: null,
+      note: a.employee.name,
+    };
+  });
+}
+
+/** 현재 배정 불러오기 */
+profitRouter.get('/assignments/:prjCd', async (req, res) => {
+  res.json(await assignmentRows(String(req.params.prjCd)));
 });
 
 // ---- 2차: 실적 손익 (기준선 대비 실적·예상 최종 이익률) ----

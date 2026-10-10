@@ -122,7 +122,7 @@ export default function ProfitSim() {
     try {
       await api.del(`/profit/sims/${id}`);
       setSaved(JSON.stringify({ name, memo, input })); // 이동 경고 끄기
-      nav('/profit');
+      nav('/profit/sims');
     } catch (e) {
       toast(errMsg(e), 'bad');
     }
@@ -150,8 +150,11 @@ export default function ProfitSim() {
         }
         actions={
           <span className="row no-print" style={{ gap: 6 }}>
-            <Link className="btn" to="/profit">
-              ← 목록
+            <Link className="btn" to="/profit/sims">
+              ← 시뮬레이션 목록
+            </Link>
+            <Link className="btn" to={`/profit/actual/${d.prjCd}`}>
+              실적 손익
             </Link>
             <button className="btn" onClick={() => window.print()}>
               인쇄 / PDF

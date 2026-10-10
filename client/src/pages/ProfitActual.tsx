@@ -86,9 +86,9 @@ export function ProfitTabs() {
   return (
     <nav className="tabs profit-tabs no-print">
       <NavLink to="/profit" end>
-        사업비 시뮬레이션
+        실적 손익
       </NavLink>
-      <NavLink to="/profit/actual">실적 손익</NavLink>
+      <NavLink to="/profit/sims">사업비 시뮬레이션</NavLink>
     </nav>
   );
 }
@@ -101,6 +101,40 @@ function Fulfill({ v }: { v: number | null }) {
 }
 const mmT = (n: number | null | undefined) => (n == null ? '-' : `${n.toLocaleString('ko-KR')} MM`);
 const signedMm = (n: number | null) => (n == null ? '-' : `${n > 0 ? '+' : ''}${n.toLocaleString('ko-KR')} MM`);
+
+/**
+ * 기준선 만들기: 현재 배정으로 채운 시뮬레이션을 만들고 편집 화면으로 이동
+ * (같은 프로젝트에 작성 중인 안이 있으면 그 안을 연다)
+ */
+function CreateBaselineButton({ prjCd, small, primary }: { prjCd: string; small?: boolean; primary?: boolean }) {
+  const editable = useAuth().can('profit', 'EDIT');
+  const nav = useNavigate();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  if (!editable) return null;
+  const go = async () => {
+    setBusy(true);
+    try {
+      const sims = await api.get<{ simId: number; prjCd: string; statusCd: string; name: string }[]>('/profit/sims');
+      const draft = sims.find((x) => x.prjCd === prjCd && x.statusCd === 'DRAFT');
+      if (draft && window.confirm(`작성 중인 '${draft.name}' 안이 있습니다. 그 안을 열까요? (취소하면 새로 만듭니다)`)) return nav(`/profit/sim/${draft.simId}`);
+      const used = new Set(sims.filter((x) => x.prjCd === prjCd).map((x) => x.name));
+      const name = 'ABCDEFGHIJ'.split('').map((c) => `${c}안`).find((n) => !used.has(n)) ?? '기준선 안';
+      const r = await api.post<{ simId: number }>('/profit/sims', { prjCd, name, fromAssignments: true });
+      toast('현재 배정으로 시뮬레이션을 만들었습니다. 확인·수정 후 "기준선으로 확정"을 누르세요.');
+      nav(`/profit/sim/${r.simId}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'bad');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button className={`btn ${small ? 'sm' : ''} ${primary ? 'primary' : ''}`} onClick={go} disabled={busy} style={small ? { marginTop: 4 } : undefined}>
+      실행예산 기준선 만들기
+    </button>
+  );
+}
 
 const signed = (n: number | null) => (n == null ? '-' : `${n > 0 ? '+' : ''}${krw(n)}`);
 
@@ -117,7 +151,7 @@ function ActualList() {
     () =>
       (data ?? [])
         .filter((p) => (filter === 'ALL' ? true : filter === 'ACTIVE' ? p.statusCd === 'ACTIVE' : p.statusCd === 'DONE'))
-        .filter((p) => p.baseline || p.revenue || p.actual.cost > 0)
+        .filter((p) => p.baseline || p.revenue || p.actual.cost > 0 || p.staffing.planMm > 0) // 배정만 있어도 표시 (기준선 만들기)
         .sort((a, b) => ['OVER', 'RESERVE', 'OK', 'NO_BASE'].indexOf(a.status) - ['OVER', 'RESERVE', 'OK', 'NO_BASE'].indexOf(b.status) || a.prjNm.localeCompare(b.prjNm)),
     [data, filter],
   );
@@ -130,7 +164,7 @@ function ActualList() {
   });
   return (
     <div>
-      <PageHeader title="수익성 분석" desc="실행예산 기준선 대비 실적 원가(주간보고 투입 MD × 1인 일 원가 + 경비)와 종료 시 예상 이익률을 봅니다." />
+      <PageHeader title="수익성 분석" desc="실행예산 기준선 대비 실적 원가(주간보고 투입 MD × 1인 일 원가 + 경비)와 종료 시 예상 이익률을 봅니다. 기준선이 없는 프로젝트는 '실행예산 기준선 만들기'로 현재 배정에서 시작해 확정하세요." />
       <ProfitTabs />
       <ErrorBox error={error} />
       {!data ? (
@@ -158,7 +192,7 @@ function ActualList() {
             ))}
           </div>
           {!list.length ? (
-            <Empty>표시할 프로젝트가 없습니다. 계약금액·실행예산 기준선·실적이 있는 프로젝트가 나타납니다.</Empty>
+            <Empty>표시할 프로젝트가 없습니다. 배정·계약금액·실행예산 기준선·실적 중 하나라도 있는 프로젝트가 나타납니다.</Empty>
           ) : (
             <Card>
               <div className="table-wrap">
@@ -191,6 +225,11 @@ function ActualList() {
                         </td>
                         <td title={PL_STATUS[p.status].desc}>
                           <Badge tone={PL_STATUS[p.status].tone}>{PL_STATUS[p.status].label}</Badge>
+                          {p.status === 'NO_BASE' && (
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <CreateBaselineButton prjCd={p.prjCd} small />
+                            </div>
+                          )}
                         </td>
                         <td className="r nowrap">
                           {krw(p.revenue?.amount)}
@@ -257,13 +296,15 @@ function ActualDetail({ prjCd }: { prjCd: string }) {
         }
         actions={
           <span className="row no-print" style={{ gap: 6 }}>
-            <Link className="btn" to="/profit/actual">
+            <Link className="btn" to="/profit">
               ← 목록
             </Link>
-            {b && (
+            {b ? (
               <Link className="btn" to={`/profit/sim/${b.simId}`}>
                 기준선 v{b.version} 보기
               </Link>
+            ) : (
+              <CreateBaselineButton prjCd={d.prjCd} primary />
             )}
             <button className="btn" onClick={() => window.print()}>
               인쇄 / PDF

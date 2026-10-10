@@ -48,9 +48,10 @@ function Routed() {
         <Route path="utilization" element={<Guard menu="utilization"><Utilization /></Guard>} />
         <Route path="project-mm" element={<Guard menu="projectMm"><ProjectMm /></Guard>} />
         <Route path="project-mm/:prjCd" element={<Guard menu="projectMm"><ProjectMm /></Guard>} />
-        <Route path="profit" element={<Guard menu="profit"><Profit /></Guard>} />
+        <Route path="profit" element={<Guard menu="profit"><ProfitActual /></Guard>} />
+        <Route path="profit/sims" element={<Guard menu="profit"><Profit /></Guard>} />
         <Route path="profit/sim/:id" element={<Guard menu="profit"><ProfitSim /></Guard>} />
-        <Route path="profit/actual" element={<Guard menu="profit"><ProfitActual /></Guard>} />
+        <Route path="profit/actual" element={<Navigate to="/profit" replace />} />
         <Route path="profit/actual/:prjCd" element={<Guard menu="profit"><ProfitActual /></Guard>} />
         <Route path="employees" element={<Guard menu="employees"><Employees /></Guard>} />
         <Route path="projects" element={<Guard menu="projects"><Projects /></Guard>} />
