@@ -6,6 +6,7 @@ import { ASG_ROLE, PRJ_TYPE, SKILL_LEVELS } from '../lib/codes';
 import { today } from '../lib/dates';
 import { won } from '../lib/format';
 import { useFetch } from '../lib/hooks';
+import { MoneyInput, PctInput } from '../components/NumInputs';
 
 type ConfigKey = 'LEGAL_RATE' | 'OVERHEAD_RATE' | 'RESERVE_RATE' | 'KOSA_OVERHEAD_RATE' | 'KOSA_TECH_FEE_RATE' | 'KOSA_YEAR';
 interface GradeRow {
@@ -54,32 +55,6 @@ const useSaver = (reload: () => void) => {
     }
   };
 };
-
-/** 금액 입력 (천 단위 쉼표) */
-function MoneyInput({ value, onChange, disabled, placeholder }: { value: number | null; onChange: (v: number | null) => void; disabled?: boolean; placeholder?: string }) {
-  return (
-    <input
-      className="num-input"
-      inputMode="numeric"
-      placeholder={placeholder}
-      value={value == null ? '' : value.toLocaleString('ko-KR')}
-      disabled={disabled}
-      onChange={(e) => {
-        const d = e.target.value.replace(/[^\d]/g, '');
-        onChange(d ? Number(d) : null);
-      }}
-    />
-  );
-}
-/** 비율 입력 (%) */
-function PctInput({ value, onChange, disabled }: { value: number | null; onChange: (v: number | null) => void; disabled?: boolean }) {
-  return (
-    <span className="pct-input">
-      <input type="number" step="0.1" min="0" value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
-      <span>%</span>
-    </span>
-  );
-}
 
 /** 월 표준원가 = 월 인건비 × (1 + 법정부담률) × (1 + 간접비율) */
 export const standardCost = (salary: number, legal: number | null, overhead: number | null) => salary * (1 + (legal ?? 0) / 100) * (1 + (overhead ?? 0) / 100);

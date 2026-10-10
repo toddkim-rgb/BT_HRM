@@ -38,12 +38,16 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     ],
   },
   {
+    group: '수익성',
+    items: [{ to: '/profit', label: '수익성 분석', icon: '₩', menu: 'profit' }],
+  },
+  {
     group: '기준정보',
     items: [
       { to: '/employees', label: '인력', icon: '☺', menu: 'employees' },
       { to: '/projects', label: '프로젝트', icon: '▣', menu: 'projects' },
       { to: '/partners', label: '협력사', icon: '⚑', menu: 'partners' },
-      { to: '/cost-basis', label: '원가 기준', icon: '₩', menu: 'costBasis' },
+      { to: '/cost-basis', label: '원가 기준', icon: '¤', menu: 'costBasis' },
       { to: '/settings', label: '기준값 설정', icon: '⚙', menu: 'settings' },
       { to: '/account-requests', label: '계정 요청', icon: '✉', menu: 'accountRequests' },
       { to: '/permissions', label: '메뉴 권한', icon: '⚿', menu: 'permissions' },

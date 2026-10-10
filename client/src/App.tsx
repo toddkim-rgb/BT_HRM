@@ -17,6 +17,8 @@ import ProjectWeekly from './pages/ProjectWeekly';
 import Projects from './pages/Projects';
 import Settings from './pages/Settings';
 import CostBasis from './pages/CostBasis';
+import Profit from './pages/Profit';
+import ProfitSim from './pages/ProfitSim';
 import Staffing from './pages/Staffing';
 import StaffingDetail from './pages/StaffingDetail';
 import Submissions from './pages/Submissions';
@@ -45,6 +47,8 @@ function Routed() {
         <Route path="utilization" element={<Guard menu="utilization"><Utilization /></Guard>} />
         <Route path="project-mm" element={<Guard menu="projectMm"><ProjectMm /></Guard>} />
         <Route path="project-mm/:prjCd" element={<Guard menu="projectMm"><ProjectMm /></Guard>} />
+        <Route path="profit" element={<Guard menu="profit"><Profit /></Guard>} />
+        <Route path="profit/sim/:id" element={<Guard menu="profit"><ProfitSim /></Guard>} />
         <Route path="employees" element={<Guard menu="employees"><Employees /></Guard>} />
         <Route path="projects" element={<Guard menu="projects"><Projects /></Guard>} />
         <Route path="partners" element={<Guard menu="partners"><Partners /></Guard>} />

@@ -411,3 +411,29 @@ model RoleJobMap {
   roleCd String @id
   jobNm  String
 }
+
+// 사업비 시뮬레이션 (수익성 분석). 기준선으로 확정하면 잠기고, 확정 당시 기준값·결과를 snapshot에 보관
+model Simulation {
+  simId       Int       @id @default(autoincrement())
+  prjCd       String
+  name        String // 시나리오명
+  statusCd    String    @default("DRAFT") // DRAFT 작성 중 / BASELINE 기준선(확정, 잠금)
+  version     Int? // 기준선 버전 (프로젝트별 1, 2, …) — 가장 큰 버전이 현재 실행예산
+  startDt     String
+  endDt       String
+  reserveRate Float
+  targetRate  Float
+  minRate     Float
+  proposedAmt Int? // 제안가(사업비) — 입력 시 예상 이익률 판정
+  memo        String?
+  rows        String // 인력 투입 행 JSON
+  expenses    String // 직접경비 JSON
+  snapshot    String? // 확정 시 { basis, result } JSON
+  createdBy   String
+  confirmedBy String?
+  confirmedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([prjCd])
+}

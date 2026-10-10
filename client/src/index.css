@@ -641,3 +641,38 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .margin-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 6px; }
 .kosa-paste { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .kosa-paste textarea { width: 100%; font-family: inherit; font-size: 13px; }
+/* 수익성 분석: 시뮬레이션 */
+.sim-tbl .r, .sim-rows .r, .compare-tbl td { text-align: right; }
+.sim-tbl tr.sim-current td, .tbl tr.sim-current td { background: #eef6ee; }
+.sim-kpis { margin-bottom: 12px; transition: opacity 0.2s; }
+.sim-kpis.calcing { opacity: 0.6; }
+.sim-warn { font-size: 13px; line-height: 1.6; }
+.sim-rows select, .sim-rows input { font-size: 13px; padding: 4px 6px; }
+.sim-rows input[type='date'] { width: 136px; }
+.sim-rows .num-input { width: 130px; }
+.sim-rows .pct-input input { width: 64px; }
+.sim-rows tr.sim-partner td { background: #f7f5fc; }
+.sim-stack { display: flex; height: 18px; border-radius: 6px; overflow: hidden; background: var(--surface-2); margin-bottom: 8px; }
+.sim-stack span, .sim-legend i { display: block; }
+:is(.sim-stack, .sim-legend) .own { background: #1f3b63; } :is(.sim-stack, .sim-legend) .partner { background: #7b61c9; } :is(.sim-stack, .sim-legend) .exp { background: #e0a23b; } :is(.sim-stack, .sim-legend) .reserve { background: #b9c2cf; }
+.sim-legend { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.sim-legend li { display: flex; align-items: center; gap: 8px; }
+.sim-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.sim-legend li > span { margin-left: auto; font-variant-numeric: tabular-nums; }
+.sim-bars { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.sim-bar { display: grid; grid-template-columns: 150px 1fr 80px; align-items: center; gap: 8px; font-size: 13px; }
+.sim-bar-track { height: 12px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+.sim-bar-fill { display: block; height: 100%; border-radius: 6px; }
+.sim-bar-fill.cost { background: #8a94a3; } .sim-bar-fill.min { background: #e0a23b; } .sim-bar-fill.fair { background: #2e8b57; } .sim-bar-fill.kosa { background: #4c8bf5; }
+.sim-bar-fill.prop.good { background: #2e8b57; } .sim-bar-fill.prop.cond { background: #e0a23b; } .sim-bar-fill.prop.bad { background: #d64545; }
+.sim-bar-val { text-align: right; font-variant-numeric: tabular-nums; }
+.sim-month-chart { display: flex; align-items: flex-end; gap: 3px; height: 70px; margin-bottom: 8px; }
+.sim-month-col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.sim-month-col span { display: block; width: 100%; background: #1f3b63; border-radius: 3px 3px 0 0; min-height: 1px; }
+.sim-month-tbl th, .sim-month-tbl td { font-size: 12px; white-space: nowrap; }
+.compare-tbl th { text-align: left; white-space: nowrap; }
+.compare-tbl td.compare-best { background: #eef6ee; font-weight: 700; }
+@media (max-width: 600px) { .sim-bar { grid-template-columns: 110px 1fr 64px; font-size: 12px; } }
+@media print {
+  .sim-page input, .sim-page select, .sim-page textarea { border: 0; background: none; padding: 0; appearance: none; }
+}
