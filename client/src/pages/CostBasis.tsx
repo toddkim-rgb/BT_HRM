@@ -123,7 +123,7 @@ function RatesCard({ d, editable, reload }: CardProps) {
   const [f, setF] = useState(d.config);
   useEffect(() => setF(d.config), [d.config]);
   const keys: { k: ConfigKey; label: string; hint: string }[] = [
-    { k: 'LEGAL_RATE', label: '법정부담률', hint: '4대보험·퇴직급여 등 회사 부담분 (월 인건비 대비)' },
+    { k: 'LEGAL_RATE', label: '법정부담률', hint: '4대보험·퇴직급여 등 회사 부담분 (직접인건비 대비)' },
     { k: 'OVERHEAD_RATE', label: '간접비율', hint: '판관비 등 간접비 배부 (인건비+법정부담 대비)' },
     { k: 'RESERVE_RATE', label: '기본 예비비율', hint: '시뮬레이션 리스크 예비비 기본값 (시뮬레이션마다 수정 가능)' },
   ];
@@ -149,7 +149,7 @@ function RatesCard({ d, editable, reload }: CardProps) {
         </Field>
       </div>
       <p className="small muted" style={{ marginBottom: 0 }}>
-        월 표준원가 = 월 인건비 × (1 + 법정부담률) × (1 + 간접비율) · 일 원가 = 월 표준원가 ÷ {d.mdPerMm}일
+        1인 월 표준원가 = 1인 월 직접인건비(급여) × (1 + 법정부담률) × (1 + 간접비율) · 1인 일 원가 = 월 표준원가 ÷ {d.mdPerMm}일
       </p>
     </Card>
   );
@@ -246,7 +246,7 @@ function GradeCostCard({ d, editable, reload }: CardProps) {
 
   return (
     <Card
-      title="직급별 표준 원가 (자사)"
+      title="직급별 1인 표준 원가 (자사)"
       actions={
         editable &&
         (editing ? (
@@ -278,11 +278,22 @@ function GradeCostCard({ d, editable, reload }: CardProps) {
             <thead>
               <tr>
                 <th>직급</th>
-                <th className="r">인원</th>
-                <th className="r">월 인건비</th>
+                <th className="r" title="참고: 이 직급의 자사 인력 수 (원가 계산에는 쓰지 않음)">
+                  보유 인원
+                </th>
+                <th className="r">
+                  1인 월 직접인건비
+                  <div className="th-sub">월 급여 (연봉 ÷ 12)</div>
+                </th>
                 <th>적용 시작일</th>
-                <th className="r">월 표준원가</th>
-                <th className="r">일 원가</th>
+                <th className="r">
+                  1인 월 표준원가
+                  <div className="th-sub">+ 법정부담 {d.config.LEGAL_RATE ?? 0}% · 간접비 {d.config.OVERHEAD_RATE ?? 0}%</div>
+                </th>
+                <th className="r">
+                  1인 일 원가
+                  <div className="th-sub">÷ {d.mdPerMm}일</div>
+                </th>
                 <th />
               </tr>
             </thead>
@@ -301,7 +312,7 @@ function GradeCostCard({ d, editable, reload }: CardProps) {
                     <td className="r">{inUse.get(g) ? `${inUse.get(g)}명` : '-'}</td>
                     <td className="r">
                       {editing ? (
-                        <MoneyInput value={draft[g] ?? null} placeholder="월 인건비" onChange={(v) => setDraft((s) => ({ ...s, [g]: v }))} />
+                        <MoneyInput value={draft[g] ?? null} placeholder="1인 월 급여" onChange={(v) => setDraft((s) => ({ ...s, [g]: v }))} />
                       ) : cur ? (
                         won(cur.monthlySalary)
                       ) : (
@@ -369,7 +380,9 @@ function GradeCostCard({ d, editable, reload }: CardProps) {
         </div>
       )}
       <p className="small muted" style={{ marginBottom: 0 }}>
-        월 인건비 = 직급 평균 월 급여(연봉 ÷ 12) 기준. 시뮬레이션은 투입 시점에 적용 중인 값을 사용하고, 확정된 실행예산은 확정 당시 값을 그대로 유지합니다.
+        모든 금액은 <strong>직급별 1인 기준</strong>입니다 (보유 인원은 참고용). 프로젝트 원가는 <strong>1인 월 표준원가 × 인원 × 투입률</strong>(투입 기간은 일할)로 나눠 잡힙니다 — 예: 과장 1명을 50%로 한 달 투입하면 0.5 MM, 표준원가의 절반.
+        <br />
+        시뮬레이션은 투입 시점에 적용 중인 값을 사용하고, 확정된 실행예산은 확정 당시 값을 그대로 유지합니다.
       </p>
     </Card>
   );

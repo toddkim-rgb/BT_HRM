@@ -328,7 +328,7 @@ function RowsCard({ input, result, opt, readOnly, prjCd, setRow, set }: { input:
                 <th>투입 시작</th>
                 <th>투입 종료</th>
                 <th className="r">투입률</th>
-                <th className="r">월단가</th>
+                <th className="r" title="1인 월 기준 단가 (비우면 원가 기준 값)">1인 월단가</th>
                 <th className="r">MM</th>
                 <th className="r">원가</th>
                 <th>비고</th>
@@ -418,7 +418,7 @@ function RowsCard({ input, result, opt, readOnly, prjCd, setRow, set }: { input:
         </div>
       )}
       <p className="small muted" style={{ marginBottom: 0 }}>
-        월단가를 비워 두면 원가 기준의 값(자사: 그 달 적용 중인 직급 표준원가 / 협력사: 등급 기본단가)을 씁니다. MM = 인원 × 투입률 × 투입일수 ÷ 그 달 일수.
+        1인 월단가를 비워 두면 원가 기준의 값(자사: 그 달 적용 중인 직급 1인 표준원가 / 협력사: 등급 기본단가)을 씁니다. 원가 = 1인 월단가 × MM, MM = 인원 × 투입률 × 투입일수 ÷ 그 달 일수.
       </p>
     </Card>
   );
